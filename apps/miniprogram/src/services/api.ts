@@ -1,0 +1,464 @@
+import { environment } from "../config/env";
+import type {
+  CreateLetterInput,
+  Letter,
+  LetterDraft,
+  LetterSummary,
+  Material,
+  ReaderLetter,
+  ReaderSource,
+} from "../types/domain";
+import { mockApi } from "./mock-api";
+import { request, uploadBinary } from "./http-client";
+
+type ServerMaterial = {
+  id: string;
+  type: "photo" | "screenshot" | "audio" | "text";
+  name: string;
+  textContent?: string;
+  status: "UPLOADING" | "READY" | "DELETED";
+  createdAt: string;
+};
+
+type ServerDraft = {
+  version: number;
+  title: string;
+  greeting: string;
+  paragraphs: Array<{ id: string; text: string; sourceRefs: string[] }>;
+  closing: string;
+};
+
+type ServerLetter = {
+  id: string;
+  recipient: string;
+  materialIds: string[];
+  settings: {
+    tone: "warm" | "plain" | "lively";
+    length: "short" | "medium" | "long";
+    focus?: string;
+    excludedTopics?: string[];
+  };
+  state: Letter["status"];
+  draft?: ServerDraft;
+  confirmedDraft?: ServerDraft;
+  shareToken?: string;
+  createdAt: string;
+  updatedAt: string;
+  confirmedAt?: string;
+};
+
+type ServerReply = {
+  id: string;
+  text: string;
+  createdAt: string;
+};
+
+type ServerReaderSource = {
+  id: string;
+  type: ServerMaterial["type"];
+  name: string;
+  contentType?: string;
+  mediaUrl?: string;
+  mediaExpiresAt?: string;
+  durationSeconds?: number;
+};
+
+type ServerReader = {
+  id: string;
+  recipient: string;
+  draft: ServerDraft;
+  publishedAt: string;
+  sources: ServerReaderSource[];
+  replies: ServerReply[];
+};
+
+const REAL_LETTER_IDS_KEY = "warm_letter_real_letter_ids";
+const REAL_INTENTS_KEY = "warm_letter_real_intents";
+const REAL_SIGNATURES_KEY = "warm_letter_real_signatures";
+const REAL_MEDIA_PATHS_KEY = "warm_letter_real_media_paths";
+const REAL_SHARE_TOKENS_KEY = "warm_letter_real_share_tokens";
+
+function readRecord<T>(key: string): Record<string, T> {
+  const value = wx.getStorageSync(key);
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, T>)
+    : {};
+}
+
+function readIds(): string[] {
+  const value = wx.getStorageSync(REAL_LETTER_IDS_KEY);
+  return Array.isArray(value) ? (value as string[]) : [];
+}
+
+function mapMaterial(material: ServerMaterial): Material {
+  const paths = readRecord<string>(REAL_MEDIA_PATHS_KEY);
+  return {
+    id: material.id,
+    type: material.type === "audio" ? "voice" : material.type,
+    name: material.name,
+    localPath: paths[material.id],
+    text: material.textContent,
+    createdAt: material.createdAt,
+  };
+}
+
+function mediaUploadDescriptor(material: Material): {
+  contentType: string;
+  filename: string;
+  localPath: string;
+} {
+  if (!material.localPath) {
+    throw new Error("真实模式必须选择本机图片或语音文件");
+  }
+  const pathWithoutQuery = material.localPath.split("?", 1)[0] || material.localPath;
+  const matchedExtension = pathWithoutQuery.match(/\.[a-zA-Z0-9]+$/)?.[0].toLowerCase();
+  const fallbackExtension = material.type === "voice" ? ".mp3" : ".jpg";
+  const extension = matchedExtension || fallbackExtension;
+  const contentTypes: Record<string, string> = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".mp4": "audio/mp4",
+    ".aac": "audio/aac",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+  };
+  const contentType = contentTypes[extension];
+  if (!contentType) {
+    throw new Error("暂不支持该媒体文件格式");
+  }
+  if (material.type === "voice" ? !contentType.startsWith("audio/") : !contentType.startsWith("image/")) {
+    throw new Error("素材类型与文件格式不匹配");
+  }
+  return {
+    contentType,
+    filename: material.name.toLowerCase().endsWith(extension)
+      ? material.name
+      : `${material.name}${extension}`,
+    localPath: material.localPath,
+  };
+}
+
+function mapReaderSource(source: ServerReaderSource): ReaderSource {
+  return {
+    id: source.id,
+    type: source.type === "audio" ? "voice" : source.type,
+    name: source.name,
+    contentType: source.contentType,
+    mediaUrl: source.mediaUrl,
+    mediaExpiresAt: source.mediaExpiresAt,
+    durationSeconds: source.durationSeconds,
+  };
+}
+
+function mapDraft(letterId: string, draft?: ServerDraft): LetterDraft | undefined {
+  if (!draft) return undefined;
+  const signatures = readRecord<string>(REAL_SIGNATURES_KEY);
+  return {
+    title: draft.title,
+    salutation: draft.greeting,
+    paragraphs: draft.paragraphs,
+    closing: draft.closing,
+    signature: signatures[letterId] || "想念你的我",
+  };
+}
+
+function fallbackIntent(letter: ServerLetter): CreateLetterInput["intent"] {
+  return {
+    recipient: letter.recipient,
+    message: "由已选择的素材整理近况。",
+    tone:
+      letter.settings.tone === "plain"
+        ? "concise"
+        : letter.settings.tone === "lively"
+          ? "lively"
+          : "warm",
+    length: letter.settings.length,
+    focus: letter.settings.focus || "",
+    exclusions: letter.settings.excludedTopics?.join("、") || "",
+  };
+}
+
+function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Letter {
+  const intents = readRecord<CreateLetterInput["intent"]>(REAL_INTENTS_KEY);
+  const draft = serverLetter.confirmedDraft || serverLetter.draft;
+  return {
+    id: serverLetter.id,
+    status: serverLetter.state,
+    materialIds: serverLetter.materialIds,
+    intent: intents[serverLetter.id] || fallbackIntent(serverLetter),
+    draft: mapDraft(serverLetter.id, draft),
+    replies: replies.map((reply) => ({
+      id: reply.id,
+      text: reply.text,
+      createdAt: reply.createdAt,
+    })),
+    createdAt: serverLetter.createdAt,
+    updatedAt: serverLetter.updatedAt,
+    confirmedAt: serverLetter.confirmedAt,
+    shareToken: serverLetter.shareToken,
+  };
+}
+
+async function ensureLogin(): Promise<void> {
+  if (wx.getStorageSync("warm_letter_access_token")) return;
+  const loginResult = await new Promise<{ code: string }>((resolve, reject) => {
+    wx.login({ success: resolve, fail: reject });
+  });
+  const response = await request<{ token: string }>("/auth/wx-login", {
+    method: "POST",
+    data: { code: loginResult.code || "local-demo" },
+  });
+  wx.setStorageSync("warm_letter_access_token", response.token);
+}
+
+async function authorized<T>(operation: () => Promise<T>): Promise<T> {
+  await ensureLogin();
+  return operation();
+}
+
+async function getServerLetter(id: string): Promise<ServerLetter> {
+  const response = await authorized(() => request<{ letter: ServerLetter }>(`/letters/${id}`));
+  return response.letter;
+}
+
+async function getServerReplies(id: string): Promise<ServerReply[]> {
+  const response = await authorized(() =>
+    request<{ replies: ServerReply[] }>(`/letters/${id}/replies`),
+  );
+  return response.replies;
+}
+
+function saveIntent(letterId: string, intent: CreateLetterInput["intent"]): void {
+  const intents = readRecord<CreateLetterInput["intent"]>(REAL_INTENTS_KEY);
+  wx.setStorageSync(REAL_INTENTS_KEY, { ...intents, [letterId]: intent });
+}
+
+function saveSignature(letterId: string, signature: string): void {
+  const signatures = readRecord<string>(REAL_SIGNATURES_KEY);
+  wx.setStorageSync(REAL_SIGNATURES_KEY, { ...signatures, [letterId]: signature });
+}
+
+function saveShareToken(letterId: string, shareToken: string): void {
+  const tokens = readRecord<string>(REAL_SHARE_TOKENS_KEY);
+  wx.setStorageSync(REAL_SHARE_TOKENS_KEY, { ...tokens, [letterId]: shareToken });
+}
+
+function requireShareToken(letterId: string, shareToken?: string): string {
+  const token = shareToken || readRecord<string>(REAL_SHARE_TOKENS_KEY)[letterId];
+  if (!token) throw new Error("阅读链接已失效，请重新确认家书");
+  return token;
+}
+
+const delay = (duration: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, duration));
+
+const realApi = {
+  async listMaterials(): Promise<Material[]> {
+    const response = await authorized(() =>
+      request<{ materials: ServerMaterial[] }>("/materials"),
+    );
+    return response.materials.filter((item) => item.status !== "DELETED").map(mapMaterial);
+  },
+
+  async saveMaterial(material: Material): Promise<Material> {
+    if (material.type !== "text") {
+      const upload = mediaUploadDescriptor(material);
+      const presigned = await authorized(() =>
+        request<{
+          materialId: string;
+          uploadUrl: string;
+          headers: Record<string, string>;
+        }>("/materials/presign", {
+          method: "POST",
+          data: {
+            type: material.type === "voice" ? "audio" : material.type,
+            filename: upload.filename,
+            contentType: upload.contentType,
+          },
+        }),
+      );
+      await uploadBinary(
+        presigned.uploadUrl,
+        upload.localPath,
+        presigned.headers["content-type"] || upload.contentType,
+      );
+      const completed = await authorized(() =>
+        request<{ material: ServerMaterial }>("/materials/complete", {
+          method: "POST",
+          data: { materialId: presigned.materialId },
+        }),
+      );
+      const paths = readRecord<string>(REAL_MEDIA_PATHS_KEY);
+      wx.setStorageSync(REAL_MEDIA_PATHS_KEY, {
+        ...paths,
+        [completed.material.id]: upload.localPath,
+      });
+      return { ...mapMaterial(completed.material), durationSeconds: material.durationSeconds };
+    }
+
+    const response = await authorized(() =>
+      request<{ material: ServerMaterial }>("/materials", {
+        method: "POST",
+        data: {
+          type: material.type,
+          name: material.name,
+          textContent: material.text,
+        },
+      }),
+    );
+    return mapMaterial(response.material);
+  },
+
+  async deleteMaterial(id: string): Promise<void> {
+    await authorized(() => request<void>(`/materials/${id}`, { method: "DELETE" }));
+  },
+
+  async listLetters(): Promise<LetterSummary[]> {
+    const letters = await Promise.all(
+      readIds().map(async (id) => {
+        try {
+          return mapLetter(await getServerLetter(id));
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return letters
+      .filter((letter): letter is Letter => Boolean(letter))
+      .map((letter) => ({
+        id: letter.id,
+        status: letter.status,
+        intent: letter.intent,
+        createdAt: letter.createdAt,
+        updatedAt: letter.updatedAt,
+        title: letter.draft?.title || `写给${letter.intent.recipient}的一封信`,
+      }))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  },
+
+  async createLetter(input: CreateLetterInput): Promise<Letter> {
+    const response = await authorized(() =>
+      request<{ letter: ServerLetter }>("/letters", {
+        method: "POST",
+        data: {
+          recipient: input.intent.recipient,
+          materialIds: input.materialIds,
+          settings: {
+            tone:
+              input.intent.tone === "concise"
+                ? "plain"
+                : input.intent.tone === "lively"
+                  ? "lively"
+                  : "warm",
+            length: input.intent.length,
+            focus: input.intent.focus || input.intent.message,
+            excludedTopics: input.intent.exclusions
+              .split(/[、,，]/)
+              .map((item) => item.trim())
+              .filter(Boolean),
+          },
+        },
+      }),
+    );
+    saveIntent(response.letter.id, input.intent);
+    wx.setStorageSync(
+      REAL_LETTER_IDS_KEY,
+      Array.from(new Set([response.letter.id, ...readIds()])),
+    );
+    return mapLetter(response.letter);
+  },
+
+  async getLetter(id: string): Promise<Letter> {
+    const [letter, replies] = await Promise.all([
+      getServerLetter(id),
+      getServerReplies(id).catch(() => []),
+    ]);
+    return mapLetter(letter, replies);
+  },
+
+  async getReader(id: string, shareToken?: string): Promise<ReaderLetter> {
+    const token = requireShareToken(id, shareToken);
+    const response = await request<{ reader: ServerReader }>(
+      `/letters/${id}/reader?token=${encodeURIComponent(token)}`,
+    );
+    saveShareToken(id, token);
+    return {
+      id: response.reader.id,
+      recipient: response.reader.recipient,
+      draft: mapDraft(response.reader.id, response.reader.draft)!,
+      sources: response.reader.sources.map(mapReaderSource),
+      replies: response.reader.replies,
+      publishedAt: response.reader.publishedAt,
+      shareToken: token,
+    };
+  },
+
+  async generateLetter(id: string): Promise<Letter> {
+    const response = await authorized(() =>
+      request<{ job: { id: string; status: string; error?: { message?: string } } }>(
+        `/letters/${id}/generate`,
+        { method: "POST" },
+      ),
+    );
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const jobResponse = await authorized(() =>
+        request<{ job: { status: string; error?: { message?: string } } }>(
+          `/jobs/${response.job.id}`,
+        ),
+      );
+      if (jobResponse.job.status === "succeeded") return realApi.getLetter(id);
+      if (jobResponse.job.status === "failed") {
+        throw new Error(jobResponse.job.error?.message || "家书生成失败");
+      }
+      await delay(250);
+    }
+    throw new Error("家书生成超时，请稍后重试");
+  },
+
+  async updateDraft(id: string, draft: LetterDraft): Promise<Letter> {
+    saveSignature(id, draft.signature);
+    const response = await authorized(() =>
+      request<{ letter: ServerLetter }>(`/letters/${id}`, {
+        method: "PATCH",
+        data: {
+          draft: {
+            title: draft.title,
+            greeting: draft.salutation,
+            paragraphs: draft.paragraphs,
+            closing: draft.closing,
+          },
+        },
+      }),
+    );
+    return mapLetter(response.letter);
+  },
+
+  async confirmLetter(id: string, draft: LetterDraft): Promise<Letter> {
+    await realApi.updateDraft(id, draft);
+    const response = await authorized(() =>
+      request<{
+        letter: ServerLetter;
+        shareToken: string;
+        shareExpiresAt: string;
+        readerUrl: string;
+      }>(`/letters/${id}/confirm`, { method: "POST" }),
+    );
+    saveShareToken(id, response.shareToken);
+    return { ...mapLetter(response.letter), shareToken: response.shareToken };
+  },
+
+  async addReply(id: string, text: string, shareToken?: string): Promise<ReaderLetter> {
+    const token = requireShareToken(id, shareToken);
+    await request<{ reply: ServerReply }>(
+      `/letters/${id}/replies?token=${encodeURIComponent(token)}`,
+      { method: "POST", data: { text, authorName: "家人" } },
+    );
+    return realApi.getReader(id, token);
+  },
+};
+
+export const api = environment.useMockApi ? mockApi : realApi;

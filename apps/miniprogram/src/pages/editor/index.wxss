@@ -1,0 +1,113 @@
+.editor-page {
+  padding-bottom: calc(174rpx + env(safe-area-inset-bottom));
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-top: 8rpx;
+}
+
+.title-row .page-title {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.ai-mark {
+  flex: none;
+  padding: 7rpx 13rpx;
+  border-radius: 6rpx;
+  background: #e2ece7;
+  color: #245a4b;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.loading-state {
+  margin-top: 40rpx;
+}
+
+.editor-section {
+  margin-top: 30rpx;
+}
+
+.title-input {
+  font-weight: 650;
+}
+
+.paragraphs-section {
+  margin-top: 36rpx;
+}
+
+.paragraph-editor {
+  padding: 26rpx 0 30rpx;
+  border-top: 2rpx solid #d2cfc7;
+}
+
+.paragraph-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14rpx;
+}
+
+.paragraph-number {
+  color: #4f5552;
+  font-size: 25rpx;
+  font-weight: 650;
+}
+
+.delete-paragraph {
+  width: 88rpx;
+  height: 56rpx;
+  padding: 0;
+  background: transparent;
+  color: #8a3e34;
+  font-size: 23rpx;
+  line-height: 56rpx;
+}
+
+.paragraph-textarea {
+  min-height: 190rpx;
+}
+
+.source-trace {
+  display: flex;
+  align-items: flex-start;
+  gap: 14rpx;
+  margin-top: 12rpx;
+  color: #67716c;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.source-label {
+  flex: none;
+  color: #245a4b;
+  font-weight: 700;
+}
+
+.source-value {
+  min-width: 0;
+}
+
+.add-paragraph {
+  width: 100%;
+}
+
+.compact-textarea {
+  min-height: 138rpx;
+}
+
+.regenerate-button {
+  width: 100%;
+  height: 76rpx;
+  margin-top: 30rpx;
+  background: transparent;
+  color: #5f6763;
+  font-size: 25rpx;
+  line-height: 76rpx;
+  text-decoration: underline;
+}

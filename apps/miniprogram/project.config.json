@@ -1,0 +1,17 @@
+{
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "libVersion": "3.6.7",
+  "miniprogramRoot": "src/",
+  "projectname": "warm-letter-miniprogram",
+  "setting": {
+    "coverView": true,
+    "es6": true,
+    "minified": false,
+    "postcss": true,
+    "showShadowRootInWxmlPanel": true,
+    "useCompilerPlugins": ["typescript"]
+  },
+  "simulatorType": "wechat",
+  "srcMiniprogramRoot": "src/"
+}

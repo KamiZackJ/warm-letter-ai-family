@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/materials/index",
+    "pages/intent/index",
+    "pages/editor/index",
+    "pages/reader/index"
+  ],
+  "window": {
+    "backgroundColor": "#F4F1EA",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#F4F1EA",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "暖笺"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

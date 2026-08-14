@@ -1,0 +1,402 @@
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import cors from "@fastify/cors";
+import { resolve } from "node:path";
+import { FakeAIProvider, type AIProvider } from "./ai.js";
+import type { Material } from "./domain.js";
+import { ApiError } from "./errors.js";
+import {
+  resolveMediaUploadPolicy,
+  supportedMediaContentTypes,
+  validateMediaBytes,
+} from "./media-policy.js";
+import {
+  FileSystemObjectStorage,
+  type ObjectStorage,
+} from "./object-storage.js";
+import { MemoryRepository } from "./repository.js";
+import {
+  WarmLetterService,
+  type CreateLetterInput,
+  type EditLetterInput,
+  type RegisterMaterialInput,
+} from "./service.js";
+
+export interface BuildAppOptions {
+  repository?: MemoryRepository;
+  aiProvider?: AIProvider;
+  logger?: boolean;
+  corsOrigins?: string[];
+  objectStorage?: ObjectStorage;
+  uploadDirectory?: string;
+  publicBaseUrl?: string;
+  maxMediaUploadBytes?: number;
+  shareTokenTtlMs?: number;
+  now?: () => Date;
+}
+
+const defaultMaximumMediaBytes = 25 * 1024 * 1024;
+
+function record(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "INVALID_BODY", "请求体必须是 JSON 对象");
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringValue(value: unknown, field: string, required = true): string | undefined {
+  if (value === undefined && !required) return undefined;
+  if (typeof value !== "string") {
+    throw new ApiError(400, "INVALID_BODY", `${field} 必须是字符串`);
+  }
+  return value;
+}
+
+function tokenFrom(request: FastifyRequest): string | undefined {
+  const authorization = request.headers.authorization;
+  return authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
+}
+
+function shareTokenFrom(request: FastifyRequest): string | undefined {
+  const query = (request.query ?? {}) as Record<string, unknown>;
+  return typeof query.token === "string" ? query.token : undefined;
+}
+
+function requireOwnedMaterial(
+  service: WarmLetterService,
+  userId: string,
+  materialId: string,
+): Material {
+  const material = service.repository.getMaterial(materialId);
+  if (!material || material.userId !== userId) {
+    throw new ApiError(404, "MATERIAL_NOT_FOUND", "素材不存在");
+  }
+  return material;
+}
+
+function mediaContentType(request: FastifyRequest): string | undefined {
+  const value = request.headers["content-type"];
+  return typeof value === "string" ? value.split(";", 1)[0]?.trim().toLowerCase() : undefined;
+}
+
+export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
+  const app = Fastify({
+    logger: options.logger
+      ? {
+          serializers: {
+            req(request: FastifyRequest) {
+              return {
+                method: request.method,
+                url: request.url.split("?", 1)[0],
+                host: request.hostname,
+                remoteAddress: request.ip,
+              };
+            },
+          },
+          redact: ["req.headers.authorization", "headers.authorization"],
+        }
+      : false,
+  });
+  const objectStorage =
+    options.objectStorage ??
+    new FileSystemObjectStorage(options.uploadDirectory ?? resolve(process.cwd(), "uploads"));
+  const publicBaseUrl = (options.publicBaseUrl ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
+  const maxMediaUploadBytes = options.maxMediaUploadBytes ?? defaultMaximumMediaBytes;
+  if (!Number.isSafeInteger(maxMediaUploadBytes) || maxMediaUploadBytes < 1) {
+    throw new Error("maxMediaUploadBytes must be a positive safe integer");
+  }
+  const service = new WarmLetterService(
+    options.repository ?? new MemoryRepository(),
+    options.aiProvider ?? new FakeAIProvider(),
+    { shareTokenTtlMs: options.shareTokenTtlMs, now: options.now },
+  );
+
+  app.addContentTypeParser(
+    supportedMediaContentTypes,
+    { parseAs: "buffer", bodyLimit: maxMediaUploadBytes },
+    (_request, body, done) => done(null, body),
+  );
+
+  void app.register(cors, {
+    origin: options.corsOrigins ?? ["http://127.0.0.1:4173", "http://localhost:4173"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  });
+
+  app.decorate("warmLetterService", service);
+  app.decorate("objectStorage", objectStorage);
+
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ApiError) {
+      return reply.status(error.statusCode).send({
+        error: { code: error.code, message: error.message },
+      });
+    }
+    if (error instanceof Error) {
+      const clientError = error as Error & { statusCode?: number; code?: string };
+      if (
+        typeof clientError.statusCode === "number" &&
+        clientError.statusCode >= 400 &&
+        clientError.statusCode < 500
+      ) {
+        return reply.status(clientError.statusCode).send({
+          error: {
+            code: clientError.code ?? "BAD_REQUEST",
+            message:
+              clientError.code === "FST_ERR_CTP_EMPTY_JSON_BODY"
+                ? "请求体不能为空"
+                : clientError.message,
+          },
+        });
+      }
+    }
+    app.log.error(error);
+    return reply.status(500).send({
+      error: { code: "INTERNAL_ERROR", message: "服务暂时不可用" },
+    });
+  });
+
+  app.get("/health", async () => ({ status: "ok", service: "warm-letter-api" }));
+
+  app.post("/v1/auth/wx-login", async (request, reply) => {
+    const body = record(request.body);
+    const code = stringValue(body.code, "code", false) ?? "local-demo";
+    const displayName = stringValue(body.displayName, "displayName", false);
+    return reply.send(service.login(code, displayName));
+  });
+
+  app.get("/v1/materials", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    return { materials: service.listMaterials(user.id) };
+  });
+
+  app.post("/v1/materials", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const body = record(request.body);
+    if (body.type !== "text") {
+      throw new ApiError(400, "MEDIA_UPLOAD_REQUIRED", "媒体素材必须通过上传流程提交");
+    }
+    const material = service.registerMaterial(user.id, body as unknown as RegisterMaterialInput);
+    return reply.status(201).send({ material });
+  });
+
+  app.post("/v1/materials/presign", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const body = record(request.body);
+    const name = stringValue(body.filename ?? body.name, "filename")!;
+    const policy = resolveMediaUploadPolicy(
+      body.type as RegisterMaterialInput["type"],
+      name,
+      stringValue(body.contentType, "contentType", false),
+    );
+    const objectKey = `${user.id}/${crypto.randomUUID()}${policy.extension}`;
+    const material = service.registerMaterial(user.id, {
+      type: body.type as RegisterMaterialInput["type"],
+      name,
+      contentType: policy.contentType,
+      objectKey,
+      uploading: true,
+    });
+    return reply.status(201).send({
+      materialId: material.id,
+      objectKey,
+      uploadUrl: `${publicBaseUrl}/v1/materials/${material.id}/content`,
+      headers: { "content-type": policy.contentType },
+    });
+  });
+
+  app.put("/v1/materials/:id/content", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    const material = requireOwnedMaterial(service, user.id, id);
+    if (material.status !== "UPLOADING") {
+      throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材不处于上传状态");
+    }
+    if (!material.objectKey || !material.contentType) {
+      throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材缺少上传信息");
+    }
+
+    const requestContentType = mediaContentType(request);
+    if (requestContentType !== material.contentType) {
+      throw new ApiError(415, "MIME_MISMATCH", "上传 MIME 类型与申请信息不一致");
+    }
+    if (!Buffer.isBuffer(request.body)) {
+      throw new ApiError(400, "INVALID_UPLOAD_BODY", "上传内容必须是二进制文件");
+    }
+    const policy = resolveMediaUploadPolicy(material.type, material.name, material.contentType);
+    validateMediaBytes(request.body, policy, maxMediaUploadBytes);
+    await objectStorage.put(material.objectKey, {
+      bytes: request.body,
+      contentType: material.contentType,
+    });
+    return reply.status(204).send();
+  });
+
+  app.post("/v1/materials/complete", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    const body = record(request.body);
+    const materialId = stringValue(body.materialId, "materialId")!;
+    const material = requireOwnedMaterial(service, user.id, materialId);
+    if (material.status !== "UPLOADING") {
+      throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材不处于上传状态");
+    }
+    if (!material.objectKey || !material.contentType) {
+      throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材缺少上传信息");
+    }
+    const storedObject = await objectStorage.read(material.objectKey);
+    if (!storedObject) {
+      throw new ApiError(409, "UPLOAD_NOT_FOUND", "尚未收到上传文件");
+    }
+    if (storedObject.contentType !== material.contentType) {
+      throw new ApiError(409, "UPLOAD_METADATA_MISMATCH", "上传文件元数据不一致");
+    }
+    const policy = resolveMediaUploadPolicy(material.type, material.name, material.contentType);
+    validateMediaBytes(storedObject.bytes, policy, maxMediaUploadBytes);
+    const textContent = stringValue(body.textContent, "textContent", false);
+    return { material: service.completeMaterial(user.id, materialId, { textContent }) };
+  });
+
+  app.get("/v1/materials/:id/content", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    const material = requireOwnedMaterial(service, user.id, id);
+    if (material.status !== "READY" || !material.objectKey) {
+      throw new ApiError(404, "MATERIAL_NOT_FOUND", "素材不存在");
+    }
+    const storedObject = await objectStorage.read(material.objectKey);
+    if (!storedObject) {
+      throw new ApiError(404, "MATERIAL_OBJECT_NOT_FOUND", "素材文件不存在");
+    }
+    return reply
+      .header("content-type", storedObject.contentType)
+      .header("content-length", storedObject.sizeBytes)
+      .header("cache-control", "private, no-store")
+      .send(storedObject.bytes);
+  });
+
+  app.delete("/v1/materials/:id", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    const material = requireOwnedMaterial(service, user.id, id);
+    if (material.objectKey) {
+      await objectStorage.delete(material.objectKey);
+    }
+    service.deleteMaterial(user.id, id);
+    return reply.status(204).send();
+  });
+
+  app.post("/v1/letters", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const body = record(request.body);
+    const letter = service.createLetter(user.id, body as unknown as CreateLetterInput);
+    return reply.status(201).send({ letter });
+  });
+
+  app.get("/v1/letters/:id", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    return { letter: service.getLetter(user.id, id) };
+  });
+
+  app.patch("/v1/letters/:id", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    const body = record(request.body);
+    return { letter: service.editLetter(user.id, id, body as unknown as EditLetterInput) };
+  });
+
+  app.post("/v1/letters/:id/generate", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    const job = service.enqueueGeneration(user.id, id);
+    return reply.status(202).send({ job });
+  });
+
+  app.get("/v1/jobs/:id", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    return { job: service.getJob(user.id, id) };
+  });
+
+  app.post("/v1/letters/:id/confirm", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    const published = service.confirmAndPublish(user.id, id);
+    return {
+      ...published,
+      readerUrl: `/v1/letters/${published.letter.id}/reader?token=${encodeURIComponent(published.shareToken)}`,
+    };
+  });
+
+  app.post("/v1/letters/:id/share/reissue", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    const published = service.reissueShare(user.id, id);
+    return {
+      ...published,
+      readerUrl: `/v1/letters/${published.letter.id}/reader?token=${encodeURIComponent(published.shareToken)}`,
+    };
+  });
+
+  app.delete("/v1/letters/:id/share", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    service.revokeShare(user.id, id);
+    return reply.status(204).send();
+  });
+
+  app.get("/v1/letters/:id/reader", async (request) => {
+    const { id } = request.params as { id: string };
+    const shareToken = shareTokenFrom(request);
+    const reader = service.getReader(id, shareToken);
+    return {
+      reader: {
+        ...reader,
+        sources: reader.sources.map((source) =>
+          source.type === "text"
+            ? source
+            : {
+                ...source,
+                mediaUrl: `${publicBaseUrl}/v1/letters/${id}/sources/${source.id}/content?token=${encodeURIComponent(shareToken!)}`,
+              },
+        ),
+      },
+    };
+  });
+
+  app.get("/v1/letters/:letterId/sources/:materialId/content", async (request, reply) => {
+    const { letterId, materialId } = request.params as { letterId: string; materialId: string };
+    const material = service.getPublicMaterial(letterId, materialId, shareTokenFrom(request));
+    const storedObject = await objectStorage.read(material.objectKey!);
+    if (!storedObject) {
+      throw new ApiError(404, "MATERIAL_OBJECT_NOT_FOUND", "家书来源媒体不存在");
+    }
+    return reply
+      .header("content-type", storedObject.contentType)
+      .header("content-length", storedObject.sizeBytes)
+      .header("cache-control", "private, no-store")
+      .send(storedObject.bytes);
+  });
+
+  app.post("/v1/letters/:id/replies", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = record(request.body);
+    const text = stringValue(body.text, "text")!;
+    const authorName = stringValue(body.authorName, "authorName", false);
+    const createdReply = service.createReply(id, shareTokenFrom(request), text, authorName);
+    return reply.status(201).send({ reply: createdReply });
+  });
+
+  app.get("/v1/letters/:id/replies", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    const { id } = request.params as { id: string };
+    return { replies: service.listReplies(user.id, id) };
+  });
+
+  return app;
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    warmLetterService: WarmLetterService;
+    objectStorage: ObjectStorage;
+  }
+}

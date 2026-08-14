@@ -1,0 +1,48 @@
+<view class="page home-page">
+  <view class="brand-band">
+    <text class="brand-name">暖笺</text>
+    <text class="brand-line">把没来得及说的话，写成一封家书。</text>
+    <button class="primary-button main-action" bindtap="startLetter">写一封家书</button>
+    <button class="demo-link" bindtap="startDemo">快速演示完整流程</button>
+  </view>
+
+  <view class="trust-row" aria-label="隐私与内容说明">
+    <view class="trust-item">
+      <text class="trust-value">主动选择</text>
+      <text class="trust-label">只使用你添加的素材</text>
+    </view>
+    <view class="trust-item">
+      <text class="trust-value">先审后寄</text>
+      <text class="trust-label">AI 草稿由你最终确认</text>
+    </view>
+  </view>
+
+  <view class="section recent-section">
+    <view class="section-heading">
+      <text class="section-title">最近家书</text>
+      <text class="section-note">草稿会保存在本机</text>
+    </view>
+
+    <view wx:if="{{loading}}" class="empty-state">正在整理家书…</view>
+    <view wx:elif="{{recentLetters.length === 0}}" class="empty-state">
+      还没有家书。添加几张照片或一段近况，就可以开始。
+    </view>
+    <view wx:else class="letter-list">
+      <button
+        wx:for="{{recentLetters}}"
+        wx:key="id"
+        class="letter-row"
+        data-id="{{item.id}}"
+        data-status="{{item.status}}"
+        bindtap="openLetter"
+      >
+        <view class="letter-main">
+          <text class="letter-title">{{item.title}}</text>
+          <text class="letter-meta">{{item.dateLabel}} · {{item.intent.recipient}}</text>
+        </view>
+        <text class="status-pill">{{item.statusLabel}}</text>
+        <text class="row-arrow">›</text>
+      </button>
+    </view>
+  </view>
+</view>

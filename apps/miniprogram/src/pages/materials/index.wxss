@@ -1,0 +1,150 @@
+.materials-page {
+  padding-bottom: calc(170rpx + env(safe-area-inset-bottom));
+}
+
+.demo-button {
+  width: 100%;
+  min-height: 80rpx;
+  margin-top: 28rpx;
+  border: 2rpx solid #9eb6ab;
+  border-radius: 8rpx;
+  background: #e5eee9;
+  color: #245a4b;
+  font-size: 27rpx;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14rpx;
+}
+
+.source-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 184rpx;
+  padding: 16rpx 8rpx;
+  border: 2rpx solid #d6d3cb;
+  border-radius: 8rpx;
+  background: #fff;
+}
+
+.source-button.is-recording {
+  border-color: #aa5a4d;
+  background: #fbf1ef;
+}
+
+.source-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54rpx;
+  height: 54rpx;
+  border-radius: 50%;
+  background: #e4ece8;
+  color: #245a4b;
+  font-size: 23rpx;
+  font-weight: 700;
+  line-height: 54rpx;
+}
+
+.source-name,
+.source-note {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-name {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  font-weight: 650;
+}
+
+.source-note {
+  margin-top: 4rpx;
+  color: #777c79;
+  font-size: 20rpx;
+}
+
+.material-textarea {
+  min-height: 150rpx;
+}
+
+.add-text-button {
+  width: 100%;
+  margin-top: 14rpx;
+}
+
+.selected-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.selected-count {
+  color: #737975;
+  font-size: 24rpx;
+}
+
+.material-list {
+  border-top: 2rpx solid #d8d5cd;
+}
+
+.material-row {
+  display: grid;
+  grid-template-columns: 70rpx minmax(0, 1fr) 64rpx;
+  align-items: center;
+  gap: 16rpx;
+  min-height: 104rpx;
+  padding: 16rpx 0;
+  border-bottom: 2rpx solid #d8d5cd;
+}
+
+.material-type {
+  color: #245a4b;
+  font-size: 24rpx;
+  font-weight: 650;
+}
+
+.material-main {
+  min-width: 0;
+}
+
+.material-name,
+.material-detail {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-name {
+  font-size: 27rpx;
+  font-weight: 600;
+}
+
+.material-detail {
+  margin-top: 6rpx;
+  color: #747976;
+  font-size: 22rpx;
+}
+
+.remove-button {
+  width: 64rpx;
+  height: 64rpx;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #8a3e34;
+  font-size: 23rpx;
+  line-height: 64rpx;
+}

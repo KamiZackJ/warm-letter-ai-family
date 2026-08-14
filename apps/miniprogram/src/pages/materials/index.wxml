@@ -1,0 +1,69 @@
+<view class="page materials-page">
+  <text class="eyebrow">第 1 步，共 3 步</text>
+  <text class="page-title">挑选想说的事</text>
+  <text class="page-subtitle">只使用你主动添加的内容。正式寄出前，所有文字都可以修改或删除。</text>
+
+  <button wx:if="{{demoMode}}" class="demo-button" bindtap="loadDemoMaterials">
+    一键加入演示素材
+  </button>
+
+  <view class="source-grid section">
+    <button class="source-button" data-type="photo" bindtap="chooseImage">
+      <text class="source-icon">图</text>
+      <text class="source-name">生活照片</text>
+      <text class="source-note">相册或拍摄</text>
+    </button>
+    <button class="source-button" data-type="screenshot" bindtap="chooseImage">
+      <text class="source-icon">截</text>
+      <text class="source-name">聊天截图</text>
+      <text class="source-note">仅选择的图片</text>
+    </button>
+    <button wx:if="{{!recording}}" class="source-button" bindtap="startRecord">
+      <text class="source-icon">声</text>
+      <text class="source-name">录一段话</text>
+      <text class="source-note">最长 60 秒</text>
+    </button>
+    <button wx:else class="source-button is-recording" bindtap="stopRecord">
+      <text class="source-icon">停</text>
+      <text class="source-name">结束录音</text>
+      <text class="source-note">正在录音…</text>
+    </button>
+  </view>
+
+  <view class="section">
+    <text class="field-label">直接写下一点近况</text>
+    <textarea
+      class="textarea material-textarea"
+      maxlength="500"
+      placeholder="例如：最近开始学做饭，工作有点忙，但我一切都好。"
+      value="{{textDraft}}"
+      bindinput="updateTextDraft"
+    />
+    <button class="quiet-button add-text-button" bindtap="addText">加入这段文字</button>
+  </view>
+
+  <view class="section selected-section">
+    <view class="selected-heading">
+      <text class="section-title">已选素材</text>
+      <text class="selected-count">{{materials.length}} 项</text>
+    </view>
+    <view wx:if="{{loading}}" class="empty-state">正在读取素材…</view>
+    <view wx:elif="{{materials.length === 0}}" class="empty-state">
+      至少添加一项。照片、语音或几句话都可以。
+    </view>
+    <view wx:else class="material-list">
+      <view wx:for="{{materials}}" wx:key="id" class="material-row">
+        <text class="material-type">{{item.typeLabel}}</text>
+        <view class="material-main">
+          <text class="material-name">{{item.name}}</text>
+          <text class="material-detail">{{item.detail}}</text>
+        </view>
+        <button class="remove-button" aria-label="删除素材" data-id="{{item.id}}" bindtap="deleteMaterial">删</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="sticky-actions">
+    <button class="primary-button" disabled="{{materials.length === 0}}" bindtap="goIntent">下一步</button>
+  </view>
+</view>

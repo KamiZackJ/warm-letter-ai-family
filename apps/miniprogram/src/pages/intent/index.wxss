@@ -1,0 +1,36 @@
+.intent-page {
+  padding-bottom: calc(170rpx + env(safe-area-inset-bottom));
+}
+
+.form-section {
+  margin-top: 32rpx;
+}
+
+.compact-textarea {
+  min-height: 128rpx;
+}
+
+.ai-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  margin-top: 36rpx;
+  padding: 24rpx 0;
+  border-top: 2rpx solid #d8d5cd;
+}
+
+.ai-badge {
+  flex: none;
+  padding: 5rpx 12rpx;
+  border-radius: 6rpx;
+  background: #e2ece7;
+  color: #245a4b;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.ai-notice-text {
+  color: #666c68;
+  font-size: 24rpx;
+  line-height: 1.55;
+}

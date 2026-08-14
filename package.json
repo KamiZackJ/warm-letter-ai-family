@@ -1,0 +1,20 @@
+{
+  "name": "warm-letter-ai-family",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "check": "pnpm typecheck && pnpm test",
+    "dev:api": "pnpm --filter @warm-letter/api dev",
+    "dev:web": "pnpm --filter @warm-letter/web dev",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

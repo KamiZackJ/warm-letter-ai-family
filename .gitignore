@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.env
+.env.local
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+apps/miniprogram/miniprogram_npm/
+apps/miniprogram/.miniprogram/
+apps/web/playwright-report/
+apps/web/test-results/
+uploads/
