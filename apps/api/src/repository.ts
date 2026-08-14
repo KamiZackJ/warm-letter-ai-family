@@ -1,4 +1,11 @@
-import type { GenerationJob, Letter, Material, Reply, ShareAccess, User } from "./domain.js";
+import type {
+  GenerationJob,
+  Letter,
+  Material,
+  Reply,
+  ShareAccess,
+  User,
+} from "./domain.js";
 
 export class MemoryRepository {
   private readonly users = new Map<string, User>();
@@ -64,9 +71,24 @@ export class MemoryRepository {
     return reply;
   }
 
+  saveReplyIfBelowLimit(reply: Reply, maximum: number): Reply | undefined {
+    let existingCount = 0;
+    for (const existing of this.replies.values()) {
+      if (existing.letterId !== reply.letterId) continue;
+      existingCount += 1;
+      if (existingCount >= maximum) return undefined;
+    }
+    this.replies.set(reply.id, reply);
+    return reply;
+  }
+
   saveShareAccess(access: ShareAccess): ShareAccess {
     this.shareAccess.set(access.id, access);
     return access;
+  }
+
+  getShareAccess(id: string): ShareAccess | undefined {
+    return this.shareAccess.get(id);
   }
 
   findShareAccessByTokenHash(tokenHash: string): ShareAccess | undefined {
@@ -76,4 +98,5 @@ export class MemoryRepository {
   listShareAccess(letterId: string): ShareAccess[] {
     return [...this.shareAccess.values()].filter((access) => access.letterId === letterId);
   }
+
 }

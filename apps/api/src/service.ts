@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { AIProvider } from "./ai.js";
 import {
   MATERIAL_TYPES,
@@ -15,8 +15,35 @@ import {
 } from "./domain.js";
 import { ApiError, assertFound } from "./errors.js";
 import { MemoryRepository } from "./repository.js";
+import {
+  DeterministicReplySafetyPolicy,
+  normalizeReplyAuthor,
+  type ReplySafetyPolicy,
+} from "./reply-safety.js";
 
 const defaultSettings: LetterSettings = { tone: "warm", length: "medium" };
+const maxRepliesPerLetter = 100;
+const base64UrlPattern = /^[A-Za-z0-9_-]+$/u;
+
+function decodeCanonicalBase64Url(value: string): Buffer | undefined {
+  if (!value || !base64UrlPattern.test(value)) return undefined;
+  try {
+    const decoded = Buffer.from(value, "base64url");
+    return decoded.toString("base64url") === value ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function canonicalMediaCredential(mediaToken: string | undefined): string | undefined {
+  if (!mediaToken) return undefined;
+  const [payload, encodedSignature, extra] = mediaToken.split(".");
+  if (!payload || !encodedSignature || extra !== undefined) return undefined;
+  if (!decodeCanonicalBase64Url(payload) || !decodeCanonicalBase64Url(encodedSignature)) {
+    return undefined;
+  }
+  return mediaToken;
+}
 
 export interface RegisterMaterialInput {
   type: MaterialType;
@@ -44,6 +71,10 @@ export interface EditLetterInput {
 
 export interface WarmLetterServiceOptions {
   shareTokenTtlMs?: number;
+  mediaTokenTtlMs?: number;
+  mediaSigningKeys?: readonly Uint8Array[];
+  replySafetyPolicy?: ReplySafetyPolicy;
+  replySafetyTimeoutMs?: number;
   now?: () => Date;
 }
 
@@ -55,6 +86,10 @@ export interface PublishedLetterResult {
 
 export class WarmLetterService {
   private readonly shareTokenTtlMs: number;
+  private readonly mediaTokenTtlMs: number;
+  private readonly replySafetyPolicy: ReplySafetyPolicy;
+  private readonly replySafetyTimeoutMs: number;
+  private readonly mediaSigningKeys: readonly Buffer[];
   private readonly now: () => Date;
 
   constructor(
@@ -63,7 +98,20 @@ export class WarmLetterService {
     options: WarmLetterServiceOptions = {},
   ) {
     this.shareTokenTtlMs = options.shareTokenTtlMs ?? 30 * 24 * 60 * 60 * 1000;
+    this.mediaTokenTtlMs = options.mediaTokenTtlMs ?? 5 * 60 * 1000;
+    this.replySafetyPolicy = options.replySafetyPolicy ?? new DeterministicReplySafetyPolicy();
+    this.replySafetyTimeoutMs = options.replySafetyTimeoutMs ?? 3_000;
+    this.mediaSigningKeys = (options.mediaSigningKeys?.length
+      ? options.mediaSigningKeys
+      : [randomBytes(32)]
+    ).map((key) => Buffer.from(key));
     this.now = options.now ?? (() => new Date());
+    this.assertPositiveTtl(this.shareTokenTtlMs, "shareTokenTtlMs");
+    this.assertPositiveTtl(this.mediaTokenTtlMs, "mediaTokenTtlMs");
+    this.assertPositiveTtl(this.replySafetyTimeoutMs, "replySafetyTimeoutMs");
+    if (this.mediaSigningKeys.some((key) => key.length < 32)) {
+      throw new Error("mediaSigningKeys must contain at least 32 bytes per key");
+    }
   }
 
   login(code: string, displayName = "暖笺用户"): { user: User; token: string } {
@@ -271,8 +319,11 @@ export class WarmLetterService {
     if (letter.state !== "PUBLISHED" || !letter.confirmedDraft || !letter.publishedAt) {
       throw new ApiError(409, "LETTER_NOT_PUBLISHED", "家书尚未确认发布");
     }
-    this.revokeShareAccess(letter.id);
+    const previousAccess = this.repository
+      .listShareAccess(letter.id)
+      .filter((access) => !access.revokedAt);
     const share = this.issueShareAccess(letter.id);
+    this.revokeShareAccessEntries(previousAccess);
     return {
       letter,
       shareToken: share.token,
@@ -295,13 +346,13 @@ export class WarmLetterService {
     publishedAt: string;
     sources: Array<
       Pick<Material, "id" | "type" | "name" | "contentType"> & {
+        mediaToken?: string;
         mediaExpiresAt?: string;
       }
     >;
     replies: Reply[];
   } {
-    const letter = assertFound(this.repository.getLetter(letterId), "LETTER_NOT_FOUND", "家书不存在");
-    const access = this.assertPublishedAccess(letter, shareToken);
+    const { letter, access } = this.resolveShareAccess(letterId, shareToken);
     return {
       id: letter.id,
       recipient: letter.recipient,
@@ -313,12 +364,27 @@ export class WarmLetterService {
           "MATERIAL_NOT_FOUND",
           "家书来源素材不存在",
         );
+        if (material.status !== "READY") {
+          throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书暂时无法阅读");
+        }
+        if (material.type === "text") {
+          return {
+            id: material.id,
+            type: material.type,
+            name: material.name,
+          };
+        }
+        if (!material.objectKey || !material.contentType) {
+          throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书的媒体暂时不可用");
+        }
+        const mediaAccess = this.issueMediaAccess(letter.id, material.id, access);
         return {
           id: material.id,
           type: material.type,
           name: material.name,
           contentType: material.contentType,
-          mediaExpiresAt: material.type === "text" ? undefined : access.expiresAt,
+          mediaToken: mediaAccess.token,
+          mediaExpiresAt: mediaAccess.expiresAt,
         };
       }),
       replies: this.repository.listReplies(letter.id),
@@ -328,37 +394,53 @@ export class WarmLetterService {
   getPublicMaterial(
     letterId: string,
     materialId: string,
-    shareToken: string | undefined,
+    mediaToken: string | undefined,
   ): Material {
-    const letter = assertFound(this.repository.getLetter(letterId), "LETTER_NOT_FOUND", "家书不存在");
-    this.assertPublishedAccess(letter, shareToken);
+    const { letter } = this.resolveMediaAccess(letterId, materialId, mediaToken);
     if (!letter.materialIds.includes(materialId)) {
-      throw new ApiError(404, "MATERIAL_NOT_FOUND", "家书来源素材不存在");
+      throw new ApiError(404, "PUBLIC_ACCESS_NOT_FOUND", "公开访问凭据无效");
     }
-    const material = assertFound(
-      this.repository.getMaterial(materialId),
-      "MATERIAL_NOT_FOUND",
-      "家书来源素材不存在",
-    );
-    if (material.status !== "READY" || material.type === "text" || !material.objectKey) {
-      throw new ApiError(404, "MATERIAL_NOT_FOUND", "家书来源媒体不存在");
+    const material = this.repository.getMaterial(materialId);
+    if (!material || material.status !== "READY" || material.type === "text" || !material.objectKey) {
+      throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书的媒体暂时不可用");
     }
     return material;
   }
 
-  createReply(letterId: string, shareToken: string | undefined, text: string, authorName?: string): Reply {
-    const letter = assertFound(this.repository.getLetter(letterId), "LETTER_NOT_FOUND", "家书不存在");
-    this.assertPublishedAccess(letter, shareToken);
-    if (!text.trim()) {
-      throw new ApiError(400, "INVALID_REPLY", "回复内容不能为空");
+  async createReply(
+    letterId: string,
+    shareToken: string | undefined,
+    text: string,
+    authorName?: string,
+  ): Promise<Reply> {
+    const { letter } = this.resolveShareAccess(letterId, shareToken);
+    if (this.repository.listReplies(letter.id).length >= maxRepliesPerLetter) {
+      throw new ApiError(409, "REPLY_LIMIT_REACHED", "这封家书的回复数量已达到上限");
     }
-    return this.repository.saveReply({
+    let safeText: string;
+    let safeAuthorName: string;
+    try {
+      safeText = await this.validateReplySafety(text);
+      safeAuthorName = normalizeReplyAuthor(
+        await this.validateReplySafety(normalizeReplyAuthor(authorName)),
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "回复安全检查暂时不可用，请稍后重试");
+    }
+    const reply = {
       id: randomUUID(),
       letterId,
-      text: text.trim(),
-      authorName: authorName?.trim() || "家人",
-      createdAt: new Date().toISOString(),
-    });
+      text: safeText,
+      authorName: safeAuthorName,
+      authorVerified: false,
+      createdAt: this.now().toISOString(),
+    } satisfies Reply;
+    const savedReply = this.repository.saveReplyIfBelowLimit(reply, maxRepliesPerLetter);
+    if (!savedReply) {
+      throw new ApiError(409, "REPLY_LIMIT_REACHED", "这封家书的回复数量已达到上限");
+    }
+    return savedReply;
   }
 
   listReplies(userId: string, letterId: string): Reply[] {
@@ -483,16 +565,16 @@ export class WarmLetterService {
     return letter;
   }
 
-  private assertPublishedAccess(letter: Letter, shareToken: string | undefined): ShareAccess {
-    if (letter.state !== "PUBLISHED" || !letter.confirmedDraft || !letter.publishedAt) {
-      throw new ApiError(409, "LETTER_NOT_PUBLISHED", "家书尚未确认发布");
-    }
+  private resolveShareAccess(
+    letterId: string,
+    shareToken: string | undefined,
+  ): { letter: Letter; access: ShareAccess } {
     if (!shareToken) {
-      throw new ApiError(403, "INVALID_SHARE_TOKEN", "读信链接无效");
+      throw new ApiError(404, "PUBLIC_ACCESS_NOT_FOUND", "公开访问凭据无效");
     }
     const access = this.repository.findShareAccessByTokenHash(this.hashShareToken(shareToken));
-    if (!access || access.letterId !== letter.id) {
-      throw new ApiError(403, "INVALID_SHARE_TOKEN", "读信链接无效");
+    if (!access || access.letterId !== letterId) {
+      throw new ApiError(404, "PUBLIC_ACCESS_NOT_FOUND", "公开访问凭据无效");
     }
     if (access.revokedAt) {
       throw new ApiError(410, "SHARE_TOKEN_REVOKED", "读信链接已撤销");
@@ -500,7 +582,11 @@ export class WarmLetterService {
     if (Date.parse(access.expiresAt) <= this.now().getTime()) {
       throw new ApiError(410, "SHARE_TOKEN_EXPIRED", "读信链接已过期");
     }
-    return access;
+    const letter = this.repository.getLetter(letterId);
+    if (!letter || letter.state !== "PUBLISHED" || !letter.confirmedDraft || !letter.publishedAt) {
+      throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书暂时无法阅读");
+    }
+    return { letter, access };
   }
 
   private issueShareAccess(letterId: string): { access: ShareAccess; token: string } {
@@ -516,9 +602,125 @@ export class WarmLetterService {
     return { access, token };
   }
 
+  private issueMediaAccess(
+    letterId: string,
+    materialId: string,
+    shareAccess: ShareAccess,
+  ): { expiresAt: string; token: string } {
+    const createdAt = this.now();
+    const expiresAt = new Date(
+      Math.min(createdAt.getTime() + this.mediaTokenTtlMs, Date.parse(shareAccess.expiresAt)),
+    );
+    const payload = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        aud: "public-media",
+        sid: shareAccess.id,
+        lid: letterId,
+        mid: materialId,
+        exp: Math.floor(expiresAt.getTime() / 1000),
+      }),
+      "utf8",
+    ).toString("base64url");
+    const signature = createHmac("sha256", this.mediaSigningKeys[0]!).update(payload).digest("base64url");
+    return { expiresAt: expiresAt.toISOString(), token: `${payload}.${signature}` };
+  }
+
+  private resolveMediaAccess(
+    letterId: string,
+    materialId: string,
+    mediaToken: string | undefined,
+  ): { letter: Letter } {
+    if (!mediaToken) {
+      throw new ApiError(404, "PUBLIC_ACCESS_NOT_FOUND", "公开访问凭据无效");
+    }
+    const claims = this.verifyMediaToken(mediaToken);
+    if (!claims || claims.lid !== letterId || claims.mid !== materialId) {
+      throw new ApiError(404, "PUBLIC_ACCESS_NOT_FOUND", "公开访问凭据无效");
+    }
+    const shareAccess = this.repository.getShareAccess(claims.sid);
+    if (!shareAccess || shareAccess.letterId !== letterId) {
+      throw new ApiError(404, "PUBLIC_ACCESS_NOT_FOUND", "公开访问凭据无效");
+    }
+    if (shareAccess.revokedAt) {
+      throw new ApiError(410, "SHARE_TOKEN_REVOKED", "读信链接已撤销");
+    }
+    if (Date.parse(shareAccess.expiresAt) <= this.now().getTime()) {
+      throw new ApiError(410, "SHARE_TOKEN_EXPIRED", "读信链接已过期");
+    }
+    if (claims.exp * 1000 <= this.now().getTime()) {
+      throw new ApiError(410, "MEDIA_TOKEN_EXPIRED", "媒体访问凭据已过期");
+    }
+    const letter = this.repository.getLetter(letterId);
+    if (!letter || letter.state !== "PUBLISHED" || !letter.confirmedDraft || !letter.publishedAt) {
+      throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书暂时无法阅读");
+    }
+    return { letter };
+  }
+
+  private verifyMediaToken(mediaToken: string): {
+    sid: string;
+    lid: string;
+    mid: string;
+    exp: number;
+  } | undefined {
+    if (canonicalMediaCredential(mediaToken) !== mediaToken) return undefined;
+    const [payload, encodedSignature] = mediaToken.split(".") as [string, string];
+    const signature = decodeCanonicalBase64Url(encodedSignature)!;
+    if (signature.length !== 32) return undefined;
+    const validSignature = this.mediaSigningKeys.some((key) => {
+      const expected = createHmac("sha256", key).update(payload).digest();
+      return timingSafeEqual(expected, signature);
+    });
+    if (!validSignature) return undefined;
+    try {
+      const parsed = JSON.parse(decodeCanonicalBase64Url(payload)!.toString("utf8")) as Record<
+        string,
+        unknown
+      >;
+      if (
+        parsed.v !== 1 ||
+        parsed.aud !== "public-media" ||
+        typeof parsed.sid !== "string" ||
+        typeof parsed.lid !== "string" ||
+        typeof parsed.mid !== "string" ||
+        typeof parsed.exp !== "number" ||
+        !Number.isSafeInteger(parsed.exp)
+      ) {
+        return undefined;
+      }
+      return { sid: parsed.sid, lid: parsed.lid, mid: parsed.mid, exp: parsed.exp };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async validateReplySafety(text: string): Promise<string> {
+    return await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("reply safety policy timed out")),
+        this.replySafetyTimeoutMs,
+      );
+      Promise.resolve(this.replySafetyPolicy.validate(text)).then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
   private revokeShareAccess(letterId: string): void {
+    this.revokeShareAccessEntries(this.repository.listShareAccess(letterId));
+  }
+
+  private revokeShareAccessEntries(accesses: ShareAccess[]): void {
     const revokedAt = this.now().toISOString();
-    for (const access of this.repository.listShareAccess(letterId)) {
+    for (const access of accesses) {
       if (!access.revokedAt) {
         access.revokedAt = revokedAt;
         this.repository.saveShareAccess(access);
@@ -528,6 +730,12 @@ export class WarmLetterService {
 
   private hashShareToken(token: string): string {
     return createHash("sha256").update(token).digest("hex");
+  }
+
+  private assertPositiveTtl(value: number, field: string): void {
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new Error(`${field} must be a positive safe integer`);
+    }
   }
 
   private transition(letter: Letter, target: Letter["state"]): void {

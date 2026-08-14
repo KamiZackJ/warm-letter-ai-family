@@ -61,12 +61,12 @@
 
 .delete-paragraph {
   width: 88rpx;
-  height: 56rpx;
+  height: 88rpx;
   padding: 0;
   background: transparent;
   color: #8a3e34;
   font-size: 23rpx;
-  line-height: 56rpx;
+  line-height: 88rpx;
 }
 
 .paragraph-textarea {

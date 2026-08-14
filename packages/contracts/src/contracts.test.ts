@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ConfirmLetterResponseSchema,
   CreateMaterialUploadRequestSchema,
+  CreateReplyRequestSchema,
   ErrorResponseSchema,
   GetLetterReaderResponseSchema,
   IssueShareLinkRequestSchema,
@@ -159,8 +160,15 @@ describe("state, errors, and future sharing contracts", () => {
     ).toMatchObject({ error: { code: "UNAUTHORIZED" } });
   });
 
-  it("defaults future share links to seven days and rejects unsafe durations", () => {
-    expect(IssueShareLinkRequestSchema.parse({}).expiresInSeconds).toBe(7 * 24 * 60 * 60);
+  it("defaults future share links to thirty days and rejects unsafe durations", () => {
+    expect(IssueShareLinkRequestSchema.parse({}).expiresInSeconds).toBe(30 * 24 * 60 * 60);
     expect(IssueShareLinkRequestSchema.safeParse({ expiresInSeconds: 60 }).success).toBe(false);
+  });
+
+  it("keeps reply input aligned with the 240-character reader UI", () => {
+    expect(CreateReplyRequestSchema.safeParse({ text: "好".repeat(240) }).success).toBe(true);
+    expect(CreateReplyRequestSchema.safeParse({ text: "好".repeat(241) }).success).toBe(false);
+    expect(CreateReplyRequestSchema.safeParse({ text: "收到", authorName: "家".repeat(41) }).success)
+      .toBe(false);
   });
 });

@@ -233,7 +233,13 @@ export const mockApi = {
     if (shareToken && shareToken !== current.shareToken) {
       throw new Error("阅读链接已失效，请重新确认家书");
     }
-    const reply = { id: createId("reply"), text, createdAt: new Date().toISOString() };
+    const reply = {
+      id: createId("reply"),
+      text,
+      authorName: "家人",
+      authorVerified: false,
+      createdAt: new Date().toISOString(),
+    };
     updateLetter({
       ...current,
       replies: [...current.replies, reply],

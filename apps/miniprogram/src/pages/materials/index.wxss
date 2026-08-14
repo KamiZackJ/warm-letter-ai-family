@@ -139,12 +139,12 @@
 }
 
 .remove-button {
-  width: 64rpx;
-  height: 64rpx;
+  width: 88rpx;
+  height: 88rpx;
   padding: 0;
   border-radius: 50%;
   background: transparent;
   color: #8a3e34;
   font-size: 23rpx;
-  line-height: 64rpx;
+  line-height: 88rpx;
 }

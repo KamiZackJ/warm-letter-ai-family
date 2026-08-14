@@ -180,9 +180,9 @@ describe("Warm Letter API", () => {
       method: "GET",
       url: `/v1/letters/${letterId}/reader?token=guessed`,
     });
-    expect(unconfirmedReader.statusCode).toBe(409);
+    expect(unconfirmedReader.statusCode).toBe(404);
     expect(json<{ error: { code: string } }>(unconfirmedReader).error.code).toBe(
-      "LETTER_NOT_PUBLISHED",
+      "PUBLIC_ACCESS_NOT_FOUND",
     );
 
     const generationResponse = await app.inject({
@@ -227,6 +227,7 @@ describe("Warm Letter API", () => {
       headers: auth(token),
     });
     expect(confirmResponse.statusCode).toBe(200);
+    expect(confirmResponse.headers["cache-control"]).toBe("no-store");
     const confirmed = json<{
       letter: { state: string };
       shareToken: string;
@@ -240,6 +241,8 @@ describe("Warm Letter API", () => {
 
     const readerResponse = await app.inject({ method: "GET", url: confirmed.readerUrl });
     expect(readerResponse.statusCode).toBe(200);
+    expect(readerResponse.headers["cache-control"]).toBe("private, no-store");
+    expect(readerResponse.headers["referrer-policy"]).toBe("no-referrer");
     const reader = json<{
       reader: {
         draft: { paragraphs: Array<{ text: string; sourceRefs: string[] }> };
@@ -253,9 +256,10 @@ describe("Warm Letter API", () => {
     const photoSource = reader.sources.find((source) => source.id === materialIds[0]);
     expect(photoSource).toMatchObject({
       type: "photo",
-      mediaUrl: expect.stringContaining(`/sources/${materialIds[0]}/content?token=`),
-      mediaExpiresAt: confirmed.shareExpiresAt,
+      mediaUrl: expect.stringContaining(`/sources/${materialIds[0]}/content?mediaToken=`),
     });
+    expect(Date.parse(photoSource!.mediaExpiresAt!)).toBeLessThan(Date.parse(confirmed.shareExpiresAt));
+    expect(Date.parse(photoSource!.mediaExpiresAt!)).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000);
     const textSource = reader.sources.find((source) => source.id === materialIds[3]);
     expect(textSource).not.toHaveProperty("mediaUrl");
     const mediaUrl = new URL(photoSource!.mediaUrl!);
@@ -265,12 +269,16 @@ describe("Warm Letter API", () => {
     });
     expect(publicMediaResponse.statusCode).toBe(200);
     expect(publicMediaResponse.rawPayload).toEqual(photoBytes);
+    expect(publicMediaResponse.headers["x-content-type-options"]).toBe("nosniff");
 
     const wrongTokenResponse = await app.inject({
       method: "GET",
       url: `/v1/letters/${letterId}/reader?token=wrong-token`,
     });
-    expect(wrongTokenResponse.statusCode).toBe(403);
+    expect(wrongTokenResponse.statusCode).toBe(404);
+    expect(json<{ error: { code: string } }>(wrongTokenResponse).error.code).toBe(
+      "PUBLIC_ACCESS_NOT_FOUND",
+    );
 
     const editAfterPublishResponse = await app.inject({
       method: "PATCH",
@@ -286,6 +294,7 @@ describe("Warm Letter API", () => {
       payload: { text: "I read it. Take care of yourself.", authorName: "Mom" },
     });
     expect(replyResponse.statusCode).toBe(201);
+    expect(replyResponse.headers["cache-control"]).toBe("no-store");
 
     const repliesResponse = await app.inject({
       method: "GET",
@@ -297,6 +306,7 @@ describe("Warm Letter API", () => {
         expect.objectContaining({
           text: "I read it. Take care of yourself.",
           authorName: "Mom",
+          authorVerified: false,
         }),
       ]);
 
@@ -306,6 +316,7 @@ describe("Warm Letter API", () => {
       headers: auth(token),
     });
     expect(reissueResponse.statusCode).toBe(200);
+    expect(reissueResponse.headers["cache-control"]).toBe("no-store");
     const reissued = json<{ shareToken: string; readerUrl: string }>(reissueResponse);
     expect(reissued.shareToken).not.toBe(confirmed.shareToken);
     expect((await app.inject({ method: "GET", url: confirmed.readerUrl })).statusCode).toBe(410);
@@ -416,7 +427,10 @@ describe("Warm Letter API", () => {
       method: "GET",
       url: `/v1/letters/${letterId}/reader?token=anything`,
     });
-    expect(readerResponse.statusCode).toBe(409);
+    expect(readerResponse.statusCode).toBe(404);
+    expect(json<{ error: { code: string } }>(readerResponse).error.code).toBe(
+      "PUBLIC_ACCESS_NOT_FOUND",
+    );
   });
 
   it("blocks confirmation if source evidence is deleted after a draft was generated", async () => {

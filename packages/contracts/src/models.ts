@@ -125,8 +125,9 @@ export const ReplySchema = z
   .object({
     id: EntityIdSchema,
     letterId: EntityIdSchema,
-    text: z.string().trim().min(1).max(1000),
+    text: z.string().trim().min(1).max(240),
     authorName: z.string().trim().min(1).max(40),
+    authorVerified: z.boolean(),
     createdAt: TimestampSchema,
   })
   .strict();

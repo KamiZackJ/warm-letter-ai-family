@@ -153,7 +153,7 @@ export const PublicLetterSchema = z
     draft: LetterDraftSchema,
     publishedAt: TimestampSchema,
     sources: z.array(PublicMaterialSourceSchema).max(30),
-    replies: z.array(ReplySchema),
+    replies: z.array(ReplySchema).max(100),
   })
   .strict();
 
@@ -161,7 +161,7 @@ export const GetLetterReaderResponseSchema = z.object({ reader: PublicLetterSche
 
 export const CreateReplyRequestSchema = z
   .object({
-    text: z.string().trim().min(1).max(1000),
+    text: z.string().trim().min(1).max(240),
     authorName: z.string().trim().min(1).max(40).optional(),
   })
   .strict();
@@ -171,7 +171,7 @@ export const ListRepliesResponseSchema = z.object({ replies: z.array(ReplySchema
 
 export const IssueShareLinkRequestSchema = z
   .object({
-    expiresInSeconds: z.number().int().min(300).max(30 * 24 * 60 * 60).default(7 * 24 * 60 * 60),
+    expiresInSeconds: z.number().int().min(300).max(30 * 24 * 60 * 60).default(30 * 24 * 60 * 60),
   })
   .strict();
 

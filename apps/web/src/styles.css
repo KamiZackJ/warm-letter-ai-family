@@ -240,7 +240,7 @@ h2 {
 .media-fallback button,
 .audio-error-row button,
 .retry-button {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
@@ -252,6 +252,13 @@ h2 {
   border-radius: 6px;
   font-weight: 700;
   font-size: 13px;
+}
+
+.media-fallback button:disabled,
+.audio-error-row button:disabled,
+.retry-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 .original-audio {
@@ -488,7 +495,7 @@ h2 {
 
 .reply-heading p {
   margin-bottom: 18px;
-  color: #66726d;
+  color: #58645f;
   font-size: 13px;
 }
 
@@ -505,7 +512,7 @@ h2 {
   line-height: 1.6;
 }
 
-.reply-composer textarea:focus {
+.reply-composer textarea:focus-visible {
   border-color: #547168;
   box-shadow: 0 0 0 3px rgba(84, 113, 104, 0.14);
 }
@@ -551,7 +558,7 @@ h2 {
 
 .sent-state p {
   margin: 4px 0 0;
-  color: #66726d;
+  color: #59645f;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.5;
@@ -581,9 +588,22 @@ h2 {
   font-size: 13px;
 }
 
+.reply-author {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.reply-author small {
+  flex: 0 0 auto;
+  color: #53605a;
+  font-size: 11px;
+}
+
 .reply-item time {
   flex: 0 0 auto;
-  color: #75807a;
+  color: #53605a;
   font-size: 11px;
 }
 
@@ -641,7 +661,7 @@ footer {
   padding-right: calc(22px + env(safe-area-inset-right));
   padding-bottom: calc(22px + env(safe-area-inset-bottom));
   padding-left: calc(22px + env(safe-area-inset-left));
-  color: #7b7d77;
+  color: #666963;
   background: #fbfaf7;
   text-align: center;
   font-size: 12px;
@@ -658,9 +678,9 @@ footer {
     border-color: #562b2f;
   }
 
-  .media-fallback button:hover,
-  .audio-error-row button:hover,
-  .retry-button:hover {
+  .media-fallback button:hover:not(:disabled),
+  .audio-error-row button:hover:not(:disabled),
+  .retry-button:hover:not(:disabled) {
     color: #29483f;
     background: #f2f7f4;
     border-color: #7f9990;
@@ -673,9 +693,9 @@ footer {
 
 .icon-button:active:not(:disabled),
 .send-button:active:not(:disabled),
-.media-fallback button:active,
-.audio-error-row button:active,
-.retry-button:active {
+.media-fallback button:active:not(:disabled),
+.audio-error-row button:active:not(:disabled),
+.retry-button:active:not(:disabled) {
   transform: translateY(1px);
 }
 

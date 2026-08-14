@@ -46,6 +46,8 @@ export type LetterDraft = {
 export type Reply = {
   id: string;
   text: string;
+  authorName: string;
+  authorVerified: boolean;
   createdAt: string;
 };
 

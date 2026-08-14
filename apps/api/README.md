@@ -41,9 +41,9 @@ The regular tests additionally cover all four MVP material types, user editing, 
 - `POST /v1/letters/:id/share/reissue`
 - `DELETE /v1/letters/:id/share`
 - `GET /v1/letters/:id/reader?token=...`
-- `GET /v1/letters/:letterId/sources/:materialId/content?token=...`
+- `GET /v1/letters/:letterId/sources/:materialId/content?mediaToken=...`
 - `GET|POST /v1/letters/:id/replies`
 
-Private endpoints use the development bearer token returned by `wx-login`. Reader and public reply endpoints use the share token returned by the confirm endpoint.
+Private endpoints use the development bearer token returned by `wx-login`. Reader and public reply endpoints use the share token returned by the confirm endpoint; public media endpoints use a separate short-lived `mediaToken` bound to one share, letter, and material.
 
 The `AIProvider` interface is the production integration boundary. The API does not require or read an OpenAI key in MVP mode.

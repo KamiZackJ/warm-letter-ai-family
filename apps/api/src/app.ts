@@ -1,4 +1,8 @@
-import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
 import cors from "@fastify/cors";
 import { resolve } from "node:path";
 import { FakeAIProvider, type AIProvider } from "./ai.js";
@@ -15,6 +19,13 @@ import {
 } from "./object-storage.js";
 import { MemoryRepository } from "./repository.js";
 import {
+  PublicRateLimiter,
+  type PublicRateLimitConfig,
+  type PublicRouteKind,
+} from "./public-rate-limit.js";
+import type { ReplySafetyPolicy } from "./reply-safety.js";
+import {
+  canonicalMediaCredential,
   WarmLetterService,
   type CreateLetterInput,
   type EditLetterInput,
@@ -31,6 +42,12 @@ export interface BuildAppOptions {
   publicBaseUrl?: string;
   maxMediaUploadBytes?: number;
   shareTokenTtlMs?: number;
+  mediaTokenTtlMs?: number;
+  mediaSigningKeys?: readonly Uint8Array[];
+  publicRateLimits?: PublicRateLimitConfig;
+  replySafetyPolicy?: ReplySafetyPolicy;
+  replySafetyTimeoutMs?: number;
+  loggerStream?: { write(message: string): void };
   now?: () => Date;
 }
 
@@ -56,9 +73,9 @@ function tokenFrom(request: FastifyRequest): string | undefined {
   return authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
 }
 
-function shareTokenFrom(request: FastifyRequest): string | undefined {
+function queryTokenFrom(request: FastifyRequest, field: "token" | "mediaToken"): string | undefined {
   const query = (request.query ?? {}) as Record<string, unknown>;
-  return typeof query.token === "string" ? query.token : undefined;
+  return typeof query[field] === "string" ? query[field] : undefined;
 }
 
 function requireOwnedMaterial(
@@ -93,6 +110,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             },
           },
           redact: ["req.headers.authorization", "headers.authorization"],
+          stream: options.loggerStream,
         }
       : false,
   });
@@ -107,8 +125,32 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const service = new WarmLetterService(
     options.repository ?? new MemoryRepository(),
     options.aiProvider ?? new FakeAIProvider(),
-    { shareTokenTtlMs: options.shareTokenTtlMs, now: options.now },
+    {
+      shareTokenTtlMs: options.shareTokenTtlMs,
+      mediaTokenTtlMs: options.mediaTokenTtlMs,
+      mediaSigningKeys: options.mediaSigningKeys,
+      replySafetyPolicy: options.replySafetyPolicy,
+      replySafetyTimeoutMs: options.replySafetyTimeoutMs,
+      now: options.now,
+    },
   );
+  const publicRateLimiter = new PublicRateLimiter(
+    options.publicRateLimits,
+    () => (options.now?.() ?? new Date()).getTime(),
+  );
+
+  function enforcePublicRateLimit(
+    kind: PublicRouteKind,
+    request: FastifyRequest,
+    reply: FastifyReply,
+    credential: string | undefined,
+  ): void {
+    const result = publicRateLimiter.check(kind, request.ip, credential);
+    if (!result.allowed) {
+      reply.header("retry-after", String(result.retryAfterSeconds));
+      throw new ApiError(429, "RATE_LIMITED", "请求过于频繁，请稍后再试");
+    }
+  }
 
   app.addContentTypeParser(
     supportedMediaContentTypes,
@@ -316,20 +358,22 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     return { job: service.getJob(user.id, id) };
   });
 
-  app.post("/v1/letters/:id/confirm", async (request) => {
+  app.post("/v1/letters/:id/confirm", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
     const published = service.confirmAndPublish(user.id, id);
+    reply.header("cache-control", "no-store");
     return {
       ...published,
       readerUrl: `/v1/letters/${published.letter.id}/reader?token=${encodeURIComponent(published.shareToken)}`,
     };
   });
 
-  app.post("/v1/letters/:id/share/reissue", async (request) => {
+  app.post("/v1/letters/:id/share/reissue", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
     const published = service.reissueShare(user.id, id);
+    reply.header("cache-control", "no-store");
     return {
       ...published,
       readerUrl: `/v1/letters/${published.letter.id}/reader?token=${encodeURIComponent(published.shareToken)}`,
@@ -343,28 +387,36 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     return reply.status(204).send();
   });
 
-  app.get("/v1/letters/:id/reader", async (request) => {
+  app.get("/v1/letters/:id/reader", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const shareToken = shareTokenFrom(request);
+    const shareToken = queryTokenFrom(request, "token");
+    enforcePublicRateLimit("reader", request, reply, shareToken);
     const reader = service.getReader(id, shareToken);
+    reply
+      .header("cache-control", "private, no-store")
+      .header("referrer-policy", "no-referrer")
+      .header("x-content-type-options", "nosniff");
     return {
       reader: {
         ...reader,
-        sources: reader.sources.map((source) =>
-          source.type === "text"
-            ? source
+        sources: reader.sources.map((source) => {
+          const { mediaToken, ...publicSource } = source;
+          return source.type === "text"
+            ? publicSource
             : {
-                ...source,
-                mediaUrl: `${publicBaseUrl}/v1/letters/${id}/sources/${source.id}/content?token=${encodeURIComponent(shareToken!)}`,
-              },
-        ),
+                ...publicSource,
+                mediaUrl: `${publicBaseUrl}/v1/letters/${id}/sources/${source.id}/content?mediaToken=${encodeURIComponent(mediaToken!)}`,
+              };
+        }),
       },
     };
   });
 
   app.get("/v1/letters/:letterId/sources/:materialId/content", async (request, reply) => {
     const { letterId, materialId } = request.params as { letterId: string; materialId: string };
-    const material = service.getPublicMaterial(letterId, materialId, shareTokenFrom(request));
+    const mediaToken = queryTokenFrom(request, "mediaToken");
+    enforcePublicRateLimit("media", request, reply, canonicalMediaCredential(mediaToken));
+    const material = service.getPublicMaterial(letterId, materialId, mediaToken);
     const storedObject = await objectStorage.read(material.objectKey!);
     if (!storedObject) {
       throw new ApiError(404, "MATERIAL_OBJECT_NOT_FOUND", "家书来源媒体不存在");
@@ -373,17 +425,28 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       .header("content-type", storedObject.contentType)
       .header("content-length", storedObject.sizeBytes)
       .header("cache-control", "private, no-store")
+      .header("referrer-policy", "no-referrer")
+      .header("x-content-type-options", "nosniff")
       .send(storedObject.bytes);
   });
 
-  app.post("/v1/letters/:id/replies", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const body = record(request.body);
-    const text = stringValue(body.text, "text")!;
-    const authorName = stringValue(body.authorName, "authorName", false);
-    const createdReply = service.createReply(id, shareTokenFrom(request), text, authorName);
-    return reply.status(201).send({ reply: createdReply });
-  });
+  app.post(
+    "/v1/letters/:id/replies",
+    { bodyLimit: 8 * 1024 },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const shareToken = queryTokenFrom(request, "token");
+      enforcePublicRateLimit("reply", request, reply, shareToken);
+      const body = record(request.body);
+      const text = stringValue(body.text, "text")!;
+      const authorName = stringValue(body.authorName, "authorName", false);
+      const createdReply = await service.createReply(id, shareToken, text, authorName);
+      return reply
+        .header("cache-control", "no-store")
+        .status(201)
+        .send({ reply: createdReply });
+    },
+  );
 
   app.get("/v1/letters/:id/replies", async (request) => {
     const user = service.authenticate(tokenFrom(request));

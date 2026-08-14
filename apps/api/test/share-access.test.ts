@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeAIProvider } from "../src/ai.js";
-import type { Letter, LetterDraft } from "../src/domain.js";
+import type { Letter, LetterDraft, ShareAccess } from "../src/domain.js";
 import { ApiError } from "../src/errors.js";
 import { MemoryRepository } from "../src/repository.js";
 import { WarmLetterService } from "../src/service.js";
@@ -15,12 +15,23 @@ const draft: LetterDraft = {
   generatedAt: "2026-08-15T00:00:00.000Z",
 };
 
-function setup(now: () => Date): {
+class FailingShareRepository extends MemoryRepository {
+  failNextShareSave = false;
+
+  override saveShareAccess(access: ShareAccess): ShareAccess {
+    if (this.failNextShareSave) {
+      this.failNextShareSave = false;
+      throw new Error("share persistence failed");
+    }
+    return super.saveShareAccess(access);
+  }
+}
+
+function setup(now: () => Date, repository = new MemoryRepository()): {
   repository: MemoryRepository;
   service: WarmLetterService;
   letter: Letter;
 } {
-  const repository = new MemoryRepository();
   repository.saveUser({
     id: "user-1",
     openId: "openid-1",
@@ -65,6 +76,21 @@ function expectApiError(operation: () => unknown, code: string, statusCode: numb
 }
 
 describe("share access lifecycle", () => {
+  it("rejects unsafe token configuration", () => {
+    expect(
+      () =>
+        new WarmLetterService(new MemoryRepository(), new FakeAIProvider(), {
+          shareTokenTtlMs: 0,
+        }),
+    ).toThrow("positive safe integer");
+    expect(
+      () =>
+        new WarmLetterService(new MemoryRepository(), new FakeAIProvider(), {
+          mediaSigningKeys: [Buffer.alloc(31)],
+        }),
+    ).toThrow("at least 32 bytes");
+  });
+
   it("stores only a token hash and expires public access", () => {
     let currentTime = new Date("2026-08-15T00:00:00.000Z");
     const { repository, service, letter } = setup(() => currentTime);
@@ -89,7 +115,7 @@ describe("share access lifecycle", () => {
     );
   });
 
-  it("revokes old links when reissuing and supports explicit revocation", () => {
+  it("revokes old links when reissuing and supports explicit revocation", async () => {
     const now = new Date("2026-08-15T00:00:00.000Z");
     const { service, letter } = setup(() => now);
     const original = service.confirmAndPublish("user-1", letter.id);
@@ -104,11 +130,22 @@ describe("share access lifecycle", () => {
     expect(service.getReader(letter.id, replacement.shareToken).id).toBe(letter.id);
 
     service.revokeShare("user-1", letter.id);
-    expectApiError(
-      () => service.createReply(letter.id, replacement.shareToken, "收到"),
-      "SHARE_TOKEN_REVOKED",
-      410,
-    );
-    expectApiError(() => service.getReader(letter.id, "guessed"), "INVALID_SHARE_TOKEN", 403);
+    await expect(service.createReply(letter.id, replacement.shareToken, "收到")).rejects.toMatchObject({
+      code: "SHARE_TOKEN_REVOKED",
+      statusCode: 410,
+    });
+    expectApiError(() => service.getReader(letter.id, "guessed"), "PUBLIC_ACCESS_NOT_FOUND", 404);
+  });
+
+  it("keeps the current share active when replacement persistence fails", () => {
+    const now = new Date("2026-08-15T00:00:00.000Z");
+    const repository = new FailingShareRepository();
+    const { service, letter } = setup(() => now, repository);
+    const original = service.confirmAndPublish("user-1", letter.id);
+
+    repository.failNextShareSave = true;
+    expect(() => service.reissueShare("user-1", letter.id)).toThrow("share persistence failed");
+    expect(service.getReader(letter.id, original.shareToken).id).toBe(letter.id);
+    expect(repository.listShareAccess(letter.id)).toHaveLength(1);
   });
 });

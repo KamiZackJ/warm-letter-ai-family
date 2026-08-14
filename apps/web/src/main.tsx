@@ -38,6 +38,7 @@ type Reply = {
   id: string;
   text: string;
   authorName: string;
+  authorVerified: boolean;
   createdAt: string;
 };
 
@@ -167,15 +168,10 @@ function formatDuration(value?: number): string {
   return `${minutes}:${seconds}`;
 }
 
-function isMediaExpired(source: Source): boolean {
+function isMediaExpired(source: Source, now = Date.now()): boolean {
   if (!source.mediaExpiresAt) return false;
   const expiresAt = new Date(source.mediaExpiresAt).getTime();
-  return !Number.isNaN(expiresAt) && expiresAt <= Date.now();
-}
-
-function retryableMediaUrl(url: string, attempt: number): string {
-  if (attempt === 0) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}warmLetterRetry=${attempt}`;
+  return !Number.isNaN(expiresAt) && expiresAt <= now;
 }
 
 async function apiErrorFrom(response: Response, fallback: string): Promise<ApiRequestError> {
@@ -200,7 +196,7 @@ async function fetchReaderData(
 ): Promise<ReaderData> {
   const response = await fetch(
     `${API_BASE_URL}/letters/${encodeURIComponent(letterId)}/reader?token=${encodeURIComponent(shareToken)}`,
-    { signal },
+    { signal, referrerPolicy: "no-referrer" },
   );
   if (!response.ok) throw await apiErrorFrom(response, "家书暂时无法打开");
   const payload = (await response.json()) as { reader?: ReaderData };
@@ -226,10 +222,17 @@ function describeReaderFailure(error: unknown): ReaderFailure {
         retryable: false,
       };
     }
-    if (error.code === "INVALID_SHARE_TOKEN" || error.status === 403 || error.status === 404) {
+    if (error.code === "PUBLIC_ACCESS_NOT_FOUND" || error.status === 403 || error.status === 404) {
       return {
         title: "无法打开这封家书",
         detail: "读信链接不正确，或这封家书已经不存在。",
+        retryable: false,
+      };
+    }
+    if (error.code === "SHARE_UNAVAILABLE") {
+      return {
+        title: "这封家书暂时无法阅读",
+        detail: "寄信人分享的内容暂时不可用，请稍后再试或联系寄信人。",
         retryable: false,
       };
     }
@@ -247,6 +250,21 @@ function describeReaderFailure(error: unknown): ReaderFailure {
   };
 }
 
+function readShareParams(): {
+  letterId: string | null;
+  shareToken: string | null;
+  cameFromQuery: boolean;
+} {
+  const query = new URLSearchParams(window.location.search);
+  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const queryToken = query.get("token");
+  return {
+    letterId: query.get("letterId") || fragment.get("letterId"),
+    shareToken: queryToken || fragment.get("token"),
+    cameFromQuery: Boolean(queryToken),
+  };
+}
+
 function App() {
   const [reader, setReader] = useState<ReaderData>(demoReader);
   const [loading, setLoading] = useState(true);
@@ -256,14 +274,15 @@ function App() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [mediaErrors, setMediaErrors] = useState<Record<string, boolean>>({});
   const [mediaAttempts, setMediaAttempts] = useState<Record<string, number>>({});
+  const [mediaRefreshing, setMediaRefreshing] = useState<Record<string, boolean>>({});
+  const [mediaNow, setMediaNow] = useState(() => Date.now());
   const [reply, setReply] = useState("");
   const [replyError, setReplyError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const letterId = params.get("letterId");
-  const shareToken = params.get("token");
+  const shareParams = useMemo(readShareParams, []);
+  const { letterId, shareToken } = shareParams;
   const isDemo = !letterId && !shareToken;
   const sourceMap = useMemo(
     () => new Map(reader.sources.map((source) => [source.id, source])),
@@ -282,6 +301,12 @@ function App() {
     [reader.sources],
   );
   const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  useEffect(() => {
+    if (!shareParams.cameFromQuery || !letterId || !shareToken) return;
+    const fragment = new URLSearchParams({ letterId, token: shareToken });
+    window.history.replaceState(null, "", `${window.location.pathname}#${fragment.toString()}`);
+  }, [letterId, shareParams.cameFromQuery, shareToken]);
 
   useEffect(() => {
     if (isDemo) {
@@ -318,6 +343,18 @@ function App() {
 
     return () => controller.abort();
   }, [isDemo, letterId, shareToken, loadAttempt]);
+
+  useEffect(() => {
+    const expirations = reader.sources
+      .map((source) => (source.mediaExpiresAt ? Date.parse(source.mediaExpiresAt) : Number.NaN))
+      .filter((value) => Number.isFinite(value) && value > Date.now());
+    if (expirations.length === 0) return;
+    const timeout = window.setTimeout(
+      () => setMediaNow(Date.now()),
+      Math.max(50, Math.min(...expirations) - Date.now() + 50),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [reader.sources]);
 
   useEffect(() => {
     return () => {
@@ -361,13 +398,32 @@ function App() {
     setMediaErrors((current) => ({ ...current, [sourceId]: true }));
   };
 
-  const retryMedia = (sourceId: string) => {
+  const retryMedia = async (sourceId: string) => {
     setMediaErrors((current) => ({ ...current, [sourceId]: false }));
-    setMediaAttempts((current) => ({ ...current, [sourceId]: (current[sourceId] || 0) + 1 }));
+    if (isDemo || !letterId || !shareToken) {
+      setMediaAttempts((current) => ({ ...current, [sourceId]: (current[sourceId] || 0) + 1 }));
+      return;
+    }
+    setMediaRefreshing((current) => ({ ...current, [sourceId]: true }));
+    try {
+      const refreshedReader = await fetchReaderData(letterId, shareToken);
+      setReader(refreshedReader);
+      setMediaNow(Date.now());
+      setMediaErrors({});
+      setMediaAttempts((current) => ({ ...current, [sourceId]: (current[sourceId] || 0) + 1 }));
+    } catch {
+      setMediaErrors((current) => ({ ...current, [sourceId]: true }));
+    } finally {
+      setMediaRefreshing((current) => ({ ...current, [sourceId]: false }));
+    }
   };
 
   const sendReply = async () => {
-    if (!reply.trim() || submitting) return;
+    if (submitting) return;
+    if (!reply.trim()) {
+      setReplyError("请先写一句回复。");
+      return;
+    }
     setReplyError("");
     setSubmitting(true);
     const replyText = reply.trim();
@@ -382,6 +438,7 @@ function App() {
               id: `demo-reply-${createdAt}`,
               text: replyText,
               authorName: "家人",
+              authorVerified: false,
               createdAt,
             },
           ],
@@ -394,6 +451,7 @@ function App() {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ text: replyText, authorName: "家人" }),
+            referrerPolicy: "no-referrer",
           },
         );
         if (!response.ok) throw await apiErrorFrom(response, "回复发送失败，请稍后重试");
@@ -510,34 +568,48 @@ function App() {
             aria-label="家书图片素材"
           >
             {imageSources.map((source, index) => {
-              const expired = isMediaExpired(source);
+              const expired = isMediaExpired(source, mediaNow);
               const failed = mediaErrors[source.id];
               const attempt = mediaAttempts[source.id] || 0;
+              const refreshing = mediaRefreshing[source.id];
               return (
                 <figure className="memory-photo" key={source.id} data-testid="source-image">
                   {expired ? (
                     <div className="media-fallback" role="status">
                       <AlertCircle aria-hidden="true" size={23} />
                       <span>图片访问已到期</span>
+                      <button
+                        type="button"
+                        disabled={refreshing}
+                        onClick={() => void retryMedia(source.id)}
+                      >
+                        <RefreshCw aria-hidden="true" size={15} />
+                        {refreshing ? "刷新中…" : "重新获取"}
+                      </button>
                     </div>
                   ) : failed ? (
                     <div className="media-fallback" role="status" aria-live="polite">
                       <ImageIcon aria-hidden="true" size={23} />
                       <span>图片暂时无法加载</span>
-                      <button type="button" onClick={() => retryMedia(source.id)}>
+                      <button
+                        type="button"
+                        disabled={refreshing}
+                        onClick={() => void retryMedia(source.id)}
+                      >
                         <RefreshCw aria-hidden="true" size={15} />
-                        重试
+                        {refreshing ? "刷新中…" : "重新获取"}
                       </button>
                     </div>
                   ) : (
                     <img
                       key={attempt}
-                      src={retryableMediaUrl(source.mediaUrl!, attempt)}
+                      src={source.mediaUrl!}
                       alt={source.name}
                       width={1200}
                       height={900}
                       loading={index === 0 ? "eager" : "lazy"}
                       fetchPriority={index === 0 ? "high" : "auto"}
+                      referrerPolicy="no-referrer"
                       onLoad={() => markMediaLoaded(source.id)}
                       onError={() => markMediaFailed(source.id)}
                     />
@@ -560,9 +632,10 @@ function App() {
             </div>
             <div className="audio-list">
               {audioSources.map((source) => {
-                const expired = isMediaExpired(source);
+                const expired = isMediaExpired(source, mediaNow);
                 const failed = mediaErrors[source.id];
                 const attempt = mediaAttempts[source.id] || 0;
+                const refreshing = mediaRefreshing[source.id];
                 return (
                   <div className="audio-source" key={source.id} data-testid="source-audio">
                     <div className="audio-source-copy">
@@ -572,15 +645,27 @@ function App() {
                       ) : null}
                     </div>
                     {expired ? (
-                      <p className="media-inline-error" role="status">
-                        语音访问已到期，请向寄信人索取新链接。
-                      </p>
+                      <div className="audio-error-row" role="status" aria-live="polite">
+                        <p className="media-inline-error">语音访问已到期。</p>
+                        <button
+                          type="button"
+                          disabled={refreshing}
+                          onClick={() => void retryMedia(source.id)}
+                        >
+                          <RefreshCw aria-hidden="true" size={15} />
+                          {refreshing ? "刷新中…" : "重新获取"}
+                        </button>
+                      </div>
                     ) : failed ? (
                       <div className="audio-error-row" role="status" aria-live="polite">
                         <p className="media-inline-error">语音暂时无法播放。</p>
-                        <button type="button" onClick={() => retryMedia(source.id)}>
+                        <button
+                          type="button"
+                          disabled={refreshing}
+                          onClick={() => void retryMedia(source.id)}
+                        >
                           <RefreshCw aria-hidden="true" size={15} />
-                          重试
+                          {refreshing ? "刷新中…" : "重新获取"}
                         </button>
                       </div>
                     ) : (
@@ -589,7 +674,7 @@ function App() {
                         controls
                         controlsList="nodownload"
                         preload="metadata"
-                        src={retryableMediaUrl(source.mediaUrl!, attempt)}
+                        src={source.mediaUrl!}
                         aria-label={`播放原始语音：${source.name}`}
                         onCanPlay={() => markMediaLoaded(source.id)}
                         onError={() => markMediaFailed(source.id)}
@@ -631,6 +716,7 @@ function App() {
             type="button"
             onClick={() => setSourcesOpen((value) => !value)}
             aria-expanded={sourcesOpen}
+            aria-controls="source-list"
           >
             <span>这封信参考了 {reader.sources.length} 份素材</span>
             <ChevronDown
@@ -640,12 +726,12 @@ function App() {
             />
           </button>
           {sourcesOpen ? (
-            <div className="source-list">
+            <div className="source-list" id="source-list">
               {reader.sources.map((source) => {
                 const meta = sourceMeta[source.type];
                 return (
                   <div className="source-item" key={source.id}>
-                    <span className={`source-dot dot-${meta.tone}`} />
+                    <span aria-hidden="true" className={`source-dot dot-${meta.tone}`} />
                     <div>
                       <strong>{source.name}</strong>
                       <p>
@@ -653,7 +739,7 @@ function App() {
                         {source.durationSeconds !== undefined
                           ? ` · ${formatDuration(source.durationSeconds)}`
                           : ""}
-                        {source.mediaExpiresAt ? ` · 随链接有效至 ${formatDateTime(source.mediaExpiresAt)}` : ""}
+                        {source.mediaExpiresAt ? ` · 媒体访问有效至 ${formatDateTime(source.mediaExpiresAt)}` : ""}
                       </p>
                     </div>
                   </div>
@@ -678,7 +764,10 @@ function App() {
             {reader.replies.map((item) => (
               <article className="reply-item" key={item.id}>
                 <div>
-                  <strong>{item.authorName}</strong>
+                  <span className="reply-author">
+                    <strong>{item.authorName}</strong>
+                    {!item.authorVerified ? <small>未验证身份</small> : null}
+                  </span>
                   <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
                 </div>
                 <p>{item.text}</p>
@@ -700,15 +789,20 @@ function App() {
             <textarea
               data-testid="reply-input"
               value={reply}
-              onChange={(event) => setReply(event.target.value)}
+              onChange={(event) => {
+                setReply(event.target.value);
+                if (replyError) setReplyError("");
+              }}
               name="reply"
               autoComplete="off"
               placeholder="例如：收到信了，周末给你打电话…"
               maxLength={240}
               aria-label="回复内容"
+              aria-invalid={Boolean(replyError)}
+              aria-describedby={replyError ? "reply-error" : undefined}
             />
             {replyError ? (
-              <p className="reply-error" role="alert" aria-live="polite">
+              <p id="reply-error" className="reply-error" role="alert" aria-live="polite">
                 {replyError}
               </p>
             ) : null}
@@ -717,7 +811,7 @@ function App() {
               data-testid="reply-submit"
               type="button"
               onClick={sendReply}
-              disabled={!reply.trim() || submitting}
+              disabled={submitting}
             >
               <Send aria-hidden="true" size={18} />
               {submitting ? "发送中…" : "发送回复"}

@@ -110,12 +110,12 @@ button {
 .segment {
   flex: 1;
   min-width: 0;
-  height: 72rpx;
+  height: 88rpx;
   border-radius: 6rpx;
   background: transparent;
   color: #5f6561;
   font-size: 26rpx;
-  line-height: 72rpx;
+  line-height: 88rpx;
   text-align: center;
 }
 

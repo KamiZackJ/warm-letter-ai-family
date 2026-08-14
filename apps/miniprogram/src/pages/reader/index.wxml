@@ -2,13 +2,21 @@
   <view class="reader-toolbar">
     <text class="toolbar-label">阅读字号</text>
     <view class="font-controls">
-      <button class="font-button {{fontMode === 'normal' ? 'is-active' : ''}}" data-value="normal" bindtap="chooseFont">标准</button>
-      <button class="font-button {{fontMode === 'large' ? 'is-active' : ''}}" data-value="large" bindtap="chooseFont">大字</button>
-      <button class="font-button {{fontMode === 'extra' ? 'is-active' : ''}}" data-value="extra" bindtap="chooseFont">特大</button>
+      <button class="font-button {{fontMode === 'normal' ? 'is-active' : ''}}" aria-pressed="{{fontMode === 'normal'}}" data-value="normal" bindtap="chooseFont">标准</button>
+      <button class="font-button {{fontMode === 'large' ? 'is-active' : ''}}" aria-pressed="{{fontMode === 'large'}}" data-value="large" bindtap="chooseFont">大字</button>
+      <button class="font-button {{fontMode === 'extra' ? 'is-active' : ''}}" aria-pressed="{{fontMode === 'extra'}}" data-value="extra" bindtap="chooseFont">特大</button>
     </view>
   </view>
 
-  <view wx:if="{{loading}}" class="reader-loading">正在展开家书…</view>
+  <view wx:if="{{loading}}" class="reader-loading" aria-live="polite">正在展开家书…</view>
+  <view wx:elif="{{loadError}}" class="reader-error" aria-live="assertive">
+    <text class="reader-error-title">家书暂时无法打开</text>
+    <text class="reader-error-detail">{{loadError}}</text>
+    <view class="reader-error-actions">
+      <button class="primary-button" bindtap="retryLoad">重新加载</button>
+      <button class="secondary-button" bindtap="backFromError">返回首页</button>
+    </view>
+  </view>
   <block wx:elif="{{letter && letter.draft}}">
     <view class="letter-paper">
       <view class="letter-status">
@@ -30,7 +38,7 @@
     <view wx:if="{{imageMaterials.length > 0}}" class="media-band">
       <text class="band-title">信里的照片</text>
       <scroll-view class="image-strip" scroll-x enable-flex>
-        <button wx:for="{{imageMaterials}}" wx:key="id" class="image-item" data-path="{{item.mediaUrl}}" bindtap="previewImage">
+        <button wx:for="{{imageMaterials}}" wx:key="id" class="image-item" aria-label="查看照片：{{item.name}}" data-id="{{item.id}}" data-path="{{item.mediaUrl}}" bindtap="previewImage">
           <image wx:if="{{item.mediaUrl}}" class="letter-image" src="{{item.mediaUrl}}" mode="aspectFill" />
           <view wx:else class="image-placeholder">照片</view>
           <text class="image-name">{{item.name}}</text>
@@ -40,7 +48,7 @@
 
     <view wx:if="{{voiceMaterials.length > 0}}" class="media-band">
       <text class="band-title">听听声音</text>
-      <button wx:for="{{voiceMaterials}}" wx:key="id" class="voice-row" data-id="{{item.id}}" data-path="{{item.mediaUrl}}" bindtap="playVoice">
+      <button wx:for="{{voiceMaterials}}" wx:key="id" class="voice-row" aria-label="{{playingId === item.id ? '暂停语音：' : '播放语音：'}}{{item.name}}" aria-pressed="{{playingId === item.id}}" data-id="{{item.id}}" data-path="{{item.mediaUrl}}" bindtap="playVoice">
         <text class="voice-control">{{playingId === item.id ? '暂停' : '播放'}}</text>
         <view class="voice-info">
           <text class="voice-name">{{item.name}}</text>
@@ -62,11 +70,12 @@
 
     <view class="reply-band">
       <text class="band-title">回一句话</text>
-      <textarea class="reply-input" maxlength="300" placeholder="例如：看到了，放心吧。你也照顾好自己。" value="{{replyText}}" bindinput="updateReply" />
+      <textarea class="reply-input" aria-label="回复内容" maxlength="240" placeholder="例如：看到了，放心吧。你也照顾好自己。" value="{{replyText}}" bindinput="updateReply" />
       <button class="primary-button reply-button" loading="{{sendingReply}}" disabled="{{sendingReply}}" bindtap="sendReply">送出回复</button>
 
       <view wx:if="{{replies.length > 0}}" class="reply-list">
         <view wx:for="{{replies}}" wx:key="id" class="reply-row">
+          <text class="reply-author-name">{{item.authorName}} · {{item.authorVerified ? '已验证' : '未验证身份'}}</text>
           <text class="reply-text">{{item.text}}</text>
           <text class="reply-date">{{item.dateLabel}}</text>
         </view>

@@ -47,8 +47,51 @@
 
 .reader-loading {
   padding: 100rpx 32rpx;
-  color: #737975;
+  color: #5d6661;
   text-align: center;
+}
+
+.reader-error {
+  min-height: calc(100vh - 124rpx);
+  padding: 96rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #3f4b46;
+  text-align: center;
+}
+
+.reader-error-title,
+.reader-error-detail {
+  display: block;
+}
+
+.reader-error-title {
+  font-size: 38rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.reader-error-detail {
+  max-width: 620rpx;
+  margin-top: 18rpx;
+  color: #59635e;
+  font-size: 28rpx;
+  line-height: 1.65;
+}
+
+.reader-error-actions {
+  width: 100%;
+  max-width: 620rpx;
+  margin-top: 34rpx;
+  display: flex;
+  gap: 16rpx;
+}
+
+.reader-error-actions button {
+  flex: 1;
+  min-width: 0;
 }
 
 .letter-paper {
@@ -102,7 +145,7 @@
 
 .letter-date {
   margin-top: 12rpx;
-  color: #838782;
+  color: #666d68;
   font-size: 21rpx;
   text-align: center;
 }
@@ -255,14 +298,14 @@
 
 .voice-duration {
   margin-top: 5rpx;
-  color: #747a76;
+  color: #5f6863;
   font-size: 22rpx;
 }
 
 .evidence-note {
   display: block;
   margin-top: -10rpx;
-  color: #6c726f;
+  color: #616865;
   font-size: 24rpx;
   line-height: 1.55;
 }
@@ -318,9 +361,16 @@
   border-bottom: 2rpx solid #d5d1c8;
 }
 
+.reply-author-name,
 .reply-text,
 .reply-date {
   display: block;
+}
+
+.reply-author-name {
+  margin-bottom: 8rpx;
+  color: #5f6a65;
+  font-size: 24rpx;
 }
 
 .reply-text {
@@ -330,6 +380,42 @@
 
 .reply-date {
   margin-top: 8rpx;
-  color: #787d7a;
+  color: #5f6763;
   font-size: 22rpx;
+}
+
+.font-large .letter-status,
+.font-large .letter-date,
+.font-large .ai-disclosure,
+.font-large .image-name,
+.font-large .voice-duration,
+.font-large .reply-author-name,
+.font-large .reply-date {
+  font-size: 25rpx;
+}
+
+.font-extra .letter-status,
+.font-extra .letter-date,
+.font-extra .ai-disclosure,
+.font-extra .image-name,
+.font-extra .voice-duration,
+.font-extra .reply-author-name,
+.font-extra .reply-date {
+  font-size: 28rpx;
+}
+
+.font-large .band-title,
+.font-large .voice-name,
+.font-large .evidence-note,
+.font-large .evidence-row,
+.font-large .reply-text {
+  font-size: 32rpx;
+}
+
+.font-extra .band-title,
+.font-extra .voice-name,
+.font-extra .evidence-note,
+.font-extra .evidence-row,
+.font-extra .reply-text {
+  font-size: 36rpx;
 }

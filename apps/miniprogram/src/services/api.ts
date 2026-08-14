@@ -50,6 +50,8 @@ type ServerLetter = {
 type ServerReply = {
   id: string;
   text: string;
+  authorName: string;
+  authorVerified: boolean;
   createdAt: string;
 };
 
@@ -194,6 +196,8 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
     replies: replies.map((reply) => ({
       id: reply.id,
       text: reply.text,
+      authorName: reply.authorName,
+      authorVerified: reply.authorVerified,
       createdAt: reply.createdAt,
     })),
     createdAt: serverLetter.createdAt,

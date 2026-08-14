@@ -14,6 +14,12 @@ const TYPE_LABELS: Record<string, string> = {
 
 const audio = wx.createInnerAudioContext();
 
+function mediaExpired(source: ReaderSource | undefined): boolean {
+  if (!source?.mediaExpiresAt) return false;
+  const expiresAt = Date.parse(source.mediaExpiresAt);
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
 Page({
   data: {
     letterId: "",
@@ -28,12 +34,17 @@ Page({
     fontMode: "large" as "normal" | "large" | "extra",
     playingId: "",
     loading: true,
+    loadError: "",
     sendingReply: false,
+    refreshingMedia: false,
   },
 
   async onLoad(options: { id?: string; token?: string }) {
     if (!options.id) {
-      wx.showToast({ title: "缺少家书编号", icon: "none" });
+      this.setData({
+        loading: false,
+        loadError: "链接里缺少家书编号，请返回后重新打开完整分享链接。",
+      });
       return;
     }
     this.setData({ letterId: options.id, shareToken: options.token || "" });
@@ -41,6 +52,7 @@ Page({
     audio.onError(() => {
       this.setData({ playingId: "" });
       wx.showToast({ title: "语音暂时无法播放", icon: "none" });
+      void this.refreshMediaAccess();
     });
     await this.loadLetter();
   },
@@ -49,7 +61,10 @@ Page({
     audio.stop();
   },
 
-  async loadLetter() {
+  async loadLetter(preserveContent = false) {
+    if (!preserveContent) {
+      this.setData({ loading: true, loadError: "" });
+    }
     try {
       const letter = await api.getReader(
         this.data.letterId,
@@ -72,11 +87,46 @@ Page({
           ...reply,
           dateLabel: formatDate(reply.createdAt),
         })),
+        loadError: "",
       });
+      return true;
     } catch (error) {
-      wx.showToast({ title: (error as Error).message, icon: "none" });
+      const message = (error as Error).message || "家书暂时无法打开";
+      if (preserveContent) {
+        wx.showToast({ title: message, icon: "none" });
+      } else {
+        this.setData({
+          letter: null,
+          materials: [],
+          imageMaterials: [],
+          voiceMaterials: [],
+          replies: [],
+          loadError: message,
+        });
+      }
+      return false;
     } finally {
-      this.setData({ loading: false });
+      if (!preserveContent) {
+        this.setData({ loading: false });
+      }
+    }
+  },
+
+  async retryLoad() {
+    await this.loadLetter();
+  },
+
+  backFromError() {
+    wx.reLaunch({ url: "/pages/home/index" });
+  },
+
+  async refreshMediaAccess() {
+    if (this.data.refreshingMedia) return;
+    this.setData({ refreshingMedia: true });
+    try {
+      await this.loadLetter(true);
+    } finally {
+      this.setData({ refreshingMedia: false });
     }
   },
 
@@ -86,8 +136,18 @@ Page({
     this.setData({ fontMode: event.currentTarget.dataset.value });
   },
 
-  previewImage(event: { currentTarget: { dataset: { path?: string } } }) {
-    const path = event.currentTarget.dataset.path;
+  async previewImage(event: { currentTarget: { dataset: { id: string; path?: string } } }) {
+    const { id } = event.currentTarget.dataset;
+    let source = this.data.imageMaterials.find((item) => item.id === id);
+    if (mediaExpired(source)) {
+      await this.refreshMediaAccess();
+      source = this.data.imageMaterials.find((item) => item.id === id);
+    }
+    if (mediaExpired(source)) {
+      wx.showToast({ title: "图片访问已到期，请稍后重试", icon: "none" });
+      return;
+    }
+    const path = source?.mediaUrl;
     if (!path) {
       wx.showToast({ title: "演示素材不含真实图片", icon: "none" });
       return;
@@ -98,8 +158,18 @@ Page({
     wx.previewImage({ current: path, urls });
   },
 
-  playVoice(event: { currentTarget: { dataset: { id: string; path?: string } } }) {
-    const { id, path } = event.currentTarget.dataset;
+  async playVoice(event: { currentTarget: { dataset: { id: string; path?: string } } }) {
+    const { id } = event.currentTarget.dataset;
+    let source = this.data.voiceMaterials.find((item) => item.id === id);
+    if (mediaExpired(source)) {
+      await this.refreshMediaAccess();
+      source = this.data.voiceMaterials.find((item) => item.id === id);
+    }
+    if (mediaExpired(source)) {
+      wx.showToast({ title: "语音访问已到期，请稍后重试", icon: "none" });
+      return;
+    }
+    const path = source?.mediaUrl;
     if (!path) {
       wx.showToast({ title: "演示语音仅展示播放入口", icon: "none" });
       return;

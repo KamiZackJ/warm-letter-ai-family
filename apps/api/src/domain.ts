@@ -96,6 +96,7 @@ export interface Reply {
   letterId: string;
   text: string;
   authorName: string;
+  authorVerified: boolean;
   createdAt: string;
 }
 
