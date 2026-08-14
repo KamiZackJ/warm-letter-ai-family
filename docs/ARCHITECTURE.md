@@ -31,7 +31,7 @@ API 和前端必须从 `@warm-letter/contracts` 导入契约，不得各自维�
 3. 用户创建家书并选择素材。只有 `READY` 且未删除的素材能令家书进入 `MATERIALS_READY`。`screenshot` 在当前契约中同时表示聊天截图和日程截图，避免服务端推断图片内容。
 4. 生成接口创建任务并将家书置为 `GENERATING`。AI provider 生成结构化 `LetterDraft`；成功后进入 `EDITING`，失败时恢复生成前状态供重试。生产版再把进程内任务替换为独立 Worker。
 5. 用户编辑草稿。每个段落保存 `sourceRefs`，服务端验证引用均属于该家书素材集合。
-6. 当前确认接口将内容复制为不可变 `confirmedDraft`，依次进入 `CONFIRMED` 和 `PUBLISHED` 并签发有期限的分享令牌。服务端只保存 token hash，支持重签和撤销；公开阅读接口只返回确认版本与脱敏来源，不返回对象键或用户内部字段。草稿版本并发保护、独立更短期媒体凭据、限流与内容安全仍待生产化。
+6. 当前确认接口将内容复制为不可变 `confirmedDraft`，依次进入 `CONFIRMED` 和 `PUBLISHED` 并签发有期限的分享令牌。服务端只保存 token hash，支持重签和撤销；公开阅读接口只返回确认版本与脱敏来源，并为每个非文本素材签发更短期、绑定分享/家书/素材的 HMAC 媒体凭据。单实例限流、回复上限原子写入和本地内容安全兜底已有测试；草稿版本并发保护、跨实例共享限流、正式审核服务和数据库事务约束仍待生产化。
 7. 长图和短片后续均以同一确认版本创建异步渲染任务，禁止从未确认草稿单独生成另一份正文。
 
 ## 4. 隐私与一致性不变量
@@ -64,7 +64,7 @@ API 和前端必须从 `@warm-letter/contracts` 导入契约，不得各自维�
 | `POST /v1/letters/:id/share/reissue` | `ReissueShareLinkResponse` | 撤销旧 token 并签发新 readerUrl |
 | `DELETE /v1/letters/:id/share` | 空响应 | 撤销当前分享 |
 | `GET /v1/letters/:id/reader` | `GetLetterReaderResponse` | 使用签名令牌读取公开版本 |
-| `GET /v1/letters/:letterId/sources/:materialId/content` | 二进制媒体 | 使用当前分享 token 读取公开媒体 |
+| `GET /v1/letters/:letterId/sources/:materialId/content` | 二进制媒体 | 使用独立短期 `mediaToken` 读取绑定的公开媒体 |
 | `POST /v1/letters/:id/replies` | `CreateReplyRequest/Response` | 添加简单文字回复 |
 | `GET /v1/letters/:id/replies` | `ListRepliesResponse` | 作者查看家人回复 |
 
@@ -75,7 +75,8 @@ API 和前端必须从 `@warm-letter/contracts` 导入契约，不得各自维�
 - `MaterialSchema` 与当前 API 一致使用 `userId/name/contentType/status`；私有素材响应中的 `objectKey/textContent` 仅供本人会话使用，前端不得写入日志、分析事件或公开页面。
 - 当前草稿使用 `greeting + paragraphs + closing`，每个 paragraph 强制携带 `sourceRefs`。`provider` 是现有生成证据，`aiDisclosure` 是向 UI 渐进增加的显式 AI 标注字段。
 - 当前生成任务只有 `status/error`；渲染类型、进度、重试次数和结果字段为可选扩展，接入独立队列后启用。
-- 当前分享令牌随确认接口签发，服务端只存 token hash、`expiresAt` 和 `revokedAt`；`POST /v1/letters/:id/share/reissue` 轮换后旧 reader、旧媒体与旧回复入口立即失效，`DELETE /v1/letters/:id/share` 可显式撤销。当前公开媒体 URL 仍复用整份分享 token，生产版必须改为独立且更短期的媒体凭据。
+- 当前分享令牌随确认接口签发，服务端只存 token hash、`expiresAt` 和 `revokedAt`；公开 reader 为每个媒体返回独立 HMAC `mediaToken`，默认 5 分钟且不超过父分享期限，并绑定 share ID、家书 ID 和素材 ID。`POST /v1/letters/:id/share/reissue` 轮换后旧 reader、旧媒体与旧回复入口立即失效，`DELETE /v1/letters/:id/share` 可显式撤销；生产环境必须配置可轮换媒体签名密钥。
+- reader/media/reply 具备 IP 与凭据双桶限流、`Retry-After`、桶数量上限；回复使用可注入安全策略、3 秒失败关闭、本地类别规则、240 字/40 字字段限制和每封 100 条同步原子门禁。当前实现只证明单进程内存仓储，生产需 PostgreSQL/Redis 事务或约束、共享限流和可信代理配置。
 
 ## 6. MVP 验收标准
 
