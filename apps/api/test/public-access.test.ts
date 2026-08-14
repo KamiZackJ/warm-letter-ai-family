@@ -231,6 +231,28 @@ describe("public share, media, and reply security", () => {
     expect(mediaTokenAsReply.statusCode).toBe(404);
   });
 
+  it("masks a missing public media object after validating the credential", async () => {
+    const fixture = await publishFixture(app, "missing-public-object");
+    const material = repository.getMaterial(fixture.materialId);
+    expect(material?.objectKey).toBeTruthy();
+    await objectStorage.delete(material!.objectKey!);
+
+    const missingObject = await app.inject({ method: "GET", url: mediaPath(fixture.mediaUrl) });
+    expect(missingObject.statusCode).toBe(410);
+    expect(errorCode(missingObject)).toBe("SHARE_UNAVAILABLE");
+    expect(missingObject.body).not.toContain("MATERIAL_OBJECT_NOT_FOUND");
+    expect(missingObject.body).not.toContain(material!.objectKey!);
+
+    const parsed = new URL(fixture.mediaUrl);
+    parsed.searchParams.set("mediaToken", "unknown");
+    const invalidCredential = await app.inject({
+      method: "GET",
+      url: `${parsed.pathname}${parsed.search}`,
+    });
+    expect(invalidCredential.statusCode).toBe(404);
+    expect(errorCode(invalidCredential)).toBe("PUBLIC_ACCESS_NOT_FOUND");
+  });
+
   it("returns a uniform not-found result for missing, unknown, and wrongly bound credentials", async () => {
     const first = await publishFixture(app, "matrix-a");
     const second = await publishFixture(app, "matrix-b");

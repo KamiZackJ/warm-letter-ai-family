@@ -419,7 +419,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const material = service.getPublicMaterial(letterId, materialId, mediaToken);
     const storedObject = await objectStorage.read(material.objectKey!);
     if (!storedObject) {
-      throw new ApiError(404, "MATERIAL_OBJECT_NOT_FOUND", "家书来源媒体不存在");
+      throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书的媒体暂时不可用");
     }
     return reply
       .header("content-type", storedObject.contentType)
