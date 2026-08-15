@@ -1,10 +1,14 @@
 <view class="page materials-page">
+  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
+    <text class="environment-label">{{environmentLabel}}</text>
+    <text class="environment-detail">{{environmentDetail}}</text>
+  </view>
   <text class="eyebrow">第 1 步，共 3 步</text>
   <text class="page-title">挑选想说的事</text>
   <text class="page-subtitle">只使用你主动添加的内容。正式寄出前，所有文字都可以修改或删除。</text>
 
   <button wx:if="{{demoMode}}" class="demo-button" bindtap="loadDemoMaterials">
-    一键加入演示素材
+    一键加入合成演示素材
   </button>
 
   <view class="source-grid section">

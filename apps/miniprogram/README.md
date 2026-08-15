@@ -28,6 +28,13 @@ pnpm --filter @warm-letter/miniprogram typecheck
 
 ## API 模式
 
-[`src/config/env.ts`](src/config/env.ts) 中 `useMockApi` 默认为 `true`。切换为 `false` 后，客户端会连接 `apiBaseUrl`，自动执行微信登录，并适配当前 API 的异步生成任务、素材类型和响应包装。
+[`src/config/env.ts`](src/config/env.ts) 显式配置 `deploymentMode`、`apiMode` 和 `apiBaseUrl`。
+微信版本映射为 `develop -> demo`、`trial -> competition`、`release -> production`；只有
+`test` 部署模式允许 `apiMode: "mock"`，其余模式必须连接真实 API。Demo 默认可连接本机
+`http://127.0.0.1:8787/v1`；competition 和 production 必须使用与服务端 `/health`
+握手一致的非回环 HTTPS 环境，且 production 当前仍由服务端门禁拒绝启动。
 
-当前真实 API 适配器已经按 `presign -> uploadFile -> complete` 流程上传照片、截图和语音，并通过公开 reader 返回的媒体地址预览或播放。默认 API 地址为 `http://127.0.0.1:8787/v1`；微信开发者工具需要允许该本地请求地址。生产环境仍需替换微信鉴权、对象存储和持久化适配层，mock 模式下的微信临时媒体路径只适合本次会话演示。
+当前真实 API 适配器按 `presign -> uploadBinary -> complete` 流程上传照片、截图和语音，
+并通过公开 reader 返回的媒体地址预览或播放。`presign` 与 `complete` 使用暖笺 API Bearer
+鉴权；外部上传 PUT 只转发 `presign` 返回的 headers，不得携带登录 `Authorization` 或
+Cookie。Demo 素材与微信临时媒体路径不得作为真实用户素材、真实 AI 调用或生产证据。

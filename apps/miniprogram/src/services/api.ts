@@ -1,4 +1,4 @@
-import { environment } from "../config/env";
+import { environment, storageKey } from "../config/env";
 import type {
   CreateLetterInput,
   Letter,
@@ -80,13 +80,14 @@ type ServerReader = {
   replies: ServerReply[];
 };
 
-const REAL_LETTER_IDS_KEY = "warm_letter_real_letter_ids";
-const REAL_INTENTS_KEY = "warm_letter_real_intents";
-const REAL_SIGNATURES_KEY = "warm_letter_real_signatures";
-const REAL_MEDIA_PATHS_KEY = "warm_letter_real_media_paths";
-const REAL_SHARE_TOKENS_KEY = "warm_letter_real_share_tokens";
-const REAL_GENERATION_JOBS_KEY = "warm_letter_real_generation_jobs";
-const REAL_GENERATION_REQUEST_KEYS_KEY = "warm_letter_real_generation_request_keys";
+const REAL_LETTER_IDS_KEY = storageKey("real_letter_ids");
+const REAL_INTENTS_KEY = storageKey("real_intents");
+const REAL_SIGNATURES_KEY = storageKey("real_signatures");
+const REAL_MEDIA_PATHS_KEY = storageKey("real_media_paths");
+const REAL_SHARE_TOKENS_KEY = storageKey("real_share_tokens");
+const REAL_GENERATION_JOBS_KEY = storageKey("real_generation_jobs");
+const REAL_GENERATION_REQUEST_KEYS_KEY = storageKey("real_generation_request_keys");
+const ACCESS_TOKEN_KEY = storageKey("access_token");
 
 function readRecord<T>(key: string): Record<string, T> {
   const value = wx.getStorageSync(key);
@@ -230,15 +231,19 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
 }
 
 async function ensureLogin(): Promise<void> {
-  if (wx.getStorageSync("warm_letter_access_token")) return;
+  if (wx.getStorageSync(ACCESS_TOKEN_KEY)) return;
   const loginResult = await new Promise<{ code: string }>((resolve, reject) => {
     wx.login({ success: resolve, fail: reject });
   });
+  const code = loginResult.code?.trim();
+  if (!code && environment.deploymentMode !== "demo" && environment.deploymentMode !== "test") {
+    throw new Error("微信登录未返回有效 code，当前环境禁止开发凭据回退");
+  }
   const response = await request<{ token: string }>("/auth/wx-login", {
     method: "POST",
-    data: { code: loginResult.code || "local-demo" },
+    data: { code: code || "local-demo" },
   });
-  wx.setStorageSync("warm_letter_access_token", response.token);
+  wx.setStorageSync(ACCESS_TOKEN_KEY, response.token);
 }
 
 async function authorized<T>(operation: () => Promise<T>): Promise<T> {
@@ -307,7 +312,7 @@ export const realApi = {
       await uploadBinary(
         presigned.uploadUrl,
         upload.localPath,
-        presigned.headers["content-type"] || upload.contentType,
+        presigned.headers,
       );
       const completed = await authorized(() =>
         request<{ material: ServerMaterial }>("/materials/complete", {
@@ -530,4 +535,4 @@ export const realApi = {
   },
 };
 
-export const api = environment.useMockApi ? mockApi : realApi;
+export const api = environment.apiMode === "mock" ? mockApi : realApi;

@@ -1,4 +1,8 @@
 <view class="reader-page font-{{fontMode}}">
+  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
+    <text class="environment-label">{{environmentLabel}}</text>
+    <text class="environment-detail">{{environmentDetail}}</text>
+  </view>
   <view class="reader-toolbar">
     <text class="toolbar-label">阅读字号</text>
     <view class="font-controls">

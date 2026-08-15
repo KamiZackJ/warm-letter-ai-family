@@ -6,7 +6,7 @@ import { auth, json, login, waitForJob } from "./helpers.js";
 let app: FastifyInstance;
 
 beforeAll(() => {
-  app = buildApp();
+  app = buildApp({ deploymentMode: "demo" });
 });
 
 afterAll(async () => {

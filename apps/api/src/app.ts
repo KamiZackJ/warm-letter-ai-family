@@ -11,7 +11,7 @@ import {
   type ClientJob,
 } from "@warm-letter/contracts";
 import { resolve } from "node:path";
-import { FakeAIProvider, type AIProvider } from "./ai.js";
+import { FakeAIProvider, OpenAIResponsesProvider, type AIProvider } from "./ai.js";
 import type { GenerationJob, Material } from "./domain.js";
 import { ApiError } from "./errors.js";
 import {
@@ -31,12 +31,18 @@ import {
 } from "./public-rate-limit.js";
 import type { ReplySafetyPolicy } from "./reply-safety.js";
 import {
+  assertApiDeploymentSupported,
+  type AIProviderMode,
+  type DeploymentMode,
+} from "./runtime-config.js";
+import {
   canonicalMediaCredential,
   WarmLetterService,
   type CreateLetterInput,
   type EditLetterInput,
   type RegisterMaterialInput,
 } from "./service.js";
+import { UploadCredentialService, uploadCredentialHeader } from "./upload-credential.js";
 
 function serializeGenerationJob(job: GenerationJob): ClientJob {
   return ClientJobSchema.parse({
@@ -73,6 +79,7 @@ function idempotencyKeyFrom(request: FastifyRequest): string | undefined {
 }
 
 export interface BuildAppOptions {
+  deploymentMode: DeploymentMode;
   repository?: MemoryRepository;
   aiProvider?: AIProvider;
   logger?: boolean;
@@ -84,6 +91,7 @@ export interface BuildAppOptions {
   shareTokenTtlMs?: number;
   mediaTokenTtlMs?: number;
   mediaSigningKeys?: readonly Uint8Array[];
+  uploadTokenTtlMs?: number;
   publicRateLimits?: PublicRateLimitConfig;
   replySafetyPolicy?: ReplySafetyPolicy;
   replySafetyTimeoutMs?: number;
@@ -135,7 +143,16 @@ function mediaContentType(request: FastifyRequest): string | undefined {
   return typeof value === "string" ? value.split(";", 1)[0]?.trim().toLowerCase() : undefined;
 }
 
-export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
+export function buildApp(options: BuildAppOptions): FastifyInstance {
+  const aiProvider = options.aiProvider ?? new FakeAIProvider();
+  const aiProviderMode: AIProviderMode | "custom" =
+    aiProvider instanceof OpenAIResponsesProvider
+      ? "openai"
+      : aiProvider instanceof FakeAIProvider
+        ? "fake"
+        : "custom";
+  assertApiDeploymentSupported(options.deploymentMode, aiProviderMode);
+
   const app = Fastify({
     logger: options.logger
       ? {
@@ -149,7 +166,12 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
               };
             },
           },
-          redact: ["req.headers.authorization", "headers.authorization"],
+          redact: [
+            "req.headers.authorization",
+            "headers.authorization",
+            `req.headers["${uploadCredentialHeader}"]`,
+            `headers["${uploadCredentialHeader}"]`,
+          ],
           stream: options.loggerStream,
         }
       : false,
@@ -162,9 +184,14 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   if (!Number.isSafeInteger(maxMediaUploadBytes) || maxMediaUploadBytes < 1) {
     throw new Error("maxMediaUploadBytes must be a positive safe integer");
   }
+  const uploadCredentials = new UploadCredentialService({
+    signingKeys: options.mediaSigningKeys,
+    ttlMs: options.uploadTokenTtlMs,
+    now: options.now,
+  });
   const service = new WarmLetterService(
     options.repository ?? new MemoryRepository(),
-    options.aiProvider ?? new FakeAIProvider(),
+    aiProvider,
     {
       shareTokenTtlMs: options.shareTokenTtlMs,
       mediaTokenTtlMs: options.mediaTokenTtlMs,
@@ -236,7 +263,19 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     });
   });
 
-  app.get("/health", async () => ({ status: "ok", service: "warm-letter-api" }));
+  app.get("/health", async () => ({
+    status: "ok",
+    service: "warm-letter-api",
+    deploymentMode: options.deploymentMode,
+    nonProduction: true,
+    capabilities: {
+      ai: aiProviderMode,
+      authentication: "development",
+      repository: "memory",
+      objectStorage: "local-filesystem",
+      replySafety: "deterministic",
+    },
+  }));
 
   app.post("/v1/auth/wx-login", async (request, reply) => {
     const body = record(request.body);
@@ -277,18 +316,34 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       objectKey,
       uploading: true,
     });
+    reply.header("cache-control", "no-store");
     return reply.status(201).send({
       materialId: material.id,
       objectKey,
       uploadUrl: `${publicBaseUrl}/v1/materials/${material.id}/content`,
-      headers: { "content-type": policy.contentType },
+      headers: {
+        "content-type": policy.contentType,
+        [uploadCredentialHeader]: uploadCredentials.issue(material.id, policy.contentType),
+      },
     });
   });
 
   app.put("/v1/materials/:id/content", async (request, reply) => {
-    const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
-    const material = requireOwnedMaterial(service, user.id, id);
+    const rawCredential = request.headers[uploadCredentialHeader];
+    const verification = uploadCredentials.verify(
+      typeof rawCredential === "string" ? rawCredential : undefined,
+    );
+    if (verification.status === "expired") {
+      throw new ApiError(410, "UPLOAD_CREDENTIAL_EXPIRED", "上传地址已过期，请重新上传");
+    }
+    if (verification.status !== "valid" || verification.claims.materialId !== id) {
+      throw new ApiError(404, "UPLOAD_CREDENTIAL_INVALID", "上传地址无效");
+    }
+    const material = service.repository.getMaterial(id);
+    if (!material || material.contentType !== verification.claims.contentType) {
+      throw new ApiError(404, "UPLOAD_CREDENTIAL_INVALID", "上传地址无效");
+    }
     if (material.status !== "UPLOADING") {
       throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材不处于上传状态");
     }

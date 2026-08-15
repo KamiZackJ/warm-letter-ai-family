@@ -1,4 +1,7 @@
 import { api } from "../../services/api";
+import { createDemoMaterials } from "../../config/demo-materials";
+import { environment, environmentView } from "../../config/env";
+import { resolveDemoRequest } from "../../config/runtime-environment";
 import type { Material, MaterialType } from "../../types/domain";
 import { createId } from "../../utils/id";
 import {
@@ -32,6 +35,7 @@ function displayMaterial(material: Material): DisplayMaterial {
 
 Page({
   data: {
+    ...environmentView,
     demoMode: false,
     materials: [] as DisplayMaterial[],
     textDraft: "",
@@ -40,7 +44,13 @@ Page({
   },
 
   onLoad(options: { demo?: string }) {
-    this.setData({ demoMode: options.demo === "1" });
+    try {
+      this.setData({ demoMode: resolveDemoRequest(options.demo, environment.demoEnabled) });
+    } catch (error) {
+      wx.showToast({ title: (error as Error).message, icon: "none" });
+      wx.reLaunch({ url: "/pages/home/index" });
+      return;
+    }
     recorder.offStop();
     recorder.offError();
     recorder.onStop((result: { tempFilePath: string; duration: number }) => {
@@ -155,32 +165,14 @@ Page({
   },
 
   async loadDemoMaterials() {
-    const now = new Date().toISOString();
-    const materials: Material[] = [
-      {
-        id: createId("photo"),
-        type: "photo",
-        name: "周末做饭的照片",
-        createdAt: now,
-      },
-      {
-        id: createId("voice"),
-        type: "voice",
-        name: "下班后的语音",
-        durationSeconds: 18,
-        createdAt: now,
-      },
-      {
-        id: createId("text"),
-        type: "text",
-        name: "最近的小事",
-        text: "周末第一次学会了你常做的番茄炒蛋。工作虽然忙，但我每天都有按时吃饭。",
-        createdAt: now,
-      },
-    ];
+    if (!environment.demoEnabled || !this.data.demoMode) {
+      wx.showToast({ title: "当前环境禁止加载演示素材", icon: "none" });
+      return;
+    }
+    const materials = createDemoMaterials();
     const saved = await Promise.all(materials.map((item) => api.saveMaterial(item)));
     this.appendMaterials(saved);
-    wx.showToast({ title: "演示素材已加入", icon: "success" });
+    wx.showToast({ title: "合成演示素材已加入", icon: "success" });
   },
 
   appendMaterials(items: Material[]) {

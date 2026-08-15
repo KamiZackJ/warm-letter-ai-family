@@ -4,6 +4,9 @@ dist/
 coverage/
 .env
 .env.local
+.env.*.local
+apps/web/.env.competition
+apps/web/.env.production
 *.log
 *.tsbuildinfo
 .DS_Store

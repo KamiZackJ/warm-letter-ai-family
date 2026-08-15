@@ -1,9 +1,13 @@
 <view class="page home-page">
+  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
+    <text class="environment-label">{{environmentLabel}}</text>
+    <text class="environment-detail">{{environmentDetail}}</text>
+  </view>
   <view class="brand-band">
     <text class="brand-name">暖笺</text>
     <text class="brand-line">把没来得及说的话，写成一封家书。</text>
     <button class="primary-button main-action" bindtap="startLetter">写一封家书</button>
-    <button class="demo-link" bindtap="startDemo">快速演示完整流程</button>
+    <button wx:if="{{demoEnabled}}" class="demo-link" bindtap="startDemo">快速演示完整流程</button>
   </view>
 
   <view class="trust-row" aria-label="隐私与内容说明">

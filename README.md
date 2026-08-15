@@ -45,11 +45,18 @@ pnpm dev:web
 - H5：`http://127.0.0.1:4173/`
 - 小程序：使用微信开发者工具导入 `apps/miniprogram`。
 
-默认小程序使用 mock 数据。切换 `apps/miniprogram/src/config/env.ts` 中的 `useMockApi` 后可连接本地 API；当前环境变量只覆盖已实现的本地与 OpenAI 适配，示例见 `.env.example`。微信生产鉴权、PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
+小程序通过 `apps/miniprogram/src/config/env.ts` 显式解析 `deploymentMode`、`apiMode` 和
+`apiBaseUrl`：无微信运行时的自动化测试使用 `test + mock`，微信 `develop` 映射到 `demo`，
+`trial` 映射到 `competition`，`release` 映射到 `production`。真实 API 模式按
+`presign -> uploadBinary -> complete` 上传素材；`presign`/`complete` 使用 API Bearer，
+外部 PUT 只携带 presign 返回的上传 headers，不得转发 `Authorization` 或 Cookie。当前
+环境变量只覆盖已实现的本地与 OpenAI 适配，示例见 `.env.example`；微信生产鉴权、
+PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 
 ## 进度与边界
 
 - [项目阶段状态](./docs/PROJECT_STATUS.md)
+- [2026-08-16 阶段进度、计划与问题](./docs/PROGRESS_2026-08-16.md)
 - [W1 阶段进度、计划与问题](./docs/W1_PROGRESS_2026-08-15.md)
 - [验收清单](./docs/ACCEPTANCE_CHECKLIST.md)
 - [架构基线](./docs/ARCHITECTURE.md)

@@ -26,9 +26,9 @@ import { realApi } from "../src/services/api";
 import { GenerationJobFailedError } from "../src/services/generation-polling";
 import { HttpRequestError } from "../src/services/http-client";
 
-const accessTokenKey = "warm_letter_access_token";
-const jobsKey = "warm_letter_real_generation_jobs";
-const requestKeysKey = "warm_letter_real_generation_request_keys";
+const accessTokenKey = "warm_letter:test:access_token";
+const jobsKey = "warm_letter:test:real_generation_jobs";
+const requestKeysKey = "warm_letter:test:real_generation_request_keys";
 const letterId = "letter-recovery-test";
 const timestamp = "2026-08-15T12:00:00.000Z";
 

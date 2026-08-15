@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AudioLines,
@@ -14,6 +14,12 @@ import {
   Volume2,
 } from "lucide-react";
 import { createRoot } from "react-dom/client";
+import { resolveReaderEntry, type ShareParams } from "./reader-entry";
+import {
+  assertRemoteDeploymentMode,
+  resolveWebRuntimeConfig,
+  RuntimeConfigurationError,
+} from "./runtime-config";
 import "./styles.css";
 
 type SourceType = "photo" | "screenshot" | "audio" | "text";
@@ -76,32 +82,37 @@ class ApiRequestError extends Error {
   }
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8787/v1").replace(
-  /\/$/,
-  "",
-);
+const runtimeConfig = resolveWebRuntimeConfig({
+  appEnv: import.meta.env.VITE_APP_ENV,
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
+  demoEnabled: import.meta.env.VITE_DEMO_ENABLED,
+  expectedMode: import.meta.env.MODE,
+});
 
-const demoReader: ReaderData = {
+const API_BASE_URL = runtimeConfig.apiBaseUrl;
+
+const demoReader: ReaderData | null = __WARM_LETTER_DEMO_BUILD__
+  ? {
   id: "demo-letter",
   recipient: "妈妈",
   draft: {
-    title: "写给家的今天",
+    title: "第一次做你常做的番茄炒蛋",
     greeting: "妈：",
     paragraphs: [
       {
         id: "opening",
-        text: "今天下班比平时早一点。我骑车经过河边，刚好碰上很漂亮的晚霞，就停下来拍了一张。风有点凉，但整个人一下子安静了。",
-        sourceRefs: ["photo"],
+        text: "周末我第一次学着做你常做的番茄炒蛋。端上桌的时候，我拍了一张照片，想让你看看这个小进步。",
+        sourceRefs: ["photo", "note"],
       },
       {
         id: "work",
-        text: "这周一直在忙的项目，今天终于完成了第一次演示。还有一些地方要慢慢调整，不过最难的那一步已经走过去了。你不用担心，我最近虽然忙，三餐都有好好吃。",
-        sourceRefs: ["desk", "note", "voice"],
+        text: "最近工作虽然有点忙，但我每天都有按时吃饭。那天把饭菜摆好时，我也觉得自己正在慢慢学会照顾生活。",
+        sourceRefs: ["note", "voice"],
       },
       {
         id: "closing",
-        text: "周末有空我给你打电话。家里的桂花是不是快开了？记得拍一张给我看看。",
-        sourceRefs: ["voice"],
+        text: "你不用担心我。周末学会这道菜以后，我想再练几次，把这个熟悉的味道做得更好一点。",
+        sourceRefs: ["note", "voice"],
       },
     ],
     closing: "想你的，阿宁",
@@ -112,22 +123,74 @@ const demoReader: ReaderData = {
     {
       id: "photo",
       type: "photo",
-      name: "傍晚的河边",
+      name: "合成演示图：周末做饭",
       contentType: "image/png",
-      mediaUrl: "/samples/riverside-sunset.png",
+      mediaUrl: "/synthetic-cooking-demo.png",
     },
+    { id: "note", type: "text", name: "最近的小事" },
     {
-      id: "desk",
-      type: "screenshot",
-      name: "第一次演示",
-      contentType: "image/png",
-      mediaUrl: "/samples/project-desk.png",
+      id: "voice",
+      type: "audio",
+      name: "系统合成演示语音",
+      contentType: "audio/wav",
+      mediaUrl: "/synthetic-voice-demo.wav",
+      durationSeconds: 12,
     },
-    { id: "note", type: "text", name: "今日小记" },
-    { id: "voice", type: "audio", name: "想让妈妈放心", durationSeconds: 18 },
   ],
   replies: [],
+    }
+  : null;
+
+const emptyReader: ReaderData = {
+  id: "",
+  recipient: "",
+  draft: {
+    title: "",
+    greeting: "",
+    paragraphs: [],
+    closing: "",
+  },
+  publishedAt: "",
+  sources: [],
+  replies: [],
 };
+
+let deploymentCheck: Promise<void> | null = null;
+
+async function verifyRemoteDeploymentMode(signal?: AbortSignal): Promise<void> {
+  if (!deploymentCheck) {
+    deploymentCheck = fetch(runtimeConfig.healthUrl, {
+      signal,
+      cache: "no-store",
+      referrerPolicy: "no-referrer",
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new ApiRequestError(
+            "无法核对服务端运行环境，请稍后重试",
+            response.status,
+            "HEALTH_UNAVAILABLE",
+          );
+        }
+        let payload: { deploymentMode?: unknown };
+        try {
+          payload = (await response.json()) as { deploymentMode?: unknown };
+        } catch {
+          throw new ApiRequestError(
+            "服务端环境信息无效，请稍后重试",
+            502,
+            "HEALTH_UNAVAILABLE",
+          );
+        }
+        assertRemoteDeploymentMode(runtimeConfig.deploymentMode, payload.deploymentMode);
+      })
+      .catch((error) => {
+        deploymentCheck = null;
+        throw error;
+      });
+  }
+  return deploymentCheck;
+}
 
 const sourceMeta: Record<SourceType, { label: string; tone: "coral" | "sage" | "blue" }> = {
   photo: { label: "照片", tone: "coral" },
@@ -207,7 +270,21 @@ async function fetchReaderData(
 }
 
 function describeReaderFailure(error: unknown): ReaderFailure {
+  if (error instanceof RuntimeConfigurationError) {
+    return {
+      title: "运行环境不匹配",
+      detail: `${error.message}。请使用与该链接一致的服务环境。`,
+      retryable: false,
+    };
+  }
   if (error instanceof ApiRequestError) {
+    if (error.code === "HEALTH_UNAVAILABLE") {
+      return {
+        title: "服务暂时不可用",
+        detail: error.message,
+        retryable: true,
+      };
+    }
     if (error.code === "SHARE_TOKEN_REVOKED") {
       return {
         title: "这封家书已停止分享",
@@ -250,11 +327,7 @@ function describeReaderFailure(error: unknown): ReaderFailure {
   };
 }
 
-function readShareParams(): {
-  letterId: string | null;
-  shareToken: string | null;
-  cameFromQuery: boolean;
-} {
+function readShareParams(): ShareParams {
   const query = new URLSearchParams(window.location.search);
   const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const queryToken = query.get("token");
@@ -265,8 +338,21 @@ function readShareParams(): {
   };
 }
 
+function EnvironmentBadge() {
+  return (
+    <div
+      className={`environment-badge environment-badge-${runtimeConfig.deploymentMode}`}
+      role="status"
+      aria-label={`${runtimeConfig.environmentLabel}，${runtimeConfig.environmentDetail}`}
+    >
+      <strong>{runtimeConfig.environmentLabel}</strong>
+      <span>{runtimeConfig.environmentDetail}</span>
+    </div>
+  );
+}
+
 function App() {
-  const [reader, setReader] = useState<ReaderData>(demoReader);
+  const [reader, setReader] = useState<ReaderData>(demoReader || emptyReader);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<ReaderFailure | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -280,10 +366,16 @@ function App() {
   const [replyError, setReplyError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const [sentLocally, setSentLocally] = useState(false);
+  const replyInputRef = useRef<HTMLTextAreaElement>(null);
 
   const shareParams = useMemo(readShareParams, []);
   const { letterId, shareToken } = shareParams;
-  const isDemo = !letterId && !shareToken;
+  const readerEntry = useMemo(
+    () => resolveReaderEntry(runtimeConfig, shareParams),
+    [shareParams],
+  );
+  const isDemo = __WARM_LETTER_DEMO_BUILD__ && readerEntry.kind === "demo";
   const sourceMap = useMemo(
     () => new Map(reader.sources.map((source) => [source.id, source])),
     [reader.sources],
@@ -309,16 +401,26 @@ function App() {
   }, [letterId, shareParams.cameFromQuery, shareToken]);
 
   useEffect(() => {
-    if (isDemo) {
+    if (readerEntry.kind === "demo") {
+      if (!demoReader) {
+        setLoadError({
+          title: "演示配置不可用",
+          detail: "当前构建不包含演示数据，请重新使用正确的演示构建。",
+          retryable: false,
+        });
+        setLoading(false);
+        return;
+      }
+      setReader(demoReader);
       setLoading(false);
       setLoadError(null);
       return;
     }
-    if (!letterId || !shareToken) {
+    if (readerEntry.kind === "error") {
       setLoading(false);
       setLoadError({
-        title: "读信链接不完整",
-        detail: "请重新打开寄信人分享的完整链接。",
+        title: readerEntry.title,
+        detail: readerEntry.detail,
         retryable: false,
       });
       return;
@@ -327,7 +429,10 @@ function App() {
     const controller = new AbortController();
     setLoading(true);
     setLoadError(null);
-    fetchReaderData(letterId, shareToken, controller.signal)
+    verifyRemoteDeploymentMode(controller.signal)
+      .then(() =>
+        fetchReaderData(readerEntry.letterId, readerEntry.shareToken, controller.signal),
+      )
       .then((nextReader) => {
         setReader(nextReader);
         setMediaErrors({});
@@ -342,7 +447,7 @@ function App() {
       });
 
     return () => controller.abort();
-  }, [isDemo, letterId, shareToken, loadAttempt]);
+  }, [readerEntry, loadAttempt]);
 
   useEffect(() => {
     const expirations = reader.sources
@@ -422,13 +527,15 @@ function App() {
     if (submitting) return;
     if (!reply.trim()) {
       setReplyError("请先写一句回复。");
+      replyInputRef.current?.focus();
       return;
     }
     setReplyError("");
     setSubmitting(true);
+    setSentLocally(false);
     const replyText = reply.trim();
     try {
-      if (isDemo) {
+      if (__WARM_LETTER_DEMO_BUILD__ && isDemo) {
         const createdAt = new Date().toISOString();
         setReader((current) => ({
           ...current,
@@ -443,6 +550,7 @@ function App() {
             },
           ],
         }));
+        setSentLocally(true);
       } else {
         if (!letterId || !shareToken) throw new Error("读信链接不完整");
         const response = await fetch(
@@ -484,6 +592,7 @@ function App() {
   if (loading) {
     return (
       <main className="reader-shell reader-state" aria-live="polite">
+        <EnvironmentBadge />
         <BookOpenText aria-hidden="true" size={30} strokeWidth={1.6} />
         <p>正在打开家书…</p>
       </main>
@@ -493,6 +602,7 @@ function App() {
   if (loadError) {
     return (
       <main className="reader-shell reader-state reader-error" role="alert">
+        <EnvironmentBadge />
         <AlertCircle aria-hidden="true" size={34} strokeWidth={1.6} />
         <h1>{loadError.title}</h1>
         <p>{loadError.detail}</p>
@@ -515,6 +625,7 @@ function App() {
 
   return (
     <main className="reader-shell">
+      <EnvironmentBadge />
       <a className="skip-link" href="#letter-content">
         跳到家书正文
       </a>
@@ -605,8 +716,8 @@ function App() {
                       key={attempt}
                       src={source.mediaUrl!}
                       alt={source.name}
-                      width={1200}
-                      height={900}
+                      width={640}
+                      height={480}
                       loading={index === 0 ? "eager" : "lazy"}
                       fetchPriority={index === 0 ? "high" : "auto"}
                       referrerPolicy="no-referrer"
@@ -780,13 +891,21 @@ function App() {
           <div className="sent-state" role="status">
             <Check aria-hidden="true" size={22} />
             <div>
-              <strong>回复已经送达</strong>
+              <strong>
+                {__WARM_LETTER_DEMO_BUILD__ && sentLocally
+                  ? "演示回复已保存在本页"
+                  : "回复已经送达"}
+              </strong>
+              {__WARM_LETTER_DEMO_BUILD__ && sentLocally ? (
+                <p>这条回复没有发送给任何人，刷新页面后会消失。</p>
+              ) : null}
               {replyError ? <p>{replyError}</p> : null}
             </div>
           </div>
         ) : (
           <div className="reply-composer">
             <textarea
+              ref={replyInputRef}
               data-testid="reply-input"
               value={reply}
               onChange={(event) => {

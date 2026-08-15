@@ -1,4 +1,8 @@
 <view class="page editor-page">
+  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
+    <text class="environment-label">{{environmentLabel}}</text>
+    <text class="environment-detail">{{environmentDetail}}</text>
+  </view>
   <text class="eyebrow">第 3 步，共 3 步</text>
   <view class="title-row">
     <text class="page-title">逐段确认草稿</text>

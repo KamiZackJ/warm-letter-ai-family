@@ -120,6 +120,7 @@ describe("generation job failure HTTP responses", () => {
     const internalMessage =
       "provider-internal-timeout request_id=req_secret_timeout api_key=sk-test-do-not-leak";
     app = buildApp({
+      deploymentMode: "test",
       aiProvider: failingProvider(
         new AIProviderError("AI_PROVIDER_TIMEOUT", internalMessage, true),
       ),
@@ -162,6 +163,7 @@ describe("generation job failure HTTP responses", () => {
     const internalMessage =
       "provider-internal-validation zod_path=paragraphs.0.sourceRefs database_row=secret";
     app = buildApp({
+      deploymentMode: "test",
       aiProvider: providerThatFailsAfterOneSuccess(
         new AIProviderError("AI_OUTPUT_INVALID", internalMessage, false),
       ),
@@ -193,7 +195,7 @@ describe("generation job failure HTTP responses", () => {
   it("returns the same completed job when an accepted generation request is retried", async () => {
     const fakeProvider = new FakeAIProvider();
     const generateLetter = vi.spyOn(fakeProvider, "generateLetter");
-    app = buildApp({ aiProvider: fakeProvider });
+    app = buildApp({ deploymentMode: "test", aiProvider: fakeProvider });
     const { token, letterId } = await createReadyLetter(app);
     const idempotencyKey = "generation_retry_after_lost_202_response";
 
@@ -221,7 +223,7 @@ describe("generation job failure HTTP responses", () => {
   });
 
   it("rejects malformed generation idempotency keys", async () => {
-    app = buildApp();
+    app = buildApp({ deploymentMode: "test" });
     const { token, letterId } = await createReadyLetter(app);
     const response = await app.inject({
       method: "POST",
@@ -236,7 +238,7 @@ describe("generation job failure HTTP responses", () => {
   });
 
   it("returns the same not-found envelope for missing and another user's jobs", async () => {
-    app = buildApp();
+    app = buildApp({ deploymentMode: "test" });
     const owner = await createReadyLetter(app);
     const otherToken = await login(app, "generation-http-other-user");
     const jobId = await startGeneration(app, owner.token, owner.letterId);

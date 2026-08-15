@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "../src/app.js";
 import { FileSystemObjectStorage } from "../src/object-storage.js";
+import { uploadCredentialHeader } from "../src/upload-credential.js";
 import { auth, json, login, registerTextMaterial, waitForJob } from "./helpers.js";
 
 async function uploadMediaMaterial(
@@ -24,11 +25,15 @@ async function uploadMediaMaterial(
     payload: input,
   });
   expect(presignResponse.statusCode).toBe(201);
-  const presigned = json<{ materialId: string }>(presignResponse);
+  const presigned = json<{
+    materialId: string;
+    uploadUrl: string;
+    headers: Record<string, string>;
+  }>(presignResponse);
   const uploadResponse = await app.inject({
     method: "PUT",
-    url: `/v1/materials/${presigned.materialId}/content`,
-    headers: { ...auth(token), "content-type": input.contentType },
+    url: new URL(presigned.uploadUrl).pathname,
+    headers: presigned.headers,
     payload: input.bytes,
   });
   expect(uploadResponse.statusCode).toBe(204);
@@ -51,6 +56,7 @@ describe("Warm Letter API", () => {
     uploadDirectory = await mkdtemp(join(tmpdir(), "warm-letter-api-"));
     objectStorage = new FileSystemObjectStorage(uploadDirectory);
     app = buildApp({
+      deploymentMode: "test",
       objectStorage,
       publicBaseUrl: "https://uploads.example.test",
       maxMediaUploadBytes: 1024,
@@ -65,7 +71,19 @@ describe("Warm Letter API", () => {
   it("reports health and requires a development login for private data", async () => {
     const health = await app.inject({ method: "GET", url: "/health" });
     expect(health.statusCode).toBe(200);
-    expect(json(health)).toEqual({ status: "ok", service: "warm-letter-api" });
+    expect(json(health)).toEqual({
+      status: "ok",
+      service: "warm-letter-api",
+      deploymentMode: "test",
+      nonProduction: true,
+      capabilities: {
+        ai: "fake",
+        authentication: "development",
+        repository: "memory",
+        objectStorage: "local-filesystem",
+        replySafety: "deterministic",
+      },
+    });
 
     const privateResponse = await app.inject({ method: "GET", url: "/v1/materials" });
     expect(privateResponse.statusCode).toBe(401);
@@ -74,7 +92,10 @@ describe("Warm Letter API", () => {
 
   it("allows configured browser origins and rejects unconfigured origins", async () => {
     await app.close();
-    app = buildApp({ corsOrigins: ["https://reader.example.com"] });
+    app = buildApp({
+      deploymentMode: "test",
+      corsOrigins: ["https://reader.example.com"],
+    });
 
     const allowedPreflight = await app.inject({
       method: "OPTIONS",
@@ -506,7 +527,13 @@ describe("Warm Letter API", () => {
       `https://uploads.example.test/v1/materials/${presigned.materialId}/content`,
     );
     expect(presigned.uploadUrl).not.toContain(presigned.objectKey);
-    expect(presigned.headers).toEqual({ "content-type": "image/jpeg" });
+    expect(presignResponse.headers["cache-control"]).toBe("no-store");
+    expect(presigned.headers).toEqual({
+      "content-type": "image/jpeg",
+      [uploadCredentialHeader]: expect.any(String),
+    });
+    expect(presigned.headers).not.toHaveProperty("authorization");
+    expect(presigned.headers).not.toHaveProperty("cookie");
 
     const beforeUpload = await app.inject({
       method: "GET",
@@ -533,7 +560,7 @@ describe("Warm Letter API", () => {
     const uploadResponse = await app.inject({
       method: "PUT",
       url: new URL(presigned.uploadUrl).pathname,
-      headers: { ...auth(token), ...presigned.headers },
+      headers: presigned.headers,
       payload: jpegBytes,
     });
     expect(uploadResponse.statusCode).toBe(204);
@@ -561,6 +588,17 @@ describe("Warm Letter API", () => {
     });
     expect(completeResponse.statusCode).toBe(200);
     expect(json<{ material: { status: string } }>(completeResponse).material.status).toBe("READY");
+
+    const replayUpload = await app.inject({
+      method: "PUT",
+      url: new URL(presigned.uploadUrl).pathname,
+      headers: presigned.headers,
+      payload: jpegBytes,
+    });
+    expect(replayUpload.statusCode).toBe(409);
+    expect(json<{ error: { code: string } }>(replayUpload).error.code).toBe(
+      "INVALID_MATERIAL_STATE",
+    );
 
     const readResponse = await app.inject({
       method: "GET",
@@ -608,13 +646,14 @@ describe("Warm Letter API", () => {
     const presigned = (await presignResponse.json()) as {
       materialId: string;
       uploadUrl: string;
+      headers: Record<string, string>;
     };
     const contentPath = new URL(presigned.uploadUrl).pathname;
     const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x4a, 0x46, 0x49, 0x46]);
 
     const uploadResponse = await fetch(`${address}${contentPath}`, {
       method: "PUT",
-      headers: { authorization, "content-type": "image/jpeg" },
+      headers: presigned.headers,
       body: jpegBytes,
     });
     expect(uploadResponse.status).toBe(204);
@@ -633,7 +672,7 @@ describe("Warm Letter API", () => {
     expect(Buffer.from(await readResponse.arrayBuffer())).toEqual(jpegBytes);
   });
 
-  it("enforces material ownership across upload, completion, and controlled reads", async () => {
+  it("separates upload capabilities from owner login and protects private operations", async () => {
     const ownerToken = await login(app, "media-owner");
     const otherToken = await login(app, "other-user");
     const presignResponse = await app.inject({
@@ -642,11 +681,24 @@ describe("Warm Letter API", () => {
       headers: auth(ownerToken),
       payload: { type: "photo", filename: "family.jpg", contentType: "image/jpeg" },
     });
-    const presigned = json<{ materialId: string; objectKey: string; uploadUrl: string }>(
-      presignResponse,
-    );
+    const presigned = json<{
+      materialId: string;
+      objectKey: string;
+      uploadUrl: string;
+      headers: Record<string, string>;
+    }>(presignResponse);
     const uploadPath = new URL(presigned.uploadUrl).pathname;
     const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+
+    const secondPresignResponse = await app.inject({
+      method: "POST",
+      url: "/v1/materials/presign",
+      headers: auth(ownerToken),
+      payload: { type: "photo", filename: "other.jpg", contentType: "image/jpeg" },
+    });
+    const secondPresigned = json<{ uploadUrl: string }>(secondPresignResponse);
+    const credential = presigned.headers[uploadCredentialHeader]!;
+    const tamperedCredential = `${credential.startsWith("A") ? "B" : "A"}${credential.slice(1)}`;
 
     for (const attempt of [
       app.inject({
@@ -662,6 +714,18 @@ describe("Warm Letter API", () => {
         payload: { materialId: presigned.materialId },
       }),
       app.inject({ method: "GET", url: uploadPath, headers: auth(otherToken) }),
+      app.inject({
+        method: "PUT",
+        url: uploadPath,
+        headers: { ...presigned.headers, [uploadCredentialHeader]: tamperedCredential },
+        payload: jpegBytes,
+      }),
+      app.inject({
+        method: "PUT",
+        url: new URL(secondPresigned.uploadUrl).pathname,
+        headers: presigned.headers,
+        payload: jpegBytes,
+      }),
     ]) {
       expect((await attempt).statusCode).toBe(404);
     }
@@ -670,10 +734,49 @@ describe("Warm Letter API", () => {
     const ownerUpload = await app.inject({
       method: "PUT",
       url: uploadPath,
-      headers: { ...auth(ownerToken), "content-type": "image/jpeg" },
+      headers: presigned.headers,
       payload: jpegBytes,
     });
     expect(ownerUpload.statusCode).toBe(204);
+  });
+
+  it("rejects expired upload capabilities before accepting bytes", async () => {
+    await app.close();
+    let now = new Date("2026-08-16T00:00:00.000Z");
+    app = buildApp({
+      deploymentMode: "test",
+      objectStorage,
+      publicBaseUrl: "https://uploads.example.test",
+      maxMediaUploadBytes: 1024,
+      uploadTokenTtlMs: 1_000,
+      now: () => now,
+    });
+    const token = await login(app, "expired-upload-owner");
+    const presignResponse = await app.inject({
+      method: "POST",
+      url: "/v1/materials/presign",
+      headers: auth(token),
+      payload: { type: "photo", filename: "expired.jpg", contentType: "image/jpeg" },
+    });
+    const presigned = json<{
+      objectKey: string;
+      uploadUrl: string;
+      headers: Record<string, string>;
+    }>(presignResponse);
+    now = new Date("2026-08-16T00:00:01.000Z");
+
+    const uploadResponse = await app.inject({
+      method: "PUT",
+      url: new URL(presigned.uploadUrl).pathname,
+      headers: presigned.headers,
+      payload: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+    });
+
+    expect(uploadResponse.statusCode).toBe(410);
+    expect(json<{ error: { code: string } }>(uploadResponse).error.code).toBe(
+      "UPLOAD_CREDENTIAL_EXPIRED",
+    );
+    expect(await objectStorage.read(presigned.objectKey)).toBeUndefined();
   });
 
   it("rejects mismatched extensions, MIME headers, and forged binary signatures", async () => {
@@ -692,13 +795,17 @@ describe("Warm Letter API", () => {
       headers: auth(token),
       payload: { type: "photo", filename: "family.jpg", contentType: "image/jpeg" },
     });
-    const presigned = json<{ objectKey: string; uploadUrl: string }>(presignResponse);
+    const presigned = json<{
+      objectKey: string;
+      uploadUrl: string;
+      headers: Record<string, string>;
+    }>(presignResponse);
     const uploadPath = new URL(presigned.uploadUrl).pathname;
 
     const wrongMime = await app.inject({
       method: "PUT",
       url: uploadPath,
-      headers: { ...auth(token), "content-type": "image/png" },
+      headers: { ...presigned.headers, "content-type": "image/png" },
       payload: Buffer.from("89504e470d0a1a0a", "hex"),
     });
     expect(wrongMime.statusCode).toBe(415);
@@ -707,7 +814,7 @@ describe("Warm Letter API", () => {
     const forgedJpeg = await app.inject({
       method: "PUT",
       url: uploadPath,
-      headers: { ...auth(token), "content-type": "image/jpeg" },
+      headers: presigned.headers,
       payload: Buffer.from("this is not a jpeg"),
     });
     expect(forgedJpeg.statusCode).toBe(415);
@@ -720,6 +827,7 @@ describe("Warm Letter API", () => {
   it("rejects media larger than the configured upload limit", async () => {
     await app.close();
     app = buildApp({
+      deploymentMode: "test",
       objectStorage,
       publicBaseUrl: "https://uploads.example.test",
       maxMediaUploadBytes: 8,
@@ -731,14 +839,18 @@ describe("Warm Letter API", () => {
       headers: auth(token),
       payload: { type: "photo", filename: "large.jpg", contentType: "image/jpeg" },
     });
-    const presigned = json<{ objectKey: string; uploadUrl: string }>(presignResponse);
+    const presigned = json<{
+      objectKey: string;
+      uploadUrl: string;
+      headers: Record<string, string>;
+    }>(presignResponse);
     const uploadPath = new URL(presigned.uploadUrl).pathname;
     const tooLargeJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5]);
 
     const uploadResponse = await app.inject({
       method: "PUT",
       url: uploadPath,
-      headers: { ...auth(token), "content-type": "image/jpeg" },
+      headers: presigned.headers,
       payload: tooLargeJpeg,
     });
     expect(uploadResponse.statusCode).toBe(413);

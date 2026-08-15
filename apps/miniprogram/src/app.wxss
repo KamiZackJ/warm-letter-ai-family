@@ -29,6 +29,64 @@ button {
   padding: 32rpx 32rpx calc(160rpx + env(safe-area-inset-bottom));
 }
 
+.environment-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  min-height: 64rpx;
+  margin-bottom: 28rpx;
+  padding: 10rpx 20rpx;
+  border: 2rpx solid transparent;
+  border-radius: 6rpx;
+  font-size: 23rpx;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.environment-label {
+  flex: none;
+  font-weight: 700;
+}
+
+.environment-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.environment-banner-demo {
+  border-color: #dfc39b;
+  background: #f4e5cf;
+  color: #643e21;
+}
+
+.environment-banner-test {
+  border-color: #bfd2dc;
+  background: #e1edf3;
+  color: #2f4d62;
+}
+
+.environment-banner-competition {
+  border-color: #b9d2c3;
+  background: #dfede5;
+  color: #245345;
+}
+
+.environment-banner-production {
+  border-color: #d9b8bc;
+  background: #f1dfe1;
+  color: #6d3035;
+}
+
+.reader-page > .environment-banner {
+  margin: 0;
+  padding-right: calc(20rpx + env(safe-area-inset-right));
+  padding-left: calc(20rpx + env(safe-area-inset-left));
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
 .eyebrow {
   color: #6b716e;
   font-size: 24rpx;

@@ -433,15 +433,19 @@ export function createAIProviderFromEnv(
   options: { assetReader?: MaterialAssetReader } = {},
 ): AIProvider {
   const providerMode = env.AI_PROVIDER?.trim().toLowerCase();
+  const requiresRealProvider =
+    env.NODE_ENV === "production" ||
+    env.DEPLOYMENT_MODE === "competition" ||
+    env.DEPLOYMENT_MODE === "production";
   if (!providerMode) {
-    if (env.NODE_ENV === "production") {
-      throw new Error("生产环境必须显式配置 AI_PROVIDER=openai");
+    if (requiresRealProvider) {
+      throw new Error("competition 和 production 模式必须显式配置 AI_PROVIDER=openai");
     }
     return new FakeAIProvider();
   }
   if (providerMode === "fake") {
-    if (env.NODE_ENV === "production") {
-      throw new Error("生产环境禁止使用 fake AI provider");
+    if (requiresRealProvider) {
+      throw new Error("competition 和 production 模式禁止使用 fake AI provider");
     }
     return new FakeAIProvider();
   }

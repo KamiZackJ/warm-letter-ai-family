@@ -11,7 +11,32 @@ pnpm --filter @warm-letter/api test
 pnpm --filter @warm-letter/api demo
 ```
 
-The server listens on `http://localhost:8787` by default. Set `PORT` or `HOST` to override it.
+The runtime does not infer a deployment mode. Provide the required values shown in the repository
+`.env.example` through the process environment before starting the server; the example is a local
+`demo` profile and is not loaded automatically. The server listens on port `8787` and host
+`0.0.0.0` by default when those optional values are omitted.
+
+## Runtime isolation
+
+`DEPLOYMENT_MODE` is required and must agree with `NODE_ENV`:
+
+| Mode | Required `NODE_ENV` | AI policy | Current adapters | Release meaning |
+| --- | --- | --- | --- | --- |
+| `demo` | `development` | Explicit `fake` or `openai` | Development auth, memory repository, local files | Non-production demonstration |
+| `test` | `test` | Explicit `fake` or `openai` | Development auth, memory repository, local files | Automated tests only |
+| `competition` | `production` | `openai` with credentials is mandatory | Development auth, memory repository, local files | Non-production competition evidence |
+| `production` | `production` | `openai` is mandatory | Rejected while development adapters remain | Not currently available |
+
+`PUBLIC_BASE_URL` must be a credential-free HTTP(S) origin. `CORS_ORIGINS`, `UPLOAD_DIR`, and
+`AI_PROVIDER` are also required. Competition
+mode additionally requires `OPENAI_API_KEY`, `OPENAI_MODEL`, and stable `MEDIA_SIGNING_KEYS`.
+Missing, misspelled, or conflicting values stop startup before storage, AI clients, or the listener
+are created.
+
+`GET /health` reports `deploymentMode`, `nonProduction`, and non-sensitive capability labels. In
+competition mode it deliberately discloses that authentication is developmental, the repository is
+in memory, object storage is local, and reply safety is deterministic. It never returns credentials
+or the configured model.
 
 ## Demonstrable evidence
 
@@ -31,6 +56,7 @@ The regular tests additionally cover all four MVP material types, user editing, 
 - `POST /v1/auth/wx-login`
 - `GET|POST /v1/materials`
 - `POST /v1/materials/presign`
+- `PUT /v1/materials/:id/content`
 - `POST /v1/materials/complete`
 - `DELETE /v1/materials/:id`
 - `POST /v1/letters`
@@ -44,9 +70,17 @@ The regular tests additionally cover all four MVP material types, user editing, 
 - `GET /v1/letters/:letterId/sources/:materialId/content?mediaToken=...`
 - `GET|POST /v1/letters/:id/replies`
 
-Private endpoints use the development bearer token returned by `wx-login`. Reader and public reply endpoints use the share token returned by the confirm endpoint; public media endpoints use a separate short-lived `mediaToken` bound to one share, letter, and material.
+Private endpoints, including material `presign` and `complete`, use the development bearer token
+returned by `wx-login`. The upload PUT is a separate capability-authenticated boundary: send only the
+headers returned by `presign`, including the short-lived `x-warm-letter-upload-token` bound to that
+material and MIME type. Never forward the API `Authorization` header or cookies to an external
+upload URL. Reader and public reply endpoints use the share token returned by the confirm endpoint;
+public media endpoints use a separate short-lived `mediaToken` bound to one share, letter, and
+material.
 
-The `AIProvider` interface is the production integration boundary. The default `AI_PROVIDER=fake` path does not require or read an OpenAI key. Real provider mode must be selected explicitly:
+The `AIProvider` interface is the production integration boundary. `AI_PROVIDER` must always be
+selected explicitly. The `fake` path is limited to demo and test modes and does not require or read
+an OpenAI key. Real provider mode is configured with:
 
 ```sh
 AI_PROVIDER=openai
@@ -59,4 +93,4 @@ OPENAI_PHOTO_DETAIL=auto
 OPENAI_SCREENSHOT_DETAIL=original
 ```
 
-Set `OPENAI_MODEL` to a model ID enabled for the target OpenAI project; the repository does not hard-code an account-dependent model. The real provider uses Responses structured outputs, sends image bytes as data URLs, uses `original` detail for screenshot OCR, transcribes audio before generation, disables response storage, and records the model ID returned by OpenAI in the draft provider field. Timeout, retry, and image-detail settings are validated at startup. Unknown provider names are rejected, and `NODE_ENV=production` requires an explicit `AI_PROVIDER=openai`; production cannot silently fall back to fake output. Real supplier evidence still requires an authorized photo, screenshot, voice note, and text sample plus an actual API credential; mock-client tests do not satisfy that gate.
+Set `OPENAI_MODEL` to a model ID enabled for the target OpenAI project; the repository does not hard-code an account-dependent model. The real provider uses Responses structured outputs, sends image bytes as data URLs, uses `original` detail for screenshot OCR, transcribes audio before generation, disables response storage, and records the model ID returned by OpenAI in the draft provider field. Timeout, retry, and image-detail settings are validated at startup. Unknown provider names are rejected, and both competition and production modes require an explicit `AI_PROVIDER=openai`; neither can silently fall back to fake output. Production startup is additionally blocked until formal authentication, persistent repository, object storage, and reply-safety adapters replace the current development implementations. Real supplier evidence still requires an authorized photo, screenshot, voice note, and text sample plus an actual API credential; mock-client tests do not satisfy that gate.

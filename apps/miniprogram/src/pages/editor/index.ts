@@ -1,4 +1,5 @@
 import { api } from "../../services/api";
+import { environmentView } from "../../config/env";
 import type { LetterDraft, Material } from "../../types/domain";
 import { createId } from "../../utils/id";
 import { clearPendingGeneration } from "../../utils/storage";
@@ -25,6 +26,7 @@ function confirmDialog(content: string): Promise<boolean> {
 
 Page({
   data: {
+    ...environmentView,
     letterId: "",
     draft: emptyDraft(),
     paragraphSourceLabels: [] as string[],

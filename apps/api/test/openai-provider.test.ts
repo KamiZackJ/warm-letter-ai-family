@@ -519,6 +519,12 @@ describe("OpenAIResponsesProvider", () => {
       createAIProviderFromEnv({ NODE_ENV: "production", AI_PROVIDER: "fake" }),
     ).toThrow("禁止使用 fake");
     expect(() => createAIProviderFromEnv({ AI_PROVIDER: "opena1" })).toThrow("不支持的 AI_PROVIDER");
+    expect(() => createAIProviderFromEnv({ DEPLOYMENT_MODE: "competition" })).toThrow(
+      "AI_PROVIDER=openai",
+    );
+    expect(() =>
+      createAIProviderFromEnv({ DEPLOYMENT_MODE: "competition", AI_PROVIDER: "fake" }),
+    ).toThrow("禁止使用 fake");
   });
 
   it("rejects unsafe OpenAI runtime configuration", () => {

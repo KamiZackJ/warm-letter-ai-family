@@ -1,4 +1,5 @@
 import { api } from "../../services/api";
+import { environment, environmentView } from "../../config/env";
 import type { LetterSummary } from "../../types/domain";
 import { formatDate } from "../../utils/date";
 import { clearPendingGeneration, saveCurrentMaterialIds } from "../../utils/storage";
@@ -18,6 +19,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 Page({
   data: {
+    ...environmentView,
     recentLetters: [] as DisplayLetter[],
     loading: true,
   },
@@ -47,6 +49,10 @@ Page({
   },
 
   startDemo() {
+    if (!environment.demoEnabled) {
+      wx.showToast({ title: "当前环境不提供演示入口", icon: "none" });
+      return;
+    }
     clearPendingGeneration();
     saveCurrentMaterialIds([]);
     wx.navigateTo({ url: "/pages/materials/index?demo=1" });

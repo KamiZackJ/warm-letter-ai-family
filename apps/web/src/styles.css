@@ -23,12 +23,14 @@ textarea {
   font: inherit;
 }
 
-button {
+button,
+a {
   cursor: pointer;
   touch-action: manipulation;
 }
 
 button:focus-visible,
+a:focus-visible,
 textarea:focus-visible,
 audio:focus-visible {
   outline: 3px solid rgba(73, 104, 96, 0.32);
@@ -44,6 +46,49 @@ audio:focus-visible {
   overflow-x: hidden;
 }
 
+.environment-badge {
+  min-height: 34px;
+  padding: 7px max(18px, calc(14px + env(safe-area-inset-left))) 7px
+    max(18px, calc(14px + env(safe-area-inset-right)));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-bottom: 1px solid transparent;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.environment-badge strong {
+  font-size: 12px;
+}
+
+.environment-badge-demo {
+  color: #643e21;
+  background: #f4e5cf;
+  border-color: #dfc39b;
+}
+
+.environment-badge-test {
+  color: #2f4d62;
+  background: #e1edf3;
+  border-color: #bfd2dc;
+}
+
+.environment-badge-competition {
+  color: #245345;
+  background: #dfede5;
+  border-color: #b9d2c3;
+}
+
+.environment-badge-production {
+  color: #6d3035;
+  background: #f1dfe1;
+  border-color: #d9b8bc;
+}
+
 .skip-link {
   position: fixed;
   z-index: 20;
@@ -56,7 +101,7 @@ audio:focus-visible {
   transform: translateY(-160%);
 }
 
-.skip-link:focus {
+.skip-link:focus-visible {
   transform: translateY(0);
 }
 
@@ -501,7 +546,7 @@ h2 {
 
 .reply-composer textarea {
   width: 100%;
-  min-height: 112px;
+  min-height: 7em;
   resize: vertical;
   padding: 14px;
   color: #313530;
@@ -707,6 +752,13 @@ footer {
 }
 
 @media (max-width: 520px) {
+  .environment-badge {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
+    text-align: left;
+  }
+
   .topbar {
     min-height: 56px;
     padding-left: calc(18px + env(safe-area-inset-left));

@@ -1,9 +1,10 @@
 import type { Letter, Material } from "../types/domain";
+import { storageKey } from "../config/env";
 
-const MATERIALS_KEY = "warm_letter_materials";
-const LETTERS_KEY = "warm_letter_letters";
-const CURRENT_MATERIALS_KEY = "warm_letter_current_material_ids";
-const PENDING_GENERATION_KEY = "warm_letter_pending_generation";
+const MATERIALS_KEY = storageKey("materials");
+const LETTERS_KEY = storageKey("letters");
+const CURRENT_MATERIALS_KEY = storageKey("current_material_ids");
+const PENDING_GENERATION_KEY = storageKey("pending_generation");
 
 export interface PendingGeneration {
   letterId: string;

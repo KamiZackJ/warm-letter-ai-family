@@ -58,13 +58,18 @@ async function publishFixture(
     payload: { type: "photo", filename: `${suffix}.jpg`, contentType: "image/jpeg" },
   });
   expect(presign.statusCode).toBe(201);
-  const materialId = json<{ materialId: string }>(presign).materialId;
+  const presigned = json<{
+    materialId: string;
+    uploadUrl: string;
+    headers: Record<string, string>;
+  }>(presign);
+  const materialId = presigned.materialId;
   expect(
     (
       await app.inject({
         method: "PUT",
-        url: `/v1/materials/${materialId}/content`,
-        headers: { ...auth(ownerToken), "content-type": "image/jpeg" },
+        url: new URL(presigned.uploadUrl).pathname,
+        headers: presigned.headers,
         payload: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
       })
     ).statusCode,
@@ -133,11 +138,12 @@ describe("public share, media, and reply security", () => {
   let objectStorage: FileSystemObjectStorage;
   let uploadDirectory: string;
 
-  async function rebuild(options: BuildAppOptions = {}): Promise<void> {
+  async function rebuild(options: Partial<BuildAppOptions> = {}): Promise<void> {
     await app.close();
     repository = options.repository ?? new MemoryRepository();
     objectStorage = new FileSystemObjectStorage(uploadDirectory);
     app = buildApp({
+      deploymentMode: "test",
       repository,
       objectStorage,
       publicBaseUrl: "https://reader.example.test",
@@ -152,6 +158,7 @@ describe("public share, media, and reply security", () => {
     repository = new MemoryRepository();
     objectStorage = new FileSystemObjectStorage(uploadDirectory);
     app = buildApp({
+      deploymentMode: "test",
       repository,
       objectStorage,
       publicBaseUrl: "https://reader.example.test",
@@ -738,6 +745,7 @@ describe("public share, media, and reply security", () => {
 
     await app.close();
     app = buildApp({
+      deploymentMode: "test",
       repository,
       objectStorage,
       publicBaseUrl: "https://reader.example.test",
@@ -748,6 +756,7 @@ describe("public share, media, and reply security", () => {
 
     await app.close();
     app = buildApp({
+      deploymentMode: "test",
       repository,
       objectStorage,
       publicBaseUrl: "https://reader.example.test",

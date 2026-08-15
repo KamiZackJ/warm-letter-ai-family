@@ -1,4 +1,5 @@
 import { api } from "../../services/api";
+import { environmentView } from "../../config/env";
 import type { ReaderLetter, ReaderSource, Reply } from "../../types/domain";
 import { formatDate } from "../../utils/date";
 
@@ -22,6 +23,7 @@ function mediaExpired(source: ReaderSource | undefined): boolean {
 
 Page({
   data: {
+    ...environmentView,
     letterId: "",
     shareToken: "",
     letter: null as ReaderLetter | null,

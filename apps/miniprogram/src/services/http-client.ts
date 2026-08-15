@@ -1,4 +1,5 @@
-import { environment } from "../config/env";
+import { environment, storageKey } from "../config/env";
+import { assertRemoteDeploymentMode } from "../config/runtime-environment";
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -19,8 +20,32 @@ export class HttpRequestError extends Error {
 }
 
 function accessTokenHeader(): Record<string, string> {
-  const accessToken = wx.getStorageSync("warm_letter_access_token");
+  const accessToken = wx.getStorageSync(storageKey("access_token"));
   return { authorization: accessToken ? `Bearer ${accessToken}` : "" };
+}
+
+let deploymentCheck: Promise<void> | null = null;
+
+const forbiddenUploadHeaders = new Set([
+  "authorization",
+  "cookie",
+  "proxy-authorization",
+  "set-cookie",
+]);
+
+function safeUploadHeaders(input: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [rawName, rawValue] of Object.entries(input)) {
+    const name = rawName.trim().toLowerCase();
+    if (!/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name) || forbiddenUploadHeaders.has(name)) {
+      throw new Error("上传服务返回了不安全的请求头");
+    }
+    if (typeof rawValue !== "string" || /[\r\n]/.test(rawValue) || name in result) {
+      throw new Error("上传服务返回了无效的请求头");
+    }
+    result[name] = rawValue;
+  }
+  return result;
 }
 
 function executeRequest<T>(options: {
@@ -67,6 +92,21 @@ function executeRequest<T>(options: {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (!deploymentCheck) {
+    deploymentCheck = executeRequest<{ deploymentMode?: unknown }>({
+      url: environment.healthUrl,
+      method: "GET",
+      header: {},
+    })
+      .then((health) => {
+        assertRemoteDeploymentMode(environment.deploymentMode, health.deploymentMode);
+      })
+      .catch((error) => {
+        deploymentCheck = null;
+        throw error;
+      });
+  }
+  await deploymentCheck;
   const header = { ...options.headers, ...accessTokenHeader() };
   if (options.data !== undefined) {
     header["content-type"] = "application/json";
@@ -82,8 +122,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 export async function uploadBinary(
   uploadUrl: string,
   filePath: string,
-  contentType: string,
+  uploadHeaders: Record<string, string>,
 ): Promise<void> {
+  const header = safeUploadHeaders(uploadHeaders);
   const fileData = await new Promise<ArrayBuffer>((resolve, reject) => {
     wx.getFileSystemManager().readFile({
       filePath,
@@ -104,6 +145,6 @@ export async function uploadBinary(
     url: uploadUrl,
     method: "PUT",
     data: fileData,
-    header: { ...accessTokenHeader(), "content-type": contentType },
+    header,
   });
 }

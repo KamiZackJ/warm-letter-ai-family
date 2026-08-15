@@ -1,4 +1,6 @@
 import { api } from "../../services/api";
+import { environment, environmentView } from "../../config/env";
+import { resolveDemoRequest } from "../../config/runtime-environment";
 import { GenerationJobFailedError } from "../../services/generation-polling";
 import type { LetterLength, Tone } from "../../types/domain";
 import {
@@ -10,6 +12,7 @@ import {
 
 Page({
   data: {
+    ...environmentView,
     recipient: "",
     message: "",
     tone: "warm" as Tone,
@@ -20,7 +23,15 @@ Page({
   },
 
   onLoad(options: { demo?: string }) {
-    if (options.demo === "1") {
+    let demoMode = false;
+    try {
+      demoMode = resolveDemoRequest(options.demo, environment.demoEnabled);
+    } catch (error) {
+      wx.showToast({ title: (error as Error).message, icon: "none" });
+      wx.reLaunch({ url: "/pages/home/index" });
+      return;
+    }
+    if (demoMode) {
       this.setData({
         recipient: "妈妈",
         message: "告诉妈妈我最近虽然工作忙，但生活得很好，也学会做她常做的菜。",

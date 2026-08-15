@@ -22,10 +22,10 @@
 
 **B1 真实媒体上传**
 
-- [x] API 使用真实 HTTP 二进制 PUT/GET 和文件系统对象，不再以 `memory://` 或仅登记对象键代替传输；小程序真实模式已接 `presign -> upload bytes -> complete`。
+- [x] API 使用真实 HTTP 二进制 PUT/GET 和文件系统对象，不再以 `memory://` 或仅登记对象键代替传输；小程序真实模式已接 `presign -> upload bytes -> complete`。`presign`/`complete` 使用 API Bearer，上传 PUT 只发送短期、绑定素材与 MIME 的 `x-warm-letter-upload-token`，不得携带登录 Bearer 或 Cookie。
 - [x] 服务端在 complete 前验证对象存在、owner、MIME、扩展名、大小和文件魔数；失败对象不进入 `READY`。
 - [x] owner 可受控读取；未上传、越权、超限、MIME/扩展名/魔数错误和删除后的对象均被拒绝，删除会物理清理对象和 sidecar。
-- [x] 日志去除查询串并脱敏 Authorization；文件系统错误不暴露绝对路径/对象键。W1 本地代码基线 `7f5421b` 的 Node 22 干净回归为 API 54/54、contracts 11/11、小程序 8/8，类型检查和构建通过。
+- [x] 日志去除查询串并脱敏 `Authorization` 与 `x-warm-letter-upload-token`；文件系统错误不暴露绝对路径/对象键。历史 W1 本地代码基线 `7f5421b` 的 Node 22 干净回归为 API 54/54、contracts 11/11、小程序 8/8，类型检查和构建通过；当前 FIX-015 工作树结果见 `PROGRESS_2026-08-16.md`。
 - [ ] 微信开发者工具/真机使用本地图片和语音完成实际上传、读取与删除；公开短期媒体签名在 B3/B4 验收。
 
 **B2 多模态 AI**
