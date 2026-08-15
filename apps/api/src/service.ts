@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import type { AIProvider } from "./ai.js";
+import { AIProviderError, type AIProvider } from "./ai.js";
 import {
   MATERIAL_TYPES,
   canTransition,
@@ -255,7 +255,15 @@ export class WarmLetterService {
     return this.repository.saveLetter(letter);
   }
 
-  enqueueGeneration(userId: string, letterId: string): GenerationJob {
+  enqueueGeneration(userId: string, letterId: string, idempotencyKey?: string): GenerationJob {
+    if (idempotencyKey) {
+      const existingJob = this.repository.findGenerationJobByIdempotencyKey(
+        userId,
+        letterId,
+        idempotencyKey,
+      );
+      if (existingJob) return existingJob;
+    }
     const letter = this.requireOwnedLetter(userId, letterId);
     if (letter.state !== "MATERIALS_READY" && letter.state !== "EDITING") {
       throw new ApiError(409, "INVALID_LETTER_STATE", "请先准备素材，再生成家书");
@@ -271,7 +279,11 @@ export class WarmLetterService {
       id: randomUUID(),
       userId,
       letterId,
+      idempotencyKey,
       status: "queued",
+      type: "generate_letter",
+      attempts: 0,
+      maxAttempts: 1,
       createdAt: now,
       updatedAt: now,
     });
@@ -455,6 +467,7 @@ export class WarmLetterService {
     if (!letter) return;
 
     job.status = "running";
+    job.attempts = 1;
     job.updatedAt = new Date().toISOString();
     this.repository.saveJob(job);
 
@@ -472,16 +485,20 @@ export class WarmLetterService {
       job.status = "succeeded";
     } catch (error) {
       const apiError = error instanceof ApiError ? error : undefined;
+      const providerError = error instanceof AIProviderError ? error : undefined;
       this.transition(letter, previousState);
       letter.updatedAt = new Date().toISOString();
       this.repository.saveLetter(letter);
       job.status = "failed";
       job.error = {
-        code: apiError?.code ?? "GENERATION_FAILED",
-        message: apiError?.message ?? "家书生成失败",
+        code: providerError?.code ?? apiError?.code ?? "GENERATION_FAILED",
+        message: providerError?.message ?? apiError?.message ?? "家书生成失败",
+        retryable: providerError?.retryable ?? false,
       };
     }
-    job.updatedAt = new Date().toISOString();
+    const finishedAt = new Date().toISOString();
+    job.updatedAt = finishedAt;
+    job.finishedAt = finishedAt;
     this.repository.saveJob(job);
   }
 

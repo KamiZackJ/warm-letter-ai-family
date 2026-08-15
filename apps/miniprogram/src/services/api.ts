@@ -8,8 +8,14 @@ import type {
   ReaderLetter,
   ReaderSource,
 } from "../types/domain";
+import { createId } from "../utils/id";
 import { mockApi } from "./mock-api";
-import { request, uploadBinary } from "./http-client";
+import {
+  GenerationJobFailedError,
+  resolveGenerationJobId,
+  waitForGenerationJob,
+} from "./generation-polling";
+import { HttpRequestError, request, uploadBinary } from "./http-client";
 
 type ServerMaterial = {
   id: string;
@@ -79,6 +85,8 @@ const REAL_INTENTS_KEY = "warm_letter_real_intents";
 const REAL_SIGNATURES_KEY = "warm_letter_real_signatures";
 const REAL_MEDIA_PATHS_KEY = "warm_letter_real_media_paths";
 const REAL_SHARE_TOKENS_KEY = "warm_letter_real_share_tokens";
+const REAL_GENERATION_JOBS_KEY = "warm_letter_real_generation_jobs";
+const REAL_GENERATION_REQUEST_KEYS_KEY = "warm_letter_real_generation_request_keys";
 
 function readRecord<T>(key: string): Record<string, T> {
   const value = wx.getStorageSync(key);
@@ -90,6 +98,20 @@ function readRecord<T>(key: string): Record<string, T> {
 function readIds(): string[] {
   const value = wx.getStorageSync(REAL_LETTER_IDS_KEY);
   return Array.isArray(value) ? (value as string[]) : [];
+}
+
+function saveGenerationJob(letterId: string, jobId?: string): void {
+  const jobs = readRecord<string>(REAL_GENERATION_JOBS_KEY);
+  if (jobId) jobs[letterId] = jobId;
+  else delete jobs[letterId];
+  wx.setStorageSync(REAL_GENERATION_JOBS_KEY, jobs);
+}
+
+function saveGenerationRequestKey(letterId: string, requestKey?: string): void {
+  const requestKeys = readRecord<string>(REAL_GENERATION_REQUEST_KEYS_KEY);
+  if (requestKey) requestKeys[letterId] = requestKey;
+  else delete requestKeys[letterId];
+  wx.setStorageSync(REAL_GENERATION_REQUEST_KEYS_KEY, requestKeys);
 }
 
 function mapMaterial(material: ServerMaterial): Material {
@@ -257,10 +279,7 @@ function requireShareToken(letterId: string, shareToken?: string): string {
   return token;
 }
 
-const delay = (duration: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, duration));
-
-const realApi = {
+export const realApi = {
   async listMaterials(): Promise<Material[]> {
     const response = await authorized(() =>
       request<{ materials: ServerMaterial[] }>("/materials"),
@@ -402,25 +421,71 @@ const realApi = {
   },
 
   async generateLetter(id: string): Promise<Letter> {
-    const response = await authorized(() =>
-      request<{ job: { id: string; status: string; error?: { message?: string } } }>(
-        `/letters/${id}/generate`,
-        { method: "POST" },
-      ),
-    );
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const jobResponse = await authorized(() =>
-        request<{ job: { status: string; error?: { message?: string } } }>(
-          `/jobs/${response.job.id}`,
-        ),
-      );
-      if (jobResponse.job.status === "succeeded") return realApi.getLetter(id);
-      if (jobResponse.job.status === "failed") {
-        throw new Error(jobResponse.job.error?.message || "家书生成失败");
+    let allowMissingJobRestart = true;
+    while (true) {
+      const existingJobId = readRecord<string>(REAL_GENERATION_JOBS_KEY)[id];
+      let requestKey = readRecord<string>(REAL_GENERATION_REQUEST_KEYS_KEY)[id];
+      const jobId = await resolveGenerationJobId(existingJobId, async () => {
+        if (!requestKey) {
+          requestKey = createId("generation");
+          saveGenerationRequestKey(id, requestKey);
+        }
+        const response = await authorized(() =>
+          request<{ job: { id: string } }>(`/letters/${id}/generate`, {
+            method: "POST",
+            headers: { "idempotency-key": requestKey! },
+          }),
+        );
+        saveGenerationJob(id, response.job.id);
+        return response.job;
+      });
+      let job;
+      try {
+        job = await waitForGenerationJob(
+          jobId,
+          (activeJobId) =>
+            authorized(() =>
+              request<{
+                job: {
+                  status: string;
+                  error?: { code?: string; message?: string; retryable?: boolean };
+                };
+              }>(`/jobs/${activeJobId}`),
+            ).then((response) => response.job),
+          {
+            shouldRetryError: (error) =>
+              !(error instanceof HttpRequestError) ||
+              error.retryable === true ||
+              error.statusCode >= 500,
+          },
+        );
+      } catch (error) {
+        if (
+          allowMissingJobRestart &&
+          existingJobId &&
+          error instanceof HttpRequestError &&
+          error.code === "JOB_NOT_FOUND"
+        ) {
+          saveGenerationJob(id);
+          allowMissingJobRestart = false;
+          continue;
+        }
+        throw error;
       }
-      await delay(250);
+      if (job.status === "failed") {
+        saveGenerationJob(id);
+        saveGenerationRequestKey(id);
+        throw new GenerationJobFailedError(
+          job.error?.message || "家书生成失败",
+          job.error?.code,
+          job.error?.retryable,
+        );
+      }
+      const letter = await realApi.getLetter(id);
+      saveGenerationJob(id);
+      saveGenerationRequestKey(id);
+      return letter;
     }
-    throw new Error("家书生成超时，请稍后重试");
   },
 
   async updateDraft(id: string, draft: LetterDraft): Promise<Letter> {

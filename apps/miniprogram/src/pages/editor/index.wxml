@@ -6,7 +6,15 @@
   </view>
   <text class="page-subtitle">来源提示帮助你核对事实。修改、删减并确认后，家人才会看到正式内容。</text>
 
-  <view wx:if="{{loading}}" class="empty-state loading-state">正在打开草稿…</view>
+  <view wx:if="{{loading}}" class="empty-state loading-state" aria-live="polite">
+    {{generationPending ? '家书正在后台整理…' : '正在打开草稿…'}}
+  </view>
+  <view wx:elif="{{errorMessage}}" class="generation-state" aria-role="alert">
+    <text class="generation-state-title">暂时还不能编辑</text>
+    <text class="generation-state-message">{{errorMessage}}</text>
+    <text class="generation-state-hint">后台任务会保留，继续查看不会重复提交。</text>
+    <button class="secondary-button retry-generation" bindtap="loadLetter" aria-label="继续查看家书生成进度">继续查看</button>
+  </view>
   <block wx:else>
     <view class="section editor-section">
       <text class="field-label">标题</text>
@@ -46,7 +54,7 @@
     <button class="regenerate-button" bindtap="regenerate">重新生成草稿</button>
   </block>
 
-  <view class="sticky-actions">
+  <view wx:if="{{!loading && !errorMessage}}" class="sticky-actions">
     <button class="secondary-button" loading="{{saving}}" disabled="{{saving || loading}}" bindtap="saveDraft">保存</button>
     <button class="primary-button" loading="{{saving}}" disabled="{{saving || loading}}" bindtap="confirmLetter">确认并预览</button>
   </view>

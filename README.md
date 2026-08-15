@@ -4,7 +4,7 @@
 
 暖笺是一款以微信小程序为创作端、H5 为收信端的 AI 家书工具。用户主动选择照片、截图、语音和文字素材，AI 生成带段落来源的可编辑草稿；只有用户确认后的版本才能发布，家人可通过短期分享链接阅读、播放原始语音并回复。
 
-本仓库已经包含可运行的比赛 MVP，而不只是设计资料。默认配置使用内存仓库、文件系统对象存储和确定性 Fake AI，可离线演示完整业务链路；OpenAI、微信生产鉴权、PostgreSQL、S3/OSS 和独立任务队列仍属于后续生产接入项。
+本仓库已经包含可离线运行的开发/比赛演示骨架（M1），而不只是设计资料；尚未通过 G2 用户测试、MVP、公测或生产放行。默认配置使用内存仓库、文件系统对象存储和确定性 Fake AI 演示业务链路；真实 OpenAI、微信生产鉴权、PostgreSQL、S3/OSS 和独立任务队列仍属于待接入项。
 
 ## 当前能力
 
@@ -26,7 +26,7 @@
 
 ## 本地运行
 
-需要 Node.js 22+ 和 pnpm 11+。
+需要 Node.js 22.20+ 和 pnpm 11+；仓库通过 `.node-version` 固定复验版本为 Node.js 22.23.2。
 
 ```powershell
 pnpm install
@@ -45,11 +45,12 @@ pnpm dev:web
 - H5：`http://127.0.0.1:4173/`
 - 小程序：使用微信开发者工具导入 `apps/miniprogram`。
 
-默认小程序使用 mock 数据。切换 `apps/miniprogram/src/config/env.ts` 中的 `useMockApi` 后可连接本地 API；生产配置通过环境变量接入真实 AI、微信、数据库和对象存储，示例见 `.env.example`。
+默认小程序使用 mock 数据。切换 `apps/miniprogram/src/config/env.ts` 中的 `useMockApi` 后可连接本地 API；当前环境变量只覆盖已实现的本地与 OpenAI 适配，示例见 `.env.example`。微信生产鉴权、PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 
 ## 进度与边界
 
 - [项目阶段状态](./docs/PROJECT_STATUS.md)
+- [W1 阶段进度、计划与问题](./docs/W1_PROGRESS_2026-08-15.md)
 - [验收清单](./docs/ACCEPTANCE_CHECKLIST.md)
 - [架构基线](./docs/ARCHITECTURE.md)
 - [开发说明](./docs/DEVELOPMENT.md)

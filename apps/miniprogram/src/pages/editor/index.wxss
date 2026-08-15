@@ -29,6 +29,36 @@
   margin-top: 40rpx;
 }
 
+.generation-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14rpx;
+  margin-top: 40rpx;
+  padding: 30rpx 0;
+  border-top: 2rpx solid #c7c4bc;
+  border-bottom: 2rpx solid #c7c4bc;
+}
+
+.generation-state-title {
+  color: #2f3431;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.generation-state-message,
+.generation-state-hint {
+  color: #4f5552;
+  font-size: 25rpx;
+  line-height: 1.6;
+}
+
+.retry-generation {
+  min-width: 220rpx;
+  min-height: 88rpx;
+  margin-top: 8rpx;
+}
+
 .editor-section {
   margin-top: 30rpx;
 }

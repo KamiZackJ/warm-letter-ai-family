@@ -3,6 +3,12 @@ import type { Letter, Material } from "../types/domain";
 const MATERIALS_KEY = "warm_letter_materials";
 const LETTERS_KEY = "warm_letter_letters";
 const CURRENT_MATERIALS_KEY = "warm_letter_current_material_ids";
+const PENDING_GENERATION_KEY = "warm_letter_pending_generation";
+
+export interface PendingGeneration {
+  letterId: string;
+  fingerprint: string;
+}
 
 function readList<T>(key: string): T[] {
   const value = wx.getStorageSync(key);
@@ -23,6 +29,29 @@ export function getCurrentMaterialIds(): string[] {
 
 export function saveCurrentMaterialIds(ids: string[]): void {
   wx.setStorageSync(CURRENT_MATERIALS_KEY, ids);
+}
+
+export function getPendingGeneration(): PendingGeneration | undefined {
+  const value = wx.getStorageSync(PENDING_GENERATION_KEY);
+  if (
+    !value ||
+    typeof value !== "object" ||
+    typeof value.letterId !== "string" ||
+    typeof value.fingerprint !== "string"
+  ) {
+    return undefined;
+  }
+  return value as PendingGeneration;
+}
+
+export function savePendingGeneration(pending?: PendingGeneration): void {
+  if (pending) wx.setStorageSync(PENDING_GENERATION_KEY, pending);
+  else wx.removeStorageSync(PENDING_GENERATION_KEY);
+}
+
+export function clearPendingGeneration(letterId?: string): void {
+  const pending = getPendingGeneration();
+  if (!letterId || pending?.letterId === letterId) savePendingGeneration();
 }
 
 export function getLetters(): Letter[] {

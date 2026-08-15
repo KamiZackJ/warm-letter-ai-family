@@ -1,6 +1,12 @@
 import { api } from "../../services/api";
+import { GenerationJobFailedError } from "../../services/generation-polling";
 import type { LetterLength, Tone } from "../../types/domain";
-import { getCurrentMaterialIds } from "../../utils/storage";
+import {
+  clearPendingGeneration,
+  getCurrentMaterialIds,
+  getPendingGeneration,
+  savePendingGeneration,
+} from "../../utils/storage";
 
 Page({
   data: {
@@ -60,22 +66,31 @@ Page({
     }
     this.setData({ generating: true });
     wx.showLoading({ title: "正在整理家书", mask: true });
+    const intent = {
+      recipient: this.data.recipient.trim(),
+      message: this.data.message.trim(),
+      tone: this.data.tone,
+      length: this.data.length,
+      focus: this.data.focus.trim(),
+      exclusions: this.data.exclusions.trim(),
+    };
+    const fingerprint = JSON.stringify({ materialIds, intent });
+    const pending = getPendingGeneration();
+    let letterId = pending?.fingerprint === fingerprint ? pending.letterId : undefined;
     try {
-      const letter = await api.createLetter({
-        materialIds,
-        intent: {
-          recipient: this.data.recipient.trim(),
-          message: this.data.message.trim(),
-          tone: this.data.tone,
-          length: this.data.length,
-          focus: this.data.focus.trim(),
-          exclusions: this.data.exclusions.trim(),
-        },
-      });
-      await api.generateLetter(letter.id);
-      wx.redirectTo({ url: `/pages/editor/index?id=${letter.id}` });
+      if (!letterId) {
+        const letter = await api.createLetter({ materialIds, intent });
+        letterId = letter.id;
+        savePendingGeneration({ letterId, fingerprint });
+      }
+      await api.generateLetter(letterId);
+      clearPendingGeneration(letterId);
+      wx.redirectTo({ url: `/pages/editor/index?id=${letterId}` });
     } catch (error) {
       wx.showToast({ title: (error as Error).message, icon: "none" });
+      if (letterId && !(error instanceof GenerationJobFailedError)) {
+        wx.redirectTo({ url: `/pages/editor/index?id=${letterId}` });
+      }
     } finally {
       wx.hideLoading();
       this.setData({ generating: false });

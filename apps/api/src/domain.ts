@@ -85,10 +85,15 @@ export interface GenerationJob {
   id: string;
   userId: string;
   letterId: string;
+  idempotencyKey?: string;
   status: JobStatus;
+  type?: "generate_letter";
+  attempts?: number;
+  maxAttempts?: number;
   createdAt: string;
   updatedAt: string;
-  error?: { code: string; message: string };
+  finishedAt?: string;
+  error?: { code: string; message: string; retryable?: boolean };
 }
 
 export interface Reply {

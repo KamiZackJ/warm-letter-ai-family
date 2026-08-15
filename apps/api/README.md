@@ -1,6 +1,6 @@
-# Warm Letter API MVP
+# Warm Letter API development skeleton
 
-Fastify and TypeScript backend for the competition MVP. All state is held in memory and AI output is produced by a deterministic fake provider, so the full product loop can be demonstrated without cloud credentials.
+Fastify and TypeScript backend for local development and competition demonstrations. All state is held in memory and AI output is produced by a deterministic fake provider, so the product flow can be demonstrated without cloud credentials. This is not an MVP, public-beta, or production release.
 
 ## Run
 
@@ -46,4 +46,17 @@ The regular tests additionally cover all four MVP material types, user editing, 
 
 Private endpoints use the development bearer token returned by `wx-login`. Reader and public reply endpoints use the share token returned by the confirm endpoint; public media endpoints use a separate short-lived `mediaToken` bound to one share, letter, and material.
 
-The `AIProvider` interface is the production integration boundary. The API does not require or read an OpenAI key in MVP mode.
+The `AIProvider` interface is the production integration boundary. The default `AI_PROVIDER=fake` path does not require or read an OpenAI key. Real provider mode must be selected explicitly:
+
+```sh
+AI_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_MODEL=
+OPENAI_TRANSCRIPTION_MODEL=gpt-transcribe
+OPENAI_TIMEOUT_MS=60000
+OPENAI_MAX_RETRIES=2
+OPENAI_PHOTO_DETAIL=auto
+OPENAI_SCREENSHOT_DETAIL=original
+```
+
+Set `OPENAI_MODEL` to a model ID enabled for the target OpenAI project; the repository does not hard-code an account-dependent model. The real provider uses Responses structured outputs, sends image bytes as data URLs, uses `original` detail for screenshot OCR, transcribes audio before generation, disables response storage, and records the model ID returned by OpenAI in the draft provider field. Timeout, retry, and image-detail settings are validated at startup. Unknown provider names are rejected, and `NODE_ENV=production` requires an explicit `AI_PROVIDER=openai`; production cannot silently fall back to fake output. Real supplier evidence still requires an authorized photo, screenshot, voice note, and text sample plus an actual API credential; mock-client tests do not satisfy that gate.

@@ -57,6 +57,19 @@ export class MemoryRepository {
     return this.jobs.get(id);
   }
 
+  findGenerationJobByIdempotencyKey(
+    userId: string,
+    letterId: string,
+    idempotencyKey: string,
+  ): GenerationJob | undefined {
+    return [...this.jobs.values()].find(
+      (job) =>
+        job.userId === userId &&
+        job.letterId === letterId &&
+        job.idempotencyKey === idempotencyKey,
+    );
+  }
+
   saveJob(job: GenerationJob): GenerationJob {
     this.jobs.set(job.id, job);
     return job;

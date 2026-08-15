@@ -1,7 +1,7 @@
 import { api } from "../../services/api";
 import type { LetterSummary } from "../../types/domain";
 import { formatDate } from "../../utils/date";
-import { saveCurrentMaterialIds } from "../../utils/storage";
+import { clearPendingGeneration, saveCurrentMaterialIds } from "../../utils/storage";
 
 type DisplayLetter = LetterSummary & {
   statusLabel: string;
@@ -41,11 +41,13 @@ Page({
   },
 
   startLetter() {
+    clearPendingGeneration();
     saveCurrentMaterialIds([]);
     wx.navigateTo({ url: "/pages/materials/index" });
   },
 
   startDemo() {
+    clearPendingGeneration();
     saveCurrentMaterialIds([]);
     wx.navigateTo({ url: "/pages/materials/index?demo=1" });
   },

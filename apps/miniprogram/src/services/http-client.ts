@@ -3,7 +3,20 @@ import { environment } from "../config/env";
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   data?: unknown;
+  headers?: Record<string, string>;
 };
+
+export class HttpRequestError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+    readonly code?: string,
+    readonly retryable?: boolean,
+  ) {
+    super(message);
+    this.name = "HttpRequestError";
+  }
+}
 
 function accessTokenHeader(): Record<string, string> {
   const accessToken = wx.getStorageSync("warm_letter_access_token");
@@ -22,14 +35,29 @@ function executeRequest<T>(options: {
       timeout: environment.requestTimeoutMs,
       success(response: {
         statusCode: number;
-        data: T | { message?: string; error?: { message?: string } };
+        data:
+          | T
+          | {
+              message?: string;
+              error?: { code?: string; message?: string; retryable?: boolean };
+            };
       }) {
         if (response.statusCode >= 200 && response.statusCode < 300) {
           resolve(response.data as T);
           return;
         }
-        const payload = response.data as { message?: string; error?: { message?: string } };
-        reject(new Error(payload?.error?.message || payload?.message || "服务暂时不可用"));
+        const payload = response.data as {
+          message?: string;
+          error?: { code?: string; message?: string; retryable?: boolean };
+        };
+        reject(
+          new HttpRequestError(
+            payload?.error?.message || payload?.message || "服务暂时不可用",
+            response.statusCode,
+            payload?.error?.code,
+            payload?.error?.retryable,
+          ),
+        );
       },
       fail(error: { errMsg?: string }) {
         reject(new Error(error.errMsg || "网络连接失败"));
@@ -39,7 +67,7 @@ function executeRequest<T>(options: {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const header = accessTokenHeader();
+  const header = { ...options.headers, ...accessTokenHeader() };
   if (options.data !== undefined) {
     header["content-type"] = "application/json";
   }

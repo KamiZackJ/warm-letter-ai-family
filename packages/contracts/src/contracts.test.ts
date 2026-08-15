@@ -5,6 +5,7 @@ import {
   CreateMaterialUploadRequestSchema,
   CreateReplyRequestSchema,
   ErrorResponseSchema,
+  GetJobResponseSchema,
   GetLetterReaderResponseSchema,
   IssueShareLinkRequestSchema,
   LetterDraftSchema,
@@ -158,6 +159,29 @@ describe("state, errors, and future sharing contracts", () => {
     expect(
       ErrorResponseSchema.parse({ error: { code: "UNAUTHORIZED", message: "请先完成微信登录" } }),
     ).toMatchObject({ error: { code: "UNAUTHORIZED" } });
+  });
+
+  it("keeps generation job responses free of owner and provider details", () => {
+    const safeJob = {
+      id,
+      letterId: otherId,
+      status: "failed",
+      type: "generate_letter",
+      attempts: 1,
+      maxAttempts: 1,
+      error: { code: "AI_PROVIDER_TIMEOUT", retryable: true },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      finishedAt: timestamp,
+    };
+
+    expect(GetJobResponseSchema.safeParse({ job: safeJob }).success).toBe(true);
+    expect(GetJobResponseSchema.safeParse({ job: { ...safeJob, userId: id } }).success).toBe(false);
+    expect(
+      GetJobResponseSchema.safeParse({
+        job: { ...safeJob, error: { ...safeJob.error, message: "provider secret" } },
+      }).success,
+    ).toBe(false);
   });
 
   it("defaults future share links to thirty days and rejects unsafe durations", () => {

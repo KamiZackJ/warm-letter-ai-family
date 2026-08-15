@@ -1,6 +1,7 @@
 import { api } from "../../services/api";
 import type { LetterDraft, Material } from "../../types/domain";
 import { createId } from "../../utils/id";
+import { clearPendingGeneration } from "../../utils/storage";
 
 const emptyDraft = (): LetterDraft => ({
   title: "",
@@ -28,12 +29,14 @@ Page({
     draft: emptyDraft(),
     paragraphSourceLabels: [] as string[],
     loading: true,
+    generationPending: false,
+    errorMessage: "",
     saving: false,
   },
 
   async onLoad(options: { id?: string }) {
     if (!options.id) {
-      wx.showToast({ title: "缺少家书编号", icon: "none" });
+      this.setData({ loading: false, errorMessage: "缺少家书编号，请返回首页重新选择" });
       return;
     }
     this.setData({ letterId: options.id });
@@ -41,14 +44,20 @@ Page({
   },
 
   async loadLetter() {
+    this.setData({ loading: true, errorMessage: "" });
     try {
-      const [letter, materials] = await Promise.all([
-        api.getLetter(this.data.letterId),
-        api.listMaterials(),
-      ]);
+      let letter = await api.getLetter(this.data.letterId);
+      if (
+        !letter.draft &&
+        (letter.status === "GENERATING" || letter.status === "MATERIALS_READY")
+      ) {
+        this.setData({ generationPending: true });
+        letter = await api.generateLetter(this.data.letterId);
+      }
       if (!letter.draft) {
         throw new Error("草稿还没有生成完成");
       }
+      const materials = await api.listMaterials();
       const materialMap = new Map<string, Material>(
         materials.map((material) => [material.id, material]),
       );
@@ -58,11 +67,14 @@ Page({
           .filter(Boolean);
         return names.length > 0 ? names.join("、") : "由你的创作意图整理";
       });
-      this.setData({ draft: letter.draft, paragraphSourceLabels: labels });
+      clearPendingGeneration(this.data.letterId);
+      this.setData({ draft: letter.draft, paragraphSourceLabels: labels, errorMessage: "" });
     } catch (error) {
-      wx.showToast({ title: (error as Error).message, icon: "none" });
+      const message = (error as Error).message || "暂时无法打开草稿";
+      this.setData({ errorMessage: message });
+      wx.showToast({ title: message, icon: "none" });
     } finally {
-      this.setData({ loading: false });
+      this.setData({ loading: false, generationPending: false });
     }
   },
 
@@ -138,13 +150,17 @@ Page({
     const confirmed = await confirmDialog("重新生成会覆盖当前修改，是否继续？");
     if (!confirmed) return;
     wx.showLoading({ title: "正在重新整理", mask: true });
+    this.setData({ generationPending: true, errorMessage: "" });
     try {
       await api.generateLetter(this.data.letterId);
       await this.loadLetter();
     } catch (error) {
-      wx.showToast({ title: (error as Error).message, icon: "none" });
+      const message = (error as Error).message || "暂时无法重新生成草稿";
+      this.setData({ errorMessage: message });
+      wx.showToast({ title: message, icon: "none" });
     } finally {
       wx.hideLoading();
+      this.setData({ generationPending: false });
     }
   },
 

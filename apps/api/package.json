@@ -4,21 +4,28 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "pnpm --filter @warm-letter/contracts build",
     "build": "tsc -p tsconfig.build.json",
+    "predemo": "pnpm --filter @warm-letter/contracts build",
     "demo": "vitest run test/demo.evidence.test.ts --reporter verbose",
+    "predev": "pnpm --filter @warm-letter/contracts build",
     "dev": "tsx watch src/server.ts",
+    "prestart": "pnpm --filter @warm-letter/contracts build",
     "start": "node dist/server.js",
+    "pretest": "pnpm --filter @warm-letter/contracts build",
     "test": "vitest run --reporter verbose",
+    "pretypecheck": "pnpm --filter @warm-letter/contracts build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
+    "@warm-letter/contracts": "workspace:*",
     "fastify": "^5.6.1",
     "openai": "^7.4.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
+    "@types/node": "^22.0.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

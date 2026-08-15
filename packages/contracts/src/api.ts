@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import { EntityIdSchema, TimestampSchema } from "./common.js";
 import {
-  JobSchema,
+  JobStatusSchema,
+  JobTypeSchema,
   LetterDraftSchema,
   LetterSchema,
   LetterSettingsSchema,
@@ -121,7 +122,27 @@ export const UpdateLetterRequestSchema = z
 
 export const UpdateLetterResponseSchema = GetLetterResponseSchema;
 export const GenerateLetterRequestSchema = z.object({}).strict();
-export const GenerateLetterResponseSchema = z.object({ job: JobSchema }).strict();
+export const ClientJobErrorSchema = z
+  .object({
+    code: z.string().min(1).max(80),
+    retryable: z.boolean(),
+  })
+  .strict();
+export const ClientJobSchema = z
+  .object({
+    id: EntityIdSchema,
+    letterId: EntityIdSchema,
+    status: JobStatusSchema,
+    type: JobTypeSchema.optional(),
+    attempts: z.number().int().nonnegative().optional(),
+    maxAttempts: z.number().int().positive().optional(),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+    finishedAt: TimestampSchema.optional(),
+    error: ClientJobErrorSchema.optional(),
+  })
+  .strict();
+export const GenerateLetterResponseSchema = z.object({ job: ClientJobSchema }).strict();
 export const GetJobResponseSchema = GenerateLetterResponseSchema;
 export const ConfirmLetterRequestSchema = z.object({}).strict();
 
@@ -206,6 +227,8 @@ export type DraftPatch = z.infer<typeof DraftPatchSchema>;
 export type UpdateLetterRequest = z.infer<typeof UpdateLetterRequestSchema>;
 export type UpdateLetterResponse = z.infer<typeof UpdateLetterResponseSchema>;
 export type GenerateLetterRequest = z.infer<typeof GenerateLetterRequestSchema>;
+export type ClientJobError = z.infer<typeof ClientJobErrorSchema>;
+export type ClientJob = z.infer<typeof ClientJobSchema>;
 export type GenerateLetterResponse = z.infer<typeof GenerateLetterResponseSchema>;
 export type GetJobResponse = z.infer<typeof GetJobResponseSchema>;
 export type ConfirmLetterRequest = z.infer<typeof ConfirmLetterRequestSchema>;

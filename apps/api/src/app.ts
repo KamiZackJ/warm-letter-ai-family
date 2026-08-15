@@ -4,9 +4,15 @@ import Fastify, {
   type FastifyRequest,
 } from "fastify";
 import cors from "@fastify/cors";
+import {
+  ClientJobSchema,
+  GenerateLetterResponseSchema,
+  GetJobResponseSchema,
+  type ClientJob,
+} from "@warm-letter/contracts";
 import { resolve } from "node:path";
 import { FakeAIProvider, type AIProvider } from "./ai.js";
-import type { Material } from "./domain.js";
+import type { GenerationJob, Material } from "./domain.js";
 import { ApiError } from "./errors.js";
 import {
   resolveMediaUploadPolicy,
@@ -31,6 +37,40 @@ import {
   type EditLetterInput,
   type RegisterMaterialInput,
 } from "./service.js";
+
+function serializeGenerationJob(job: GenerationJob): ClientJob {
+  return ClientJobSchema.parse({
+    id: job.id,
+    letterId: job.letterId,
+    status: job.status,
+    type: job.type,
+    attempts: job.attempts,
+    maxAttempts: job.maxAttempts,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    finishedAt: job.finishedAt,
+    error: job.error
+      ? {
+          code: job.error.code,
+          retryable: job.error.retryable ?? false,
+        }
+      : undefined,
+  });
+}
+
+function idempotencyKeyFrom(request: FastifyRequest): string | undefined {
+  const value = request.headers["idempotency-key"];
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "string" ||
+    value.length < 16 ||
+    value.length > 120 ||
+    !/^[A-Za-z0-9._:-]+$/.test(value)
+  ) {
+    throw new ApiError(400, "INVALID_IDEMPOTENCY_KEY", "生成请求标识无效");
+  }
+  return value;
+}
 
 export interface BuildAppOptions {
   repository?: MemoryRepository;
@@ -348,14 +388,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.post("/v1/letters/:id/generate", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
-    const job = service.enqueueGeneration(user.id, id);
-    return reply.status(202).send({ job });
+    const job = service.enqueueGeneration(user.id, id, idempotencyKeyFrom(request));
+    return reply
+      .status(202)
+      .send(GenerateLetterResponseSchema.parse({ job: serializeGenerationJob(job) }));
   });
 
   app.get("/v1/jobs/:id", async (request) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
-    return { job: service.getJob(user.id, id) };
+    return GetJobResponseSchema.parse({ job: serializeGenerationJob(service.getJob(user.id, id)) });
   });
 
   app.post("/v1/letters/:id/confirm", async (request, reply) => {
