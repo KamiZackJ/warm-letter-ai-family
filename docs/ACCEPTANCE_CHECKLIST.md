@@ -2,7 +2,7 @@
 
 本清单是阶段放行依据。所有项目默认未通过；勾选时必须在同一行或对应验收记录中填写可复核证据。`代码已写`、`本机看起来正常`、`视频中演示过`均不能单独作为完成证明。
 
-> 2026-08-17 发布快照：当前远端 HEAD 为 `67f003b50a47878afcef0895fa9047952bc0b013`，草稿 [PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1) 的 [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959241772) 和 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959245010) 均成功。小程序素材会话、Reader/回复以及 H5 字号/回复/可访问性已按独立提交发布；当前冻结回归为小程序 `118/118`、API `131/131`、contracts `12/12`、Web `68/68`。本文件中的旧 SHA 与历史测试数只代表当时记录；真实 AI、正式微信环境、双真机、读屏、生产持久化/审核和比赛外部材料仍未关闭，因此不得放行 G1、G2、MVP、公测、生产或比赛提交。
+> 2026-08-17 发布快照：当前远端 HEAD 为 `09f03c159900f9ad329b390b618d99800968d9f9`，草稿 [PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1) 的 [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959509731) 和 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959511141) 均成功。小程序素材会话、Reader/回复以及 H5 字号/回复/可访问性已按独立提交发布；当前冻结回归为小程序 `118/118`、API `131/131`、contracts `12/12`、Web `68/68`。本文件中的旧 SHA 与历史测试数只代表当时记录；真实 AI、正式微信环境、双真机、读屏、生产持久化/审核和比赛外部材料仍未关闭，因此不得放行 G1、G2、MVP、公测、生产或比赛提交。
 
 ## 1. 验收记录格式
 
@@ -61,7 +61,7 @@
 - [x] H5 已实现消费 API `mediaUrl`、图片/原始语音控件、过期/失败/重试状态，并在回复后用同一 token 重读 reader；类型检查和构建通过。
 - [x] H5 真实浏览器在 390x844、412x915、1440x900 使用 API 地址加载两张图片和原始 WAV；媒体失败后重试恢复、系统朗读、回复后同 token 刷新均通过主代理人工交互验收，尚未形成可提交自动请求时间线。
 - [x] 重签后旧 reader 与 photo/screenshot/audio 三条旧媒体 URL 均返回 410，旧 H5 显示停止分享；新 token 的 reader 与三媒体均返回 200，原回复仍可见。
-- [x] FIX-015 H5 补充浏览器验收已覆盖 320/390/768/1440 px、200% 字体、最长中文和无媒体状态，均无横向溢出，console error/warning 为 0。完成结论记录于 `d28c9d9` 并包含在当前 HEAD `71d6aae`；原始截图、console 和页面状态仍只位于 `D:\tmp\warm-letter-ai-family`，尚未持久归档，不能作为 G3 冻结证据。
+- [x] FIX-015 H5 补充浏览器验收已覆盖 320/390/768/1440 px、200% 字体、最长中文和无媒体状态，均无横向溢出，console error/warning 为 0。完成结论记录于 `d28c9d9` 并包含在历史 HEAD `71d6aae`；原始截图、console 和页面状态仍只位于 `D:\tmp\warm-letter-ai-family`，尚未持久归档，不能作为 G3 冻结证据。
 - [ ] 小程序使用 API 返回的地址完成真机图片预览和语音播放；H5 篡改媒体凭据的 UI 展示仍需单独回归，不能由 API 负向测试代替。
 - [ ] 清空本地存储的独立设备可打开、预览图片、播放语音、发送回复并用同一 token 刷新成功状态。
 - [ ] 寄信端可回查回复；两个账号/设备看到的确认正文、来源与回复一致，错误 token 被拒绝。
@@ -168,7 +168,7 @@
 - [ ] `pnpm install` 可复现，Node/pnpm 版本与文档一致，环境变量模板不含真实密钥。
 - [x] 本轮 Windows 验收命令均使用进程级 `$env:TEMP`/`$env:TMP` 指向 `D:\tmp\warm-letter-ai-family`；没有运行 `setx`、注册表或系统设置修改全局临时目录。
 - [x] 最终代码基线 `d1c525db521ac857866c019ac9dc264396c006e3` 的 `pnpm check`、`pnpm build` 全部通过：contracts 10/10、API 40/40、四工作区构建全绿；结果已写入脱敏证据记录。
-- [x] 本地验证实现提交 `18027406f7d0683526e7664a41f27625e5a97a18` 全量回归通过：API `114/114`、Web `38/38`、小程序 `30/30`、contracts `11/11`；推送后仍需由 PR 最新 HEAD 重新跑远端 CI。
+- [x] 本地验证实现提交 `18027406f7d0683526e7664a41f27625e5a97a18` 全量回归通过：API `114/114`、Web `38/38`、小程序 `30/30`、contracts `11/11`；其后续提交已由当前 PR 最新 HEAD `09f03c159900f9ad329b390b618d99800968d9f9` 的两条远端 CI 复核通过。
 - [ ] 文件系统对象独占创建后、metadata sidecar 完成前发生进程级强制终止时，可通过原子提交、恢复扫描或等价补偿避免长期遗留孤儿对象或不完整 sidecar；该项为生产 P1，不重新打开重复 PUT 的本地 P0。
 - [ ] 正式测试集固化对象创建后各中断点的故障注入与清理回归，证明失败对象不可见、可恢复且不会长期占用存储。
 - [x] CORS 使用明确来源白名单；已测试允许配置来源且拒绝未配置来源，真实 H5 分享 URL 可跨域读取和回复。
@@ -181,7 +181,7 @@
 - [ ] 共享 contracts 的 schema、状态机和错误结构由 API、小程序和 H5 复用，没有重复且漂移的 DTO。
 - [ ] 单元测试覆盖 schema 边界、状态转换、来源引用和幂等；API 测试覆盖全部公开端点和认证/越权。
 - [ ] 端到端测试至少覆盖一次完整闭环，以及上传失败、AI 超时、删除素材、令牌过期、重复请求和回复失败。
-- [x] [草稿 PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1) 的 HEAD `71d6aae` 已在 GitHub Actions 干净环境完成两条 `verify`，结果均为通过：[run 31934597929](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31934597929) 与 [run 31934599732](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31934599732)。
+- [x] [草稿 PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1) 的历史 HEAD `71d6aae` 已在 GitHub Actions 干净环境完成两条 `verify`，结果均为通过：[run 31934597929](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31934597929) 与 [run 31934599732](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31934599732)。
 - [ ] 提交候选版本仍需固定 Git SHA、构建产物版本、部署时间和最终证据索引；后续提交必须重新以 PR 最新 HEAD 的 CI 结果为准。
 - [ ] README 与当前源码一致，包含快速运行、架构入口、演示方式、隐私边界和比赛方向。
 - [ ] 匿名产品事件字典明确触发点、去重键、分母、时区、必需/禁止字段；事件不含素材、正文、签名 URL，并可对账激活、阅读、回复、第二封、成本和删除 SLA。
@@ -209,4 +209,4 @@
 
 ## 11. 当前验收结论
 
-截至 2026-08-16：本地验证实现提交 `18027406f7d0683526e7664a41f27625e5a97a18` 已完成 API `114/114`、Web `38/38`、小程序 `30/30`、contracts `11/11`，重复 PUT 防覆盖与适老返修均已复验。历史远端 HEAD `71d6aae` 的两条 `verify` 不覆盖该提交，最新远端 CI 尚待推送后运行；微信真机、真实 OpenAI、正式审核、完整删除和生产基础设施仍未通过。因此当前不达到 G1、G2、MVP、公测或比赛提交候选。
+截至 2026-08-17：当前远端 HEAD `09f03c159900f9ad329b390b618d99800968d9f9` 的 push/PR 两条 `verify` 均成功；其代码验证基线 `67f003b50a47878afcef0895fa9047952bc0b013` 已完成小程序 `118/118`、API `131/131`、contracts `12/12`、Web `68/68`、`pnpm check` 与 `pnpm build`。`18027406f7d0683526e7664a41f27625e5a97a18` 和 `71d6aae` 的记录均为历史证据。微信真机、真实 OpenAI、正式审核、完整删除和生产基础设施仍未通过。因此当前不达到 G1、G2、MVP、公测或比赛提交候选。
