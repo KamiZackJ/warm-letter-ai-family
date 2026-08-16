@@ -10,10 +10,10 @@
 
 ## 1. 当前结论
 
-当前远端基线为 `bb1cfc0a66f3743e7436c8bbed4e699abf805fc8`。其中功能实现基线为 `12f7b62812f0521e010f1c1d0166d959c15f15ae`，已经包含本地实现提交 `1802740` 和 FIX-026 原子对象存储修复；其后的提交只同步文档，不改变功能代码。针对当前远端 HEAD，PR #1 的两条 GitHub Actions `verify` 已成功：
+本文件的已验证功能实现基线为 `12f7b62812f0521e010f1c1d0166d959c15f15ae`，已经包含本地实现提交 `1802740` 和 FIX-026 原子对象存储修复；其后的 `4102bd8`、`d6bb2ab`、`bb1cfc0` 只同步文档，不改变功能代码。本轮状态内容首次发布于 `b3112a73141594df50dc49be7a04ff2df9864b1f`，对应的两条 GitHub Actions `verify` 已成功：
 
-- [CI run 31938456674（pull_request）](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31938456674)
-- [CI run 31938454236（push）](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31938454236)
+- [CI run 31939832282（pull_request）](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31939832282)
+- [CI run 31939830275（push）](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31939830275)
 
 已验证的范围是“可运行的开发/演示骨架、本地代码门禁和单实例分享安全”。这不等于 G1、G2、MVP、公测、生产放行或比赛提交候选。真实 OpenAI 四素材闭环、微信 `code2Session` 与 HTTPS 双设备闭环、正式内容审核、完整删除生命周期和生产基础设施仍未关闭。
 
@@ -49,9 +49,9 @@ FIX-026 已在 `12f7b62` 提交并推送：对象字节与 metadata 在同一暂
 
 ### 2.3 GitHub 状态
 
-- 远端分支 `origin/codex/warm-letter-mvp` 当前为 `bb1cfc0`。
-- PR #1 保持草稿状态；最新 push 与 pull request 两条 `verify` 均成功。
-- 工作树中没有待提交的 FIX-026 文件，但存在上述 P1 Web/小程序功能改动；它们不属于 `bb1cfc0`，也未被最新远端 CI 覆盖。
+- 本轮状态内容已在 `b3112a7` 推送到 `origin/codex/warm-letter-mvp`。
+- PR #1 保持草稿状态；`b3112a7` 的 push 与 pull request 两条 `verify` 均成功。
+- 工作树中没有待提交的 FIX-026 文件，但存在上述 P1 Web/小程序功能改动；它们不属于 `b3112a7`，也未被这两条远端 CI 覆盖。
 
 ## 3. 当前放行判断
 
