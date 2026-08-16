@@ -55,6 +55,7 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 
 ## 进度与边界
 
+- [当前进度、推进计划与问题清单（2026-08-16）](./docs/CURRENT_PROGRESS_PLAN_ISSUES_2026-08-16.md)
 - [项目阶段状态](./docs/PROJECT_STATUS.md)
 - [2026-08-16 阶段进度、计划与问题](./docs/PROGRESS_2026-08-16.md)
 - [W1 阶段进度、计划与问题](./docs/W1_PROGRESS_2026-08-15.md)
