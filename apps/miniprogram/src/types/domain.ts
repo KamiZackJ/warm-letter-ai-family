@@ -29,10 +29,17 @@ export type LetterIntent = {
   exclusions: string;
 };
 
+export type ParagraphSourceAttribution =
+  | "ai"
+  | "sources-confirmed"
+  | "user-supplied"
+  | "needs-review";
+
 export type DraftParagraph = {
   id: string;
   text: string;
   sourceRefs: string[];
+  sourceAttribution?: ParagraphSourceAttribution;
 };
 
 export type LetterDraft = {

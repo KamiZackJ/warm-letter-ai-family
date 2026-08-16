@@ -87,6 +87,16 @@ describe("reader interface design gates", () => {
     );
   });
 
+  it("discloses whether each paragraph is AI-derived, rechecked, or a personal addition", () => {
+    expect(mainSource).toContain('sourceAttribution?: ParagraphSourceAttribution');
+    expect(mainSource).toContain("写信人修改，已重新核对依据");
+    expect(mainSource).toContain("写信人补充，无素材依据");
+    expect(mainSource).toContain("aria-label={`段落归因：${paragraphAttributionLabel(section)}`}");
+    expect(cssRule(stylesSource, "\\.letter-section > \\.paragraph-attribution")).toContain(
+      "font-family: var(--warm-font-ui)",
+    );
+  });
+
   it("keeps the three font controls in one stable row", () => {
     const controlRule = cssRule(stylesSource, "\\.reader-font-size-control");
 

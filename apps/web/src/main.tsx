@@ -39,6 +39,11 @@ import {
 import "./styles.css";
 
 type SourceType = "photo" | "screenshot" | "audio" | "text";
+type ParagraphSourceAttribution =
+  | "ai"
+  | "sources-confirmed"
+  | "user-supplied"
+  | "needs-review";
 
 type Source = {
   id: string;
@@ -54,6 +59,7 @@ type LetterSection = {
   id: string;
   text: string;
   sourceRefs: string[];
+  sourceAttribution?: ParagraphSourceAttribution;
 };
 
 type ReaderData = {
@@ -211,6 +217,23 @@ const sourceMeta: Record<SourceType, { label: string; tone: "coral" | "sage" | "
   audio: { label: "语音", tone: "blue" },
   text: { label: "文字", tone: "sage" },
 };
+
+function paragraphAttribution(section: LetterSection): ParagraphSourceAttribution {
+  return section.sourceAttribution ?? "ai";
+}
+
+function paragraphAttributionLabel(section: LetterSection): string {
+  switch (paragraphAttribution(section)) {
+    case "sources-confirmed":
+      return "写信人修改，已重新核对依据";
+    case "user-supplied":
+      return "写信人补充，无素材依据";
+    case "needs-review":
+      return "修改后待核对依据";
+    case "ai":
+      return "AI 根据素材整理";
+  }
+}
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -886,6 +909,12 @@ function App() {
           {reader.draft.paragraphs.map((section) => (
             <div className="letter-section" key={section.id}>
               <p>{section.text}</p>
+              <p
+                className={`paragraph-attribution attribution-${paragraphAttribution(section)}`}
+                aria-label={`段落归因：${paragraphAttributionLabel(section)}`}
+              >
+                {paragraphAttributionLabel(section)}
+              </p>
               <div className="source-row" aria-label="段落来源">
                 {section.sourceRefs.map((sourceId) => {
                   const source = sourceMap.get(sourceId);

@@ -34,6 +34,7 @@
       <view class="letter-body">
         <view wx:for="{{paragraphs}}" wx:key="id" wx:for-item="paragraph" class="letter-paragraph-block">
           <text class="letter-paragraph">{{paragraph.text}}</text>
+          <text class="paragraph-attribution attribution-{{paragraph.sourceAttribution}}">{{paragraph.attributionLabel}}</text>
           <view class="paragraph-source">
             <button wx:if="{{paragraph.sourceCount > 0}}" class="paragraph-source-toggle" aria-label="{{paragraph.sourcesExpanded ? '收起本段来源：' + paragraph.sourceSummary : '展开本段 ' + paragraph.sourceCount + ' 条来源：' + paragraph.sourceSummary}}" aria-expanded="{{paragraph.sourcesExpanded}}" aria-controls="paragraph-sources-{{paragraph.id}}" data-id="{{paragraph.id}}" bindtap="toggleParagraphSources">
               <text class="paragraph-source-kicker">内容来源</text>

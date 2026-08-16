@@ -3,6 +3,14 @@ import { environmentView } from "../../config/env";
 import type { LetterDraft, Material } from "../../types/domain";
 import { createId } from "../../utils/id";
 import { clearPendingGeneration } from "../../utils/storage";
+import {
+  draftNeedsSourceReview,
+  markParagraphTextEdited,
+  markParagraphUserSupplied,
+  paragraphAttributionHint,
+  paragraphAttributionLabel,
+  setParagraphSources,
+} from "../../utils/paragraph-attribution";
 
 const emptyDraft = (): LetterDraft => ({
   title: "",
@@ -11,6 +19,41 @@ const emptyDraft = (): LetterDraft => ({
   closing: "",
   signature: "",
 });
+
+type ParagraphSourceChoice = {
+  id: string;
+  name: string;
+  selected: boolean;
+};
+
+type ParagraphAttributionView = {
+  id: string;
+  label: string;
+  hint: string;
+  needsReview: boolean;
+  sourcePickerOpen: boolean;
+  sourceChoices: ParagraphSourceChoice[];
+};
+
+function buildParagraphAttributionViews(
+  draft: LetterDraft,
+  materials: Material[],
+  sourcePickerOpenIds: string[],
+): ParagraphAttributionView[] {
+  const openIds = new Set(sourcePickerOpenIds);
+  return draft.paragraphs.map((paragraph) => ({
+    id: paragraph.id,
+    label: paragraphAttributionLabel(paragraph),
+    hint: paragraphAttributionHint(paragraph),
+    needsReview: paragraph.sourceAttribution === "needs-review",
+    sourcePickerOpen: openIds.has(paragraph.id),
+    sourceChoices: materials.map((material) => ({
+      id: material.id,
+      name: material.name,
+      selected: paragraph.sourceRefs.includes(material.id),
+    })),
+  }));
+}
 
 function confirmDialog(content: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -29,7 +72,9 @@ Page({
     ...environmentView,
     letterId: "",
     draft: emptyDraft(),
-    paragraphSourceLabels: [] as string[],
+    sourceMaterials: [] as Material[],
+    sourcePickerOpenIds: [] as string[],
+    paragraphAttributionViews: [] as ParagraphAttributionView[],
     loading: true,
     generationPending: false,
     errorMessage: "",
@@ -60,17 +105,19 @@ Page({
         throw new Error("草稿还没有生成完成");
       }
       const materials = await api.listMaterials();
-      const materialMap = new Map<string, Material>(
-        materials.map((material) => [material.id, material]),
-      );
-      const labels = letter.draft.paragraphs.map((paragraph) => {
-        const names = paragraph.sourceRefs
-          .map((id) => materialMap.get(id)?.name)
-          .filter(Boolean);
-        return names.length > 0 ? names.join("、") : "由你的创作意图整理";
-      });
+      const sourceMaterials = materials.filter((material) => letter.materialIds.includes(material.id));
       clearPendingGeneration(this.data.letterId);
-      this.setData({ draft: letter.draft, paragraphSourceLabels: labels, errorMessage: "" });
+      this.setData({
+        draft: letter.draft,
+        sourceMaterials,
+        sourcePickerOpenIds: [],
+        paragraphAttributionViews: buildParagraphAttributionViews(
+          letter.draft,
+          sourceMaterials,
+          [],
+        ),
+        errorMessage: "",
+      });
     } catch (error) {
       const message = (error as Error).message || "暂时无法打开草稿";
       this.setData({ errorMessage: message });
@@ -93,16 +140,45 @@ Page({
     detail: { value: string };
   }) {
     const index = Number(event.currentTarget.dataset.index);
-    this.setData({ [`draft.paragraphs[${index}].text`]: event.detail.value });
+    const paragraph = this.data.draft.paragraphs[index];
+    if (!paragraph) return;
+    const paragraphs = [...this.data.draft.paragraphs];
+    paragraphs[index] = markParagraphTextEdited(paragraph, event.detail.value);
+    const draft = { ...this.data.draft, paragraphs };
+    const sourcePickerOpenIds = Array.from(
+      new Set([...this.data.sourcePickerOpenIds, paragraph.id]),
+    );
+    this.setData({
+      draft,
+      sourcePickerOpenIds,
+      paragraphAttributionViews: buildParagraphAttributionViews(
+        draft,
+        this.data.sourceMaterials,
+        sourcePickerOpenIds,
+      ),
+    });
   },
 
   addParagraph() {
+    const paragraph = {
+      id: createId("paragraph"),
+      text: "",
+      sourceRefs: [],
+      sourceAttribution: "needs-review" as const,
+    };
+    const draft = {
+      ...this.data.draft,
+      paragraphs: [...this.data.draft.paragraphs, paragraph],
+    };
+    const sourcePickerOpenIds = [...this.data.sourcePickerOpenIds, paragraph.id];
     this.setData({
-      "draft.paragraphs": [
-        ...this.data.draft.paragraphs,
-        { id: createId("paragraph"), text: "", sourceRefs: [] },
-      ],
-      paragraphSourceLabels: [...this.data.paragraphSourceLabels, "由你手动补充"],
+      draft,
+      sourcePickerOpenIds,
+      paragraphAttributionViews: buildParagraphAttributionViews(
+        draft,
+        this.data.sourceMaterials,
+        sourcePickerOpenIds,
+      ),
     });
   },
 
@@ -114,20 +190,90 @@ Page({
     const index = Number(event.currentTarget.dataset.index);
     const confirmed = await confirmDialog("删除这一段文字？删除后仍可重新生成草稿。");
     if (!confirmed) return;
+    const removed = this.data.draft.paragraphs[index];
+    const draft = {
+      ...this.data.draft,
+      paragraphs: this.data.draft.paragraphs.filter((_, itemIndex) => itemIndex !== index),
+    };
+    const sourcePickerOpenIds = removed
+      ? this.data.sourcePickerOpenIds.filter((id) => id !== removed.id)
+      : this.data.sourcePickerOpenIds;
     this.setData({
-      "draft.paragraphs": this.data.draft.paragraphs.filter((_, itemIndex) => itemIndex !== index),
-      paragraphSourceLabels: this.data.paragraphSourceLabels.filter(
-        (_, itemIndex) => itemIndex !== index,
+      draft,
+      sourcePickerOpenIds,
+      paragraphAttributionViews: buildParagraphAttributionViews(
+        draft,
+        this.data.sourceMaterials,
+        sourcePickerOpenIds,
       ),
     });
   },
 
-  validateDraft(): boolean {
+  beginParagraphSourceReview(event: { currentTarget: { dataset: { index: number } } }) {
+    const paragraph = this.data.draft.paragraphs[Number(event.currentTarget.dataset.index)];
+    if (!paragraph) return;
+    const sourcePickerOpenIds = Array.from(
+      new Set([...this.data.sourcePickerOpenIds, paragraph.id]),
+    );
+    this.setData({
+      sourcePickerOpenIds,
+      paragraphAttributionViews: buildParagraphAttributionViews(
+        this.data.draft,
+        this.data.sourceMaterials,
+        sourcePickerOpenIds,
+      ),
+    });
+  },
+
+  updateParagraphSources(event: {
+    currentTarget: { dataset: { index: number } };
+    detail: { value: string[] };
+  }) {
+    const index = Number(event.currentTarget.dataset.index);
+    const paragraph = this.data.draft.paragraphs[index];
+    if (!paragraph) return;
+    const paragraphs = [...this.data.draft.paragraphs];
+    paragraphs[index] = setParagraphSources(paragraph, event.detail.value);
+    const draft = { ...this.data.draft, paragraphs };
+    this.setData({
+      draft,
+      paragraphAttributionViews: buildParagraphAttributionViews(
+        draft,
+        this.data.sourceMaterials,
+        this.data.sourcePickerOpenIds,
+      ),
+    });
+  },
+
+  markParagraphUserSupplied(event: { currentTarget: { dataset: { index: number } } }) {
+    const index = Number(event.currentTarget.dataset.index);
+    const paragraph = this.data.draft.paragraphs[index];
+    if (!paragraph) return;
+    const paragraphs = [...this.data.draft.paragraphs];
+    paragraphs[index] = markParagraphUserSupplied(paragraph);
+    const draft = { ...this.data.draft, paragraphs };
+    const sourcePickerOpenIds = this.data.sourcePickerOpenIds.filter((id) => id !== paragraph.id);
+    this.setData({
+      draft,
+      sourcePickerOpenIds,
+      paragraphAttributionViews: buildParagraphAttributionViews(
+        draft,
+        this.data.sourceMaterials,
+        sourcePickerOpenIds,
+      ),
+    });
+  },
+
+  validateDraft(requireResolvedSources = false): boolean {
     const hasEmptyParagraph = this.data.draft.paragraphs.some(
       (paragraph) => !paragraph.text.trim(),
     );
     if (!this.data.draft.title.trim() || hasEmptyParagraph) {
       wx.showToast({ title: "请补全标题和正文", icon: "none" });
+      return false;
+    }
+    if (requireResolvedSources && draftNeedsSourceReview(this.data.draft.paragraphs)) {
+      wx.showToast({ title: "请先处理修改段落的内容依据", icon: "none" });
       return false;
     }
     return true;
@@ -167,7 +313,7 @@ Page({
   },
 
   async confirmLetter() {
-    if (!this.validateDraft()) return;
+    if (!this.validateDraft(true)) return;
     const confirmed = await confirmDialog(
       "请确认内容准确且没有不想寄出的信息。确认后将进入家书阅读页。",
     );

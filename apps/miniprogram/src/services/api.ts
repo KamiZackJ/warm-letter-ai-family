@@ -5,6 +5,7 @@ import type {
   LetterDraft,
   LetterSummary,
   Material,
+  ParagraphSourceAttribution,
   ReaderLetter,
   ReaderSource,
   Reply,
@@ -31,7 +32,12 @@ type ServerDraft = {
   version: number;
   title: string;
   greeting: string;
-  paragraphs: Array<{ id: string; text: string; sourceRefs: string[] }>;
+  paragraphs: Array<{
+    id: string;
+    text: string;
+    sourceRefs: string[];
+    sourceAttribution?: ParagraphSourceAttribution;
+  }>;
   closing: string;
 };
 

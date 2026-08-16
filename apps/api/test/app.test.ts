@@ -223,12 +223,38 @@ describe("Warm Letter API", () => {
     const generated = json<{
       letter: {
         state: string;
-        draft: { paragraphs: Array<{ text: string; sourceRefs: string[] }> };
+        draft: {
+          paragraphs: Array<{
+            text: string;
+            sourceRefs: string[];
+            sourceAttribution?: string;
+          }>;
+        };
       };
     }>(generatedResponse).letter;
     expect(generated.state).toBe("EDITING");
     const tracedSources = new Set(generated.draft.paragraphs.flatMap((item) => item.sourceRefs));
     expect(tracedSources).toEqual(new Set(materialIds));
+    expect(generated.draft.paragraphs.every((item) => item.sourceAttribution === "ai")).toBe(true);
+
+    const tamperedAiResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/letters/${letterId}`,
+      headers: auth(token),
+      payload: {
+        draft: {
+          paragraphs: generated.draft.paragraphs.map((paragraph, index) => ({
+            text: paragraph.text,
+            sourceRefs: index === 0 ? [materialIds[1]!] : paragraph.sourceRefs,
+            sourceAttribution: "ai",
+          })),
+        },
+      },
+    });
+    expect(tamperedAiResponse.statusCode).toBe(400);
+    expect(json<{ error: { code: string } }>(tamperedAiResponse).error.code).toBe(
+      "INVALID_SOURCE_ATTRIBUTION",
+    );
 
     const editedParagraphs = generated.draft.paragraphs.map((paragraph, index) => ({
       text: index === 0 ? "I edited this paragraph before sharing it with you." : paragraph.text,
@@ -241,6 +267,44 @@ describe("Warm Letter API", () => {
       payload: { draft: { paragraphs: editedParagraphs } },
     });
     expect(editResponse.statusCode).toBe(200);
+    const edited = json<{
+      letter: {
+        draft: {
+          paragraphs: Array<{ text: string; sourceRefs: string[]; sourceAttribution?: string }>;
+        };
+      };
+    }>(editResponse).letter;
+    expect(edited.draft.paragraphs[0]).toMatchObject({
+      text: "I edited this paragraph before sharing it with you.",
+      sourceRefs: [],
+      sourceAttribution: "needs-review",
+    });
+
+    const blockedConfirmResponse = await app.inject({
+      method: "POST",
+      url: `/v1/letters/${letterId}/confirm`,
+      headers: auth(token),
+    });
+    expect(blockedConfirmResponse.statusCode).toBe(409);
+    expect(json<{ error: { code: string } }>(blockedConfirmResponse).error.code).toBe(
+      "SOURCE_REVIEW_REQUIRED",
+    );
+
+    const reviewedResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/letters/${letterId}`,
+      headers: auth(token),
+      payload: {
+        draft: {
+          paragraphs: edited.draft.paragraphs.map((paragraph, index) => ({
+            text: paragraph.text,
+            sourceRefs: index === 0 ? [materialIds[0]!] : paragraph.sourceRefs,
+            sourceAttribution: index === 0 ? "sources-confirmed" : paragraph.sourceAttribution,
+          })),
+        },
+      },
+    });
+    expect(reviewedResponse.statusCode).toBe(200);
 
     const confirmResponse = await app.inject({
       method: "POST",
@@ -266,7 +330,13 @@ describe("Warm Letter API", () => {
     expect(readerResponse.headers["referrer-policy"]).toBe("no-referrer");
     const reader = json<{
       reader: {
-        draft: { paragraphs: Array<{ text: string; sourceRefs: string[] }> };
+        draft: {
+          paragraphs: Array<{
+            text: string;
+            sourceRefs: string[];
+            sourceAttribution?: string;
+          }>;
+        };
         sources: Array<{ id: string; type: string; mediaUrl?: string; mediaExpiresAt?: string }>;
       };
     }>(readerResponse).reader;
@@ -274,6 +344,7 @@ describe("Warm Letter API", () => {
       "I edited this paragraph before sharing it with you.",
     );
     expect(reader.draft.paragraphs[0]?.sourceRefs).toEqual([materialIds[0]]);
+    expect(reader.draft.paragraphs[0]?.sourceAttribution).toBe("sources-confirmed");
     const photoSource = reader.sources.find((source) => source.id === materialIds[0]);
     expect(photoSource).toMatchObject({
       type: "photo",

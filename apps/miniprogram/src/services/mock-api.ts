@@ -15,6 +15,7 @@ import {
   saveLetters,
   saveMaterials,
 } from "../utils/storage";
+import { getParagraphSourceAttribution } from "../utils/paragraph-attribution";
 
 const wait = <T>(value: T, delay = 280): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), delay));
@@ -83,7 +84,8 @@ function generateDraft(letter: Letter): LetterDraft {
     text:
       letter.intent.message.trim() ||
       "最近的日子过得平稳，也有一些小事想慢慢说给你听。",
-    sourceRefs: textMaterial ? [textMaterial.id] : [],
+    sourceRefs: textMaterial ? [textMaterial.id] : materials.slice(0, 1).map((item) => item.id),
+    sourceAttribution: "ai",
   });
 
   if (visualMaterials.length > 0) {
@@ -91,6 +93,7 @@ function generateDraft(letter: Letter): LetterDraft {
       id: createId("paragraph"),
       text: `我还挑了${visualMaterials.length}张最近的画面。它们不是什么大事，却很适合留在这封信里，等我们见面时再一起细看。`,
       sourceRefs: visualMaterials.map((item) => item.id),
+      sourceAttribution: "ai",
     });
   }
 
@@ -99,6 +102,7 @@ function generateDraft(letter: Letter): LetterDraft {
       id: createId("paragraph"),
       text: "有些话写下来还是不够，我也留了一段声音。希望你读到这里时，能像平常聊天一样听见我的语气。",
       sourceRefs: [voiceMaterial.id],
+      sourceAttribution: "ai",
     });
   }
 
@@ -107,6 +111,7 @@ function generateDraft(letter: Letter): LetterDraft {
       id: createId("paragraph"),
       text: textMaterial.text.trim(),
       sourceRefs: [textMaterial.id],
+      sourceAttribution: "ai",
     });
   }
 
@@ -115,6 +120,7 @@ function generateDraft(letter: Letter): LetterDraft {
       id: createId("paragraph"),
       text: `最想告诉你的是：${letter.intent.focus.trim()}`,
       sourceRefs: materials.map((item) => item.id).slice(0, 2),
+      sourceAttribution: "ai",
     });
   }
 
@@ -131,6 +137,48 @@ function generateDraft(letter: Letter): LetterDraft {
     closing: toneClosing,
     signature: "想念你的我",
   };
+}
+
+function normalizeDraftAttribution(previous: LetterDraft | undefined, draft: LetterDraft): LetterDraft {
+  return {
+    ...draft,
+    paragraphs: draft.paragraphs.map((paragraph, index) => {
+      const previousParagraph = previous?.paragraphs[index];
+      if (!paragraph.sourceAttribution) {
+        if (!previousParagraph || previousParagraph.text !== paragraph.text) {
+          return { ...paragraph, sourceRefs: [], sourceAttribution: "needs-review" };
+        }
+        return {
+          ...paragraph,
+          sourceRefs: previousParagraph.sourceRefs,
+          sourceAttribution: previousParagraph.sourceAttribution ?? "ai",
+        };
+      }
+      return {
+        ...paragraph,
+        sourceAttribution:
+          paragraph.sourceAttribution ?? previousParagraph?.sourceAttribution ?? "ai",
+      };
+    }),
+  };
+}
+
+function assertDraftReadyForConfirmation(draft: LetterDraft): void {
+  for (const paragraph of draft.paragraphs) {
+    const sourceAttribution = getParagraphSourceAttribution(paragraph);
+    if (sourceAttribution === "needs-review") {
+      throw new Error("请先为修改后的段落重新核对素材依据，或标记为本人补充");
+    }
+    if (sourceAttribution === "sources-confirmed" && paragraph.sourceRefs.length === 0) {
+      throw new Error("已核对依据的段落至少需要选择一份素材");
+    }
+    if (sourceAttribution === "user-supplied" && paragraph.sourceRefs.length > 0) {
+      throw new Error("本人补充的段落不能保留素材引用");
+    }
+    if (sourceAttribution === "ai" && paragraph.sourceRefs.length === 0) {
+      throw new Error("AI 整理的段落必须保留至少一份素材依据");
+    }
+  }
 }
 
 export const mockApi = {
@@ -233,10 +281,11 @@ export const mockApi = {
 
   async updateDraft(id: string, draft: LetterDraft): Promise<Letter> {
     const current = requireLetter(id);
+    const normalizedDraft = normalizeDraftAttribution(current.draft, draft);
     return wait(
       updateLetter({
         ...current,
-        draft,
+        draft: normalizedDraft,
         status: "EDITING",
         updatedAt: new Date().toISOString(),
       }),
@@ -246,11 +295,13 @@ export const mockApi = {
 
   async confirmLetter(id: string, draft: LetterDraft): Promise<Letter> {
     const current = requireLetter(id);
+    const normalizedDraft = normalizeDraftAttribution(current.draft, draft);
+    assertDraftReadyForConfirmation(normalizedDraft);
     const now = new Date().toISOString();
     return wait(
       updateLetter({
         ...current,
-        draft,
+        draft: normalizedDraft,
         status: "CONFIRMED",
         confirmedAt: now,
         shareToken: createId("share"),

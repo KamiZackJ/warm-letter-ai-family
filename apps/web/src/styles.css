@@ -520,6 +520,28 @@ h2 {
   text-align: justify;
 }
 
+.letter-section > .paragraph-attribution {
+  margin: 0 0 8px;
+  color: #587169;
+  font-family: var(--warm-font-ui);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.letter-section > .attribution-sources-confirmed {
+  color: #3f5a4d;
+}
+
+.letter-section > .attribution-user-supplied {
+  color: #6f5e45;
+}
+
+.letter-section > .attribution-needs-review {
+  color: #8b4448;
+}
+
 .source-row {
   display: flex;
   flex-wrap: wrap;

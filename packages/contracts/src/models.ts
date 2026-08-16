@@ -23,6 +23,12 @@ export const MaterialSchema = z
 
 export const LetterToneSchema = z.enum(["warm", "plain", "lively"]);
 export const LetterLengthSchema = z.enum(["short", "medium", "long"]);
+export const ParagraphSourceAttributionSchema = z.enum([
+  "ai",
+  "sources-confirmed",
+  "user-supplied",
+  "needs-review",
+]);
 
 export const LetterSettingsSchema = z
   .object({
@@ -38,6 +44,7 @@ export const DraftParagraphSchema = z
     id: EntityIdSchema,
     text: z.string().trim().min(1).max(4000),
     sourceRefs: z.array(EntityIdSchema).max(30),
+    sourceAttribution: ParagraphSourceAttributionSchema.optional(),
   })
   .strict();
 
@@ -148,6 +155,7 @@ export type MaterialStatus = z.infer<typeof MaterialStatusSchema>;
 export type Material = z.infer<typeof MaterialSchema>;
 export type LetterTone = z.infer<typeof LetterToneSchema>;
 export type LetterLength = z.infer<typeof LetterLengthSchema>;
+export type ParagraphSourceAttribution = z.infer<typeof ParagraphSourceAttributionSchema>;
 export type LetterSettings = z.infer<typeof LetterSettingsSchema>;
 export type DraftParagraph = z.infer<typeof DraftParagraphSchema>;
 export type AiDisclosure = z.infer<typeof AiDisclosureSchema>;

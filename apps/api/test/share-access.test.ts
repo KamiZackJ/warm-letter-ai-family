@@ -115,6 +115,50 @@ describe("share access lifecycle", () => {
     );
   });
 
+  it("requires an explicit attribution decision after edits and discloses personal additions", () => {
+    const now = () => new Date("2026-08-15T00:00:00.000Z");
+    const { service, letter } = setup(now);
+    const edited = service.editLetter("user-1", letter.id, {
+      draft: {
+        paragraphs: [
+          {
+            text: "这段内容由我补充。",
+            sourceRefs: ["material-1"],
+          },
+        ],
+      },
+    });
+    expect(edited.draft?.paragraphs[0]).toMatchObject({
+      sourceRefs: [],
+      sourceAttribution: "needs-review",
+    });
+    expectApiError(
+      () => service.confirmAndPublish("user-1", letter.id),
+      "SOURCE_REVIEW_REQUIRED",
+      409,
+    );
+
+    const resolved = service.editLetter("user-1", letter.id, {
+      draft: {
+        paragraphs: [
+          {
+            text: "这段内容由我补充。",
+            sourceAttribution: "user-supplied",
+          },
+        ],
+      },
+    });
+    expect(resolved.draft?.paragraphs[0]).toMatchObject({
+      sourceRefs: [],
+      sourceAttribution: "user-supplied",
+    });
+    const published = service.confirmAndPublish("user-1", letter.id);
+    expect(service.getReader(letter.id, published.shareToken).draft.paragraphs[0]).toMatchObject({
+      sourceAttribution: "user-supplied",
+      sourceRefs: [],
+    });
+  });
+
   it("revokes old links when reissuing and supports explicit revocation", async () => {
     const now = new Date("2026-08-15T00:00:00.000Z");
     const { service, letter } = setup(() => now);

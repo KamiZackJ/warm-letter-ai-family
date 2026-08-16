@@ -57,6 +57,7 @@ export class FakeAIProvider implements AIProvider {
       id: randomUUID(),
       text: materialSummary(material),
       sourceRefs: [material.id],
+      sourceAttribution: "ai" as const,
     }));
 
     if (input.settings.focus) {
@@ -64,6 +65,7 @@ export class FakeAIProvider implements AIProvider {
         id: randomUUID(),
         text: `我尤其想和你说：${input.settings.focus}`,
         sourceRefs: input.materials.map((material) => material.id),
+        sourceAttribution: "ai" as const,
       });
     }
 
@@ -283,6 +285,7 @@ export class OpenAIResponsesProvider implements AIProvider {
         id: randomUUID(),
         text,
         sourceRefs,
+        sourceAttribution: "ai" as const,
       };
     });
 

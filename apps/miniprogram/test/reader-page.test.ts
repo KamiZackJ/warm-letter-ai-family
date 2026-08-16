@@ -230,6 +230,7 @@ describe("reader page recovery", () => {
     expect(template).toContain('wx:for="{{paragraphs}}"');
     expect(template).toContain('bindtap="toggleParagraphSources"');
     expect(template).toContain('aria-expanded="{{paragraph.sourcesExpanded}}"');
+    expect(template).toContain("{{paragraph.attributionLabel}}");
     expect(template).toContain("内容来源");
     expect(template).toContain('maxlength="{{replyLimit}}"');
     expect(template).toContain("{{replyCount}} / {{replyLimit}}");
@@ -247,8 +248,14 @@ describe("reader page recovery", () => {
               id: "paragraph-traced",
               text: "这一段来自两份素材。",
               sourceRefs: ["voice-1", "photo-1", "voice-1"],
+              sourceAttribution: "sources-confirmed",
             },
-            { id: "paragraph-manual", text: "这一段由写信人补充。", sourceRefs: [] },
+            {
+              id: "paragraph-manual",
+              text: "这一段由写信人补充。",
+              sourceRefs: [],
+              sourceAttribution: "user-supplied",
+            },
             { id: "paragraph-missing", text: "这一段的来源已失效。", sourceRefs: ["missing-1"] },
           ],
         },
@@ -263,6 +270,7 @@ describe("reader page recovery", () => {
         id: "paragraph-traced",
         sourceSummary: "语音、生活照片",
         sourceCount: 2,
+        attributionLabel: "写信人修改，已重新核对依据",
         sourcesExpanded: false,
       }),
     );
@@ -271,7 +279,11 @@ describe("reader page recovery", () => {
       expect.objectContaining({ id: "photo-1", typeLabel: "生活照片", name: "晚饭照片" }),
     ]);
     expect(context.data.paragraphs[1]).toEqual(
-      expect.objectContaining({ sourceSummary: "写信人补充", sourceCount: 0 }),
+      expect.objectContaining({
+        sourceSummary: "未关联素材",
+        sourceCount: 0,
+        attributionLabel: "写信人补充，无素材依据",
+      }),
     );
     expect(context.data.paragraphs[2].sources).toEqual([
       {

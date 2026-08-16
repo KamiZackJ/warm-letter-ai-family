@@ -167,6 +167,27 @@
   text-align: justify;
 }
 
+.paragraph-attribution {
+  display: block;
+  margin-top: 10rpx;
+  color: #557067;
+  font-size: 22rpx;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.attribution-sources-confirmed {
+  color: #245a4b;
+}
+
+.attribution-user-supplied {
+  color: #6b5c45;
+}
+
+.attribution-needs-review {
+  color: #8a3e34;
+}
+
 .paragraph-source {
   margin-top: 12rpx;
   border-top: 2rpx solid #e3dfd6;

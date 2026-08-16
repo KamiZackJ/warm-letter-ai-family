@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 import { AIProviderError, type AIProvider } from "./ai.js";
 import {
   MATERIAL_TYPES,
+  PARAGRAPH_SOURCE_ATTRIBUTIONS,
   canTransition,
   type GenerationJob,
   type Letter,
@@ -9,6 +10,7 @@ import {
   type LetterSettings,
   type Material,
   type MaterialType,
+  type ParagraphSourceAttribution,
   type Reply,
   type ShareAccess,
   type User,
@@ -77,7 +79,11 @@ export interface EditLetterInput {
   materialIds?: string[];
   settings?: Partial<LetterSettings>;
   draft?: Partial<Pick<LetterDraft, "title" | "greeting" | "closing">> & {
-    paragraphs?: Array<{ text: string; sourceRefs?: string[] }>;
+    paragraphs?: Array<{
+      text: string;
+      sourceRefs?: string[];
+      sourceAttribution?: ParagraphSourceAttribution;
+    }>;
   };
 }
 
@@ -342,6 +348,35 @@ export class WarmLetterService {
     }
     this.validateReadyMaterials(userId, letter.materialIds);
     for (const paragraph of letter.draft.paragraphs) {
+      const sourceAttribution = paragraph.sourceAttribution ?? "ai";
+      if (sourceAttribution === "needs-review") {
+        throw new ApiError(
+          409,
+          "SOURCE_REVIEW_REQUIRED",
+          "请先为修改后的段落重新核对素材依据，或标记为本人补充",
+        );
+      }
+      if (sourceAttribution === "sources-confirmed" && paragraph.sourceRefs.length === 0) {
+        throw new ApiError(
+          409,
+          "SOURCE_REVIEW_REQUIRED",
+          "已核对依据的段落至少需要选择一份素材",
+        );
+      }
+      if (sourceAttribution === "user-supplied" && paragraph.sourceRefs.length > 0) {
+        throw new ApiError(
+          409,
+          "INVALID_SOURCE_ATTRIBUTION",
+          "本人补充的段落不能保留素材引用",
+        );
+      }
+      if (sourceAttribution === "ai" && paragraph.sourceRefs.length === 0) {
+        throw new ApiError(
+          409,
+          "SOURCE_REVIEW_REQUIRED",
+          "AI 整理的段落必须保留至少一份素材依据",
+        );
+      }
       if (paragraph.sourceRefs.some((materialId) => !letter.materialIds.includes(materialId))) {
         throw new ApiError(409, "INVALID_SOURCE_REF", "家书仍引用已移除的素材，请先修改草稿");
       }
@@ -584,16 +619,74 @@ export class WarmLetterService {
         throw new ApiError(400, "INVALID_DRAFT", "家书段落不能为空");
       }
       const previous = current.paragraphs[index];
-      const sourceRefs = paragraph.sourceRefs ?? previous?.sourceRefs ?? [];
-      if (!this.isStringArray(sourceRefs)) {
+      const text = paragraph.text.trim();
+      const textChanged = !previous || previous.text !== text;
+      const requestedAttribution = this.parseParagraphSourceAttribution(
+        paragraph.sourceAttribution,
+      );
+      if (paragraph.sourceRefs !== undefined && !this.isStringArray(paragraph.sourceRefs)) {
         throw new ApiError(400, "INVALID_SOURCE_REF", "sourceRefs 必须是字符串数组");
       }
+      let sourceRefs: string[];
+      let sourceAttribution: ParagraphSourceAttribution;
+
+      if (requestedAttribution === "needs-review") {
+        if (paragraph.sourceRefs && paragraph.sourceRefs.length > 0) {
+          throw new ApiError(400, "INVALID_SOURCE_ATTRIBUTION", "待核对段落不能保留素材引用");
+        }
+        sourceRefs = [];
+        sourceAttribution = "needs-review";
+      } else if (requestedAttribution === "user-supplied") {
+        if (paragraph.sourceRefs && paragraph.sourceRefs.length > 0) {
+          throw new ApiError(400, "INVALID_SOURCE_ATTRIBUTION", "本人补充不能引用素材");
+        }
+        sourceRefs = [];
+        sourceAttribution = "user-supplied";
+      } else if (requestedAttribution === "sources-confirmed") {
+        if (!paragraph.sourceRefs || paragraph.sourceRefs.length === 0) {
+          throw new ApiError(400, "INVALID_SOURCE_ATTRIBUTION", "重新核对依据时至少选择一份素材");
+        }
+        sourceRefs = paragraph.sourceRefs;
+        sourceAttribution = "sources-confirmed";
+      } else if (requestedAttribution === "ai") {
+        if (textChanged || !previous) {
+          throw new ApiError(
+            400,
+            "INVALID_SOURCE_ATTRIBUTION",
+            "修改后的段落不能标记为 AI 整理，请重新核对依据或标记为本人补充",
+          );
+        }
+        if (
+          paragraph.sourceRefs !== undefined &&
+          !this.sameSourceRefs(paragraph.sourceRefs, previous.sourceRefs)
+        ) {
+          throw new ApiError(
+            400,
+            "INVALID_SOURCE_ATTRIBUTION",
+            "AI 整理段落不能由客户端更换素材引用",
+          );
+        }
+        sourceRefs = previous.sourceRefs;
+        sourceAttribution = "ai";
+      } else if (textChanged) {
+        // A legacy client may send old sourceRefs after editing. Discard them rather than
+        // allowing a human rewrite to appear as an AI-supported claim.
+        sourceRefs = [];
+        sourceAttribution = "needs-review";
+      } else {
+        // Legacy clients post every paragraph and its existing refs. Treat missing attribution
+        // as no attribution decision; source changes require an explicit confirmed state.
+        sourceRefs = previous?.sourceRefs ?? [];
+        sourceAttribution = previous?.sourceAttribution ?? "ai";
+      }
+
+      sourceRefs = [...new Set(sourceRefs)];
       for (const materialId of sourceRefs) {
         if (!letter.materialIds.includes(materialId)) {
           throw new ApiError(400, "INVALID_SOURCE_REF", "段落引用了不属于该家书的素材");
         }
       }
-      return { id: previous?.id ?? randomUUID(), text: paragraph.text.trim(), sourceRefs };
+      return { id: previous?.id ?? randomUUID(), text, sourceRefs, sourceAttribution };
     });
     return {
       ...current,
@@ -602,6 +695,25 @@ export class WarmLetterService {
       closing: input.closing?.trim() || current.closing,
       paragraphs: paragraphs ?? current.paragraphs,
     };
+  }
+
+  private parseParagraphSourceAttribution(
+    value: unknown,
+  ): ParagraphSourceAttribution | undefined {
+    if (value === undefined) return undefined;
+    if (
+      typeof value !== "string" ||
+      !PARAGRAPH_SOURCE_ATTRIBUTIONS.includes(value as ParagraphSourceAttribution)
+    ) {
+      throw new ApiError(400, "INVALID_SOURCE_ATTRIBUTION", "不支持的段落来源归因状态");
+    }
+    return value as ParagraphSourceAttribution;
+  }
+
+  private sameSourceRefs(left: string[], right: string[]): boolean {
+    if (left.length !== right.length) return false;
+    const rightRefs = new Set(right);
+    return new Set(left).size === left.length && left.every((sourceRef) => rightRefs.has(sourceRef));
   }
 
   private mergeSettings(current: LetterSettings, input?: Partial<LetterSettings>): LetterSettings {

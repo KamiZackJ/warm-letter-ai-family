@@ -9,6 +9,7 @@ import {
   LetterSettingsSchema,
   MaterialSchema,
   MaterialTypeSchema,
+  ParagraphSourceAttributionSchema,
   ReplySchema,
   ShareLinkSchema,
 } from "./models.js";
@@ -117,6 +118,7 @@ export const DraftPatchSchema = z
           .object({
             text: z.string().trim().min(1).max(4000),
             sourceRefs: z.array(EntityIdSchema).max(30).optional(),
+            sourceAttribution: ParagraphSourceAttributionSchema.optional(),
           })
           .strict(),
       )

@@ -3,6 +3,10 @@ import { environmentView } from "../../config/env";
 import type { ReaderLetter, ReaderSource, Reply } from "../../types/domain";
 import { formatDate } from "../../utils/date";
 import { createId } from "../../utils/id";
+import {
+  getParagraphSourceAttribution,
+  paragraphAttributionLabel,
+} from "../../utils/paragraph-attribution";
 
 type DisplayReply = Reply & { dateLabel: string };
 type ImageLoadState = "loading" | "ready" | "error";
@@ -21,6 +25,8 @@ type DisplayParagraphSource = {
 };
 type DisplayParagraph = ReaderLetter["draft"]["paragraphs"][number] & {
   sources: DisplayParagraphSource[];
+  attributionLabel: string;
+  sourceAttribution: "ai" | "sources-confirmed" | "user-supplied" | "needs-review";
   sourceSummary: string;
   sourceCount: number;
   sourcesExpanded: boolean;
@@ -117,6 +123,7 @@ function toDisplayParagraphs(
   );
 
   return letter.draft.paragraphs.map((paragraph) => {
+    const sourceAttribution = getParagraphSourceAttribution(paragraph);
     const sourceIds = [...new Set(paragraph.sourceRefs)];
     const sources = sourceIds.map((sourceId): DisplayParagraphSource => {
       const source = materialMap.get(sourceId);
@@ -140,8 +147,17 @@ function toDisplayParagraphs(
 
     return {
       ...paragraph,
+      sourceAttribution,
       sources,
-      sourceSummary: sourceLabels.length > 0 ? sourceLabels.join("、") : "写信人补充",
+      attributionLabel: paragraphAttributionLabel(paragraph),
+      sourceSummary:
+        sourceLabels.length > 0
+          ? sourceLabels.join("、")
+          : sourceAttribution === "user-supplied"
+            ? "未关联素材"
+            : sourceAttribution === "needs-review"
+              ? "尚未核对"
+              : "未提供素材",
       sourceCount: sources.length,
       sourcesExpanded: expandedParagraphs.has(paragraph.id),
     };

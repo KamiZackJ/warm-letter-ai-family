@@ -145,6 +145,40 @@ describe("letter and public response contracts", () => {
     expect(parsed.paragraphs[0]?.sourceRefs).toEqual([otherId]);
   });
 
+  it("carries transparent paragraph attribution while accepting legacy AI paragraphs", () => {
+    expect(LetterDraftSchema.parse(draft).paragraphs[0]?.sourceAttribution).toBeUndefined();
+    expect(
+      LetterDraftSchema.parse({
+        ...draft,
+        paragraphs: [
+          {
+            ...draft.paragraphs[0],
+            sourceRefs: [],
+            sourceAttribution: "user-supplied",
+          },
+        ],
+      }).paragraphs[0]?.sourceAttribution,
+    ).toBe("user-supplied");
+    expect(
+      UpdateLetterRequestSchema.safeParse({
+        draft: {
+          paragraphs: [
+            {
+              text: "已重新核对的段落",
+              sourceRefs: [otherId],
+              sourceAttribution: "sources-confirmed",
+            },
+          ],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      UpdateLetterRequestSchema.safeParse({
+        draft: { paragraphs: [{ text: "段落", sourceAttribution: "unverified" }] },
+      }).success,
+    ).toBe(false);
+  });
+
   it("matches the current confirm and reader response shapes", () => {
     const letter = {
       id,

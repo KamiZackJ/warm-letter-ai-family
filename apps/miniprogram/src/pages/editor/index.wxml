@@ -31,16 +31,27 @@
     </view>
 
     <view class="paragraphs-section">
-      <view wx:for="{{draft.paragraphs}}" wx:key="id" class="paragraph-editor">
-        <view class="paragraph-heading">
-          <text class="paragraph-number">正文 {{index + 1}}</text>
-          <button class="delete-paragraph" data-index="{{index}}" bindtap="removeParagraph">删除</button>
+    <view wx:for="{{draft.paragraphs}}" wx:for-index="paragraphIndex" wx:key="id" class="paragraph-editor">
+      <view class="paragraph-heading">
+          <text class="paragraph-number">正文 {{paragraphIndex + 1}}</text>
+          <button class="delete-paragraph" data-index="{{paragraphIndex}}" bindtap="removeParagraph">删除</button>
         </view>
-        <textarea class="textarea paragraph-textarea" aria-label="正文第 {{index + 1}} 段" data-index="{{index}}" maxlength="1000" value="{{item.text}}" bindinput="updateParagraph" />
+        <textarea class="textarea paragraph-textarea" aria-label="正文第 {{paragraphIndex + 1}} 段" data-index="{{paragraphIndex}}" maxlength="1000" value="{{item.text}}" bindinput="updateParagraph" />
         <view class="source-trace">
-          <text class="source-label">内容依据</text>
-          <text class="source-value">{{paragraphSourceLabels[index]}}</text>
+          <text class="source-label">内容归因</text>
+          <text class="source-value">{{paragraphAttributionViews[paragraphIndex].label}}</text>
         </view>
+        <view wx:if="{{paragraphAttributionViews[paragraphIndex].needsReview || paragraphAttributionViews[paragraphIndex].sourcePickerOpen}}" class="attribution-review" aria-live="polite">
+          <text class="attribution-hint">{{paragraphAttributionViews[paragraphIndex].hint}}</text>
+          <checkbox-group class="source-choice-list" data-index="{{paragraphIndex}}" bindchange="updateParagraphSources">
+            <label wx:for="{{paragraphAttributionViews[paragraphIndex].sourceChoices}}" wx:key="id" wx:for-item="source" class="source-choice">
+              <checkbox value="{{source.id}}" checked="{{source.selected}}" color="#245A4B" />
+              <text class="source-choice-name">{{source.name}}</text>
+            </label>
+          </checkbox-group>
+          <button class="personal-supplement-button" data-index="{{paragraphIndex}}" bindtap="markParagraphUserSupplied">标记为本人补充</button>
+        </view>
+        <button wx:else class="source-review-button" data-index="{{paragraphIndex}}" bindtap="beginParagraphSourceReview">重新核对依据</button>
       </view>
       <button class="quiet-button add-paragraph" bindtap="addParagraph">添加一段</button>
     </view>

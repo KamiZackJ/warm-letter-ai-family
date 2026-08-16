@@ -41,10 +41,19 @@ export interface LetterSettings {
   excludedTopics?: string[];
 }
 
+export const PARAGRAPH_SOURCE_ATTRIBUTIONS = [
+  "ai",
+  "sources-confirmed",
+  "user-supplied",
+  "needs-review",
+] as const;
+export type ParagraphSourceAttribution = (typeof PARAGRAPH_SOURCE_ATTRIBUTIONS)[number];
+
 export interface DraftParagraph {
   id: string;
   text: string;
   sourceRefs: string[];
+  sourceAttribution?: ParagraphSourceAttribution;
 }
 
 export interface LetterDraft {
