@@ -10,7 +10,7 @@
 
 ## 1. 当前结论
 
-本次状态以仓库远端 HEAD `12f7b62812f0521e010f1c1d0166d959c15f15ae` 为基线。该提交已经包含本地实现提交 `1802740`、FIX-026 原子对象存储修复、进度文档同步和本文件的前一版；PR #1 最新 HEAD 的两条 GitHub Actions `verify` 已成功：
+本次状态以功能实现提交 `12f7b62812f0521e010f1c1d0166d959c15f15ae` 及其后的文档同步为基线。该实现提交已经包含本地实现提交 `1802740` 和 FIX-026 原子对象存储修复；后续文档提交只补充状态，不改变功能代码。针对该实现提交，PR #1 的两条 GitHub Actions `verify` 已成功：
 
 - [CI run 31938227545](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31938227545)
 - [CI run 31938225647](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31938225647)
@@ -38,8 +38,8 @@ FIX-026 已在 `12f7b62` 提交并推送：对象字节与 metadata 在同一暂
 ### 2.2 GitHub 状态
 
 - 当前分支已推送到 `origin/codex/warm-letter-mvp`。
-- PR #1 保持草稿状态，最新远端 HEAD 为 `12f7b62`。
-- 最新 HEAD 的 push 与 pull request 两条 `verify` 均成功；工作树中没有待提交的 FIX-026 文件。
+- PR #1 保持草稿状态；功能实现基线为 `12f7b62`，状态文档在其后持续同步。
+- 针对功能实现基线的 push 与 pull request 两条 `verify` 均成功；工作树中没有待提交的 FIX-026 文件。
 
 ## 3. 当前放行判断
 
