@@ -2,6 +2,8 @@
 
 本清单是阶段放行依据。所有项目默认未通过；勾选时必须在同一行或对应验收记录中填写可复核证据。`代码已写`、`本机看起来正常`、`视频中演示过`均不能单独作为完成证明。
 
+> 2026-08-17 发布快照：当前远端 HEAD 为 `67f003b50a47878afcef0895fa9047952bc0b013`，草稿 [PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1) 的 [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959241772) 和 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959245010) 均成功。小程序素材会话、Reader/回复以及 H5 字号/回复/可访问性已按独立提交发布；当前冻结回归为小程序 `118/118`、API `131/131`、contracts `12/12`、Web `68/68`。本文件中的旧 SHA 与历史测试数只代表当时记录；真实 AI、正式微信环境、双真机、读屏、生产持久化/审核和比赛外部材料仍未关闭，因此不得放行 G1、G2、MVP、公测、生产或比赛提交。
+
 ## 1. 验收记录格式
 
 每次评审记录：版本/提交 SHA、环境、验收人、日期、测试数据、步骤、预期、实际、截图/录像/日志、结论和返修单 ID。失败项进入 `PROJECT_STATUS.md` 返修队列，修复后由非原实现者或项目经理复测。

@@ -1,9 +1,17 @@
 # 暖笺项目状态与推进台账
 
-最后更新：2026-08-16（Asia/Shanghai）
+最后更新：2026-08-17（Asia/Shanghai）
 项目经理：负责计划、阶段总结、风险升级、评审、验收和返修闭环；不代替队长承担主功能编码。
 
 当前“项目经理”是研发协作与质量治理角色，不自动计入 iCAN 报名成员；官方参赛成员仍以 `EXT-01` 最终确认的真人团队名单为准。
+
+## 0. 2026-08-17 已发布快照
+
+- 当前远端 HEAD 为 `67f003b50a47878afcef0895fa9047952bc0b013`，草稿 [PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1) 的 [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959241772) 与 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31959245010) 均成功。
+- 本轮独立发布了 `7d0a0c5`（小程序素材选择会话恢复）、`82e6ca4`（小程序 Reader、媒体恢复与回复幂等）和 `67f003b`（H5 字号、回复与可访问性返修）。历史段落中的旧 SHA、测试数和“待运行”描述仅保留为当时快照，不覆盖本节事实。
+- `67f003b` 的干净 D 盘 worktree 验收为冻结安装、`pnpm check`、`pnpm build`、生产 bundle verifier、敏感信息扫描和差异检查全部通过；全仓测试为小程序 `118/118`、API `131/131`、contracts `12/12`、Web `68/68`。
+- H5 demo 浏览器验收覆盖 320px 无横向溢出、1280px 三段字号稳定、字号持久化、回复成功后编辑器持续可用，控制台 `0 errors / 0 warnings`。该证据使用合成 demo 数据，不替代真实后端、真机或生产验收。
+- 当前仍不得宣称 G1、G2、MVP、公测、生产发布或比赛提交候选；真实 AI 四素材、微信正式 AppID/HTTPS、双真机/读屏、生产持久化、正式审核和比赛外部材料仍是阻塞门禁。
 
 ## 1. 项目目标与推进原则
 
