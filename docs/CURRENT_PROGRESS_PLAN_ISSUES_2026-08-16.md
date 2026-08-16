@@ -1,22 +1,22 @@
 # 暖笺当前进度、推进计划与问题清单
 
-- 更新时间：2026-08-16 21:36（Asia/Shanghai）
+- 更新时间：2026-08-16 22:02（Asia/Shanghai）
 - 仓库：`KamiZackJ/warm-letter-ai-family`
 - 分支：`codex/warm-letter-mvp`
-- 本次更新前远端 HEAD：`eae660b7b74cd2142101cf272e8cb2399d907f86`
+- 当前远端 HEAD：`85ba9490de5e3261111878798e7f0b7b6b91c945`
 - 已发布功能基线：`cf097586f6eeb09eb7b5bc383c07e492065c5141`
-- 上一文档提交：`eae660b`（已推送，push run `31948534413` 与 pull request run `31948537909` 均成功）
+- 上一版文档提交：`85ba949`（已推送，push run `31950647429` 与 pull request run `31950649071` 均成功）
 - 草稿 PR：[PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1)
 - 文档性质：项目经理阶段快照。只有完成“测试 -> 独立复核 -> 提交 -> 推送 -> 远端 CI 全绿”的内容才计为“已发布”；工作树中的实现统一计为“进行中”。
 
 ## 1. 阶段结论
 
-暖笺当前已具备可运行的 Fastify API、React H5 和微信小程序开发/演示骨架，`G0` 内部开发门禁已通过，`W2` 本地/单实例分享安全已有基线。远端 `cf09758` 已发布 API 素材/回复幂等加固：素材同键重放与异内容冲突、预签名/complete 恢复、回复重放先于限流和内容安全、并发同键只写一条、审核期间撤销分享不落库，以及分享 token hash 的 O(1) 索引均已进入草稿 PR。管理文档 HEAD 已推进到 `eae660b`，其 push 与 pull request 两条 GitHub Actions 均成功：
+暖笺当前已具备可运行的 Fastify API、React H5 和微信小程序开发/演示骨架，`G0` 内部开发门禁已通过，`W2` 本地/单实例分享安全已有基线。远端 `cf09758` 已发布 API 素材/回复幂等加固：素材同键重放与异内容冲突、预签名/complete 恢复、回复重放先于限流和内容安全、并发同键只写一条、审核期间撤销分享不落库，以及分享 token hash 的 O(1) 索引均已进入草稿 PR。管理文档 HEAD 已推进到 `85ba949`，其 push 与 pull request 两条 GitHub Actions 均成功：
 
-- [push run 31948534413](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31948534413)
-- [pull_request run 31948537909](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31948537909)
+- [push run 31950647429](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31950647429)
+- [pull_request run 31950649071](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31950649071)
 
-当前未提交批次集中在 Web 和微信小程序。最新小程序证据为 materials 定向 `42/42`、全量 `117/117`、typecheck 与 `git diff --check` 通过；两条跨 epoch ABA 和 `recorder.stop()` 同步抛错后的迟到回调均有回归，独立评审结论为 GO。根级 `pnpm check` 与 `pnpm build` 已在最终 stop 抛错加固前通过，随后小程序定向、全量和 typecheck 已重新通过；提交前仍会再跑一次根级门禁。上述结果均来自包含未提交改动的工作树，只能作为候选证据，不能绑定为 `cf09758` 或 `eae660b` 的已发布功能证据。
+当前未提交批次集中在 Web 和微信小程序。最新小程序证据为 materials 定向 `42/42`、全量 `117/117`、typecheck 与 `git diff --check` 通过；两条跨 epoch ABA 和 `recorder.stop()` 同步抛错后的迟到回调均有回归，独立评审结论为 GO。根级 `pnpm check` 与 `pnpm build` 已在最终 stop 抛错加固前通过，随后小程序定向、全量和 typecheck 已重新通过；提交前仍会再跑一次根级门禁。上述结果均来自包含未提交改动的工作树，只能作为候选证据，不能绑定为 `cf09758` 或 `85ba949` 的已发布功能证据。
 
 Web 已完成设计高优先返修：照片与聊天截图采用不同裁切策略，回复成功后编辑器保持可用，回复历史默认展示最近三条并支持展开/收起，同时补充跨页面品牌 CSS token。独立复核发现 skip link 会覆盖承载分享凭据的 hash，现已改为阻止默认导航、直接聚焦并滚动正文；键盘 Tab -> Enter 后 hash 保持，刷新仍可读。最新定向 `5/5`、Web 全量 `67/67`、typecheck、`build:test` 与 `git diff --check` 通过。主流程在真实 Chromium 320px 下确认回复请求 `201`、编辑器可见/启用/清空、回复数为 9、横向溢出为 0、console `0 errors / 0 warnings`；独立评审复测 320px 与 1280px 均无横向溢出并给出最终 GO。证据使用 Playwright route 模拟 API，且尚未绑定冻结 SHA/tree，因此仍需提交后验证，不能替代真实后端联调。
 
@@ -60,6 +60,8 @@ Web 已完成设计高优先返修：照片与聊天截图采用不同裁切策�
 
 ### P0：收口当前本地批次
 
+前置工作：独立回归发现共享 `CreateMaterialUploadResponseSchema` 曾只描述旧的预签名响应，未覆盖 API 当前的 `completed: false` 待上传响应和 `completed: true + material` 已完成重放响应。当前工作树已补为严格判别联合，并让 API 幂等测试直接解析真实响应；主流程复跑 contracts `12/12` 与 API `131/131` 通过。该修复仍需作为首个小批次独立提交、干净副本复跑并绑定远端双 CI，随后再进入 Web/小程序批次。
+
 1. 归档 Web 独立复核最终 GO，补齐并索引 320/390/768/1440、200% 字体、截图完整显示、历史展开、编辑器持续可用、焦点与控制台证据。
 2. 复跑 API、Web、小程序、contracts 全量测试与各端 typecheck，以及根级 `pnpm check`、`pnpm build`、Web `build:test` 和 production bundle verifier；执行敏感信息扫描和 `git diff --check`。
 3. 按“小程序 auth/list/service 回归”“素材 session/storage/home/materials/Mock/录音”“reader 来源与适老”“Web 字号/回复/草稿与设计返修”拆分提交；显式暂存文件，禁止 `git add -A`。
@@ -81,6 +83,7 @@ Web 已完成设计高优先返修：照片与聊天截图采用不同裁切策�
 ### 代码与验证
 
 - 工作树混合多条工作流且差异较大；必须分批审查、显式暂存文件并独立提交。
+- 新发现并已本地返修：共享素材预签名响应 schema 与 API 真实 pending/completed 响应曾发生漂移；此前全量测试没有把真实 HTTP 响应交给共享 schema，因此未能发现。当前 contracts `12/12`、API `131/131` 通过，但 contracts/API 测试改动尚未提交、推送和绑定远端 CI。
 - `MemoryRepository` 的素材/回复幂等只覆盖单进程内存，无法提供跨进程重启、多实例或生产持久化保证。
 - 已返修、待发布：素材选择旧快照覆盖问题已改为 session/revision 原子快照与条件更新，`listLetters()` 也已基于写回时最新 ID 清理失效项；两项均有本地回归证据，但尚未拆分提交、推送和绑定远端 CI。
 - 当前没有已知本地测试阻塞；小程序 materials `42/42`、全量 `117/117`、typecheck 与录音独立复核均通过。
@@ -126,3 +129,27 @@ Web 已完成设计高优先返修：照片与聊天截图采用不同裁切策�
 - 当前 H5 浏览器证据目录为 `D:\tmp\warm-letter-ai-family\web-design-qa` 与 `D:\tmp\warm-letter-ai-family\web-main-review`。
 - 当前关键日志位于 `D:\tmp\warm-letter-ai-family\logs`：`materials-page-stop-throw-final.log`、`miniprogram-full-stop-throw-final.log`、`miniprogram-typecheck-stop-throw-final.log`、`web-full-skip-fragment.log`、`web-typecheck-skip-fragment.log`、`web-build-skip-fragment.log`、`root-check-integrated.log` 与 `root-build-integrated.log`。
 - 不提交 API key、访问令牌、原始家庭素材、签名 URL、个人信息截图或未脱敏日志。
+
+## 8. 评委视角、推广判断与下一批三项
+
+### 第一印象与核心用户
+
+- 当前首页温暖、可信，“主动选择”“先审后寄”能快速传达隐私边界；但评委第一眼仍可能把暖笺理解为普通 AI 写信工具。首屏尚未足够强地证明“照片/截图/语音/文字等生活碎片 -> AI 多模态理解 -> 每段可追溯来源 -> 家人阅读回复”这一不可替代链路。
+- 首批用户限定为两组：18-28 岁异地求学者及其父母/祖父母，22-35 岁异地职场人与家人。首批高价值场景为周末近况、节日问候，以及第一次独立生活、项目完成等阶段性时刻。
+- 真正竞品不是另一款 AI 写作产品，而是直接在微信发送照片和语音。真实推广成立的前提是：整理后的表达明显更好，额外操作成本可接受，并能自然形成“收到回复 -> 再写一封”的复用循环。
+
+### 提交与推广判断
+
+- 比赛提交形态仍不完整：真实 OpenAI 四素材闭环、正式微信 AppID/HTTPS/双真机、30 秒至 3 分钟快手视频、双话题、AIGC 声明、PDF、授权台账、报名字段与回执均未关闭。
+- 产品已有可演示骨架和较强的阅读/回复基础，但目前只能判断为“可继续孵化”，不能判断为“已支持真实推广”。生产持久化、正式审核、完整删除 SLA、监控、跨设备历史和通知仍是推广前门槛。
+- 小程序确认后依赖微信原生分享菜单，`onShareAppMessage()` 已生成分享路径，但页面没有足够显性的“分享给家人”主操作；首页仅展示最近三封，尚未完成未读回复通知、跨设备历史和“写下一封”闭环。
+
+### 下一批最值得做的三项
+
+| 优先级 | 工作项 | 完成定义 | 必须留下的验收证据 |
+| --- | --- | --- | --- |
+| 1 | 来源核验闭环 | 补齐日程截图的明确入口；编辑页可预览/播放、删除或重选每段来源；用户改写后标记“用户修改”，确认前发现正文与来源失配时要求复核 | 五类入口截图与定向测试；照片/截图预览、语音播放、来源重选录像；来源失配拦截测试；更新 `FIX-022` 与验收清单 |
+| 2 | 分享与复用闭环 | 确认页提供显性的“分享给家人”主操作；寄信端能看到回复通知并回查；历史页支持跨设备读取；收到回复后可主动发起下一封 | 两台设备或两个隔离会话的连续录像：确认 -> 分享 -> 阅读 -> 回复 -> 寄信端回查 -> 写下一封；通知去重与错误恢复测试；不使用情感焦虑促活文案 |
+| 3 | 比赛第一印象与真实证据 | 首屏明确展示“多模态生活碎片整理为可追溯家书”；完成真实 AI、真实媒体、双设备闭环，并从同一冻结版本制作视频/PDF | 脱敏真实 AI request ID、模型/usage/耗时；100-140 秒演示母版；双话题与 AIGC 声明截图；PDF 逐页检查；至少 3 组学生家庭和 3 组职场家庭观察记录 |
+
+三项推进顺序固定为 1 -> 2 -> 3。第 1 项解决事实可信与 AI 差异化，第 2 项解决传播和留存闭环，第 3 项把真实产品证据转化为比赛提交物；任一项只有在代码/设计验收、独立复核、提交推送和最新远端 CI 全绿后才更新为已完成。
