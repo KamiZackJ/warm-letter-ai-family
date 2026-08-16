@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AudioLines,
@@ -14,7 +14,23 @@ import {
   Volume2,
 } from "lucide-react";
 import { createRoot } from "react-dom/client";
+import { ApiRequestError, apiErrorFrom } from "./api-request";
 import { resolveReaderEntry, type ShareParams } from "./reader-entry";
+import {
+  readReaderFontSize,
+  type ReaderFontSize,
+  writeReaderFontSize,
+} from "./reader-font-size";
+import { installReplyDraftGuard } from "./reply-draft-guard";
+import {
+  acquireReplyAttempt,
+  appendReply,
+  mergeReaderPreservingReplies,
+  postReply,
+  retainReplyAttemptForDraft,
+  type ReplyAttempt,
+  type ReplyRecord,
+} from "./reply-flow";
 import {
   assertRemoteDeploymentMode,
   resolveWebRuntimeConfig,
@@ -40,14 +56,6 @@ type LetterSection = {
   sourceRefs: string[];
 };
 
-type Reply = {
-  id: string;
-  text: string;
-  authorName: string;
-  authorVerified: boolean;
-  createdAt: string;
-};
-
 type ReaderData = {
   id: string;
   recipient: string;
@@ -60,7 +68,7 @@ type ReaderData = {
   };
   publishedAt: string;
   sources: Source[];
-  replies: Reply[];
+  replies: ReplyRecord[];
 };
 
 type ReaderFailure = {
@@ -71,15 +79,20 @@ type ReaderFailure = {
 
 type SpeechState = "idle" | "playing" | "paused";
 
-class ApiRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code?: string,
-  ) {
-    super(message);
-    this.name = "ApiRequestError";
-  }
+const REPLY_PREVIEW_COUNT = 3;
+
+const readerFontSizeOptions: ReadonlyArray<{ value: ReaderFontSize; label: string }> = [
+  { value: "standard", label: "标准" },
+  { value: "large", label: "大字" },
+  { value: "extra", label: "特大" },
+];
+
+function skipToLetterContent(event: MouseEvent<HTMLAnchorElement>): void {
+  event.preventDefault();
+  const content = document.getElementById("letter-content");
+  if (!content) return;
+  content.focus({ preventScroll: true });
+  content.scrollIntoView({ block: "start" });
 }
 
 const runtimeConfig = resolveWebRuntimeConfig({
@@ -237,21 +250,6 @@ function isMediaExpired(source: Source, now = Date.now()): boolean {
   return !Number.isNaN(expiresAt) && expiresAt <= now;
 }
 
-async function apiErrorFrom(response: Response, fallback: string): Promise<ApiRequestError> {
-  let code: string | undefined;
-  let message = fallback;
-  try {
-    const payload = (await response.json()) as {
-      error?: { code?: string; message?: string };
-    };
-    code = payload.error?.code;
-    message = payload.error?.message || fallback;
-  } catch {
-    // Keep the user-facing fallback when the server response is not JSON.
-  }
-  return new ApiRequestError(message, response.status, code);
-}
-
 async function fetchReaderData(
   letterId: string,
   shareToken: string,
@@ -367,7 +365,14 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [sentLocally, setSentLocally] = useState(false);
+  const [replyHistoryExpanded, setReplyHistoryExpanded] = useState(false);
+  const [readerFontSize, setReaderFontSize] = useState(readReaderFontSize);
   const replyInputRef = useRef<HTMLTextAreaElement>(null);
+  const replyDraftRef = useRef("");
+  const replyAttemptRef = useRef<ReplyAttempt | null>(null);
+  const replyControllerRef = useRef<AbortController | null>(null);
+  const mediaControllersRef = useRef(new Set<AbortController>());
+  const mountedRef = useRef(true);
 
   const shareParams = useMemo(readShareParams, []);
   const { letterId, shareToken } = shareParams;
@@ -392,7 +397,27 @@ function App() {
     () => reader.sources.filter((source) => source.type === "audio" && Boolean(source.mediaUrl)),
     [reader.sources],
   );
+  const hiddenReplyCount = Math.max(0, reader.replies.length - REPLY_PREVIEW_COUNT);
+  const visibleReplies = replyHistoryExpanded
+    ? reader.replies
+    : reader.replies.slice(-REPLY_PREVIEW_COUNT);
   const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      replyControllerRef.current?.abort();
+      for (const controller of mediaControllersRef.current) controller.abort();
+      mediaControllersRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => installReplyDraftGuard(() => replyDraftRef.current), []);
+
+  useEffect(() => {
+    setReplyHistoryExpanded(false);
+  }, [reader.id]);
 
   useEffect(() => {
     if (!shareParams.cameFromQuery || !letterId || !shareToken) return;
@@ -509,22 +534,29 @@ function App() {
       setMediaAttempts((current) => ({ ...current, [sourceId]: (current[sourceId] || 0) + 1 }));
       return;
     }
+    const controller = new AbortController();
+    mediaControllersRef.current.add(controller);
     setMediaRefreshing((current) => ({ ...current, [sourceId]: true }));
     try {
-      const refreshedReader = await fetchReaderData(letterId, shareToken);
-      setReader(refreshedReader);
+      const refreshedReader = await fetchReaderData(letterId, shareToken, controller.signal);
+      if (!mountedRef.current || controller.signal.aborted) return;
+      setReader((current) => mergeReaderPreservingReplies(refreshedReader, current));
       setMediaNow(Date.now());
       setMediaErrors({});
       setMediaAttempts((current) => ({ ...current, [sourceId]: (current[sourceId] || 0) + 1 }));
-    } catch {
+    } catch (error) {
+      if (controller.signal.aborted || !mountedRef.current) return;
       setMediaErrors((current) => ({ ...current, [sourceId]: true }));
     } finally {
-      setMediaRefreshing((current) => ({ ...current, [sourceId]: false }));
+      mediaControllersRef.current.delete(controller);
+      if (mountedRef.current) {
+        setMediaRefreshing((current) => ({ ...current, [sourceId]: false }));
+      }
     }
   };
 
   const sendReply = async () => {
-    if (submitting) return;
+    if (submitting || replyControllerRef.current) return;
     if (!reply.trim()) {
       setReplyError("请先写一句回复。");
       replyInputRef.current?.focus();
@@ -532,49 +564,61 @@ function App() {
     }
     setReplyError("");
     setSubmitting(true);
+    setSent(false);
     setSentLocally(false);
-    const replyText = reply.trim();
+    const attempt = acquireReplyAttempt(replyAttemptRef.current, reply);
+    replyAttemptRef.current = attempt;
+    const controller = new AbortController();
+    replyControllerRef.current = controller;
     try {
+      let createdReply: ReplyRecord;
+      let savedLocally = false;
       if (__WARM_LETTER_DEMO_BUILD__ && isDemo) {
         const createdAt = new Date().toISOString();
-        setReader((current) => ({
-          ...current,
-          replies: [
-            ...current.replies,
-            {
-              id: `demo-reply-${createdAt}`,
-              text: replyText,
-              authorName: "家人",
-              authorVerified: false,
-              createdAt,
-            },
-          ],
-        }));
-        setSentLocally(true);
+        createdReply = {
+          id: `demo-reply-${createdAt}`,
+          text: attempt.text,
+          authorName: "家人",
+          authorVerified: false,
+          createdAt,
+        };
+        savedLocally = true;
       } else {
         if (!letterId || !shareToken) throw new Error("读信链接不完整");
-        const response = await fetch(
-          `${API_BASE_URL}/letters/${encodeURIComponent(letterId)}/replies?token=${encodeURIComponent(shareToken)}`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: replyText, authorName: "家人" }),
-            referrerPolicy: "no-referrer",
-          },
-        );
-        if (!response.ok) throw await apiErrorFrom(response, "回复发送失败，请稍后重试");
-
-        try {
-          const refreshedReader = await fetchReaderData(letterId, shareToken);
-          setReader(refreshedReader);
-        } catch {
-          setReplyError("回复已送达，但回信列表暂时无法刷新。重新打开链接即可查看。");
-        }
+        createdReply = await postReply({
+          apiBaseUrl: API_BASE_URL,
+          letterId,
+          shareToken,
+          text: attempt.text,
+          authorName: "家人",
+          requestKey: attempt.requestKey,
+          signal: controller.signal,
+        });
       }
-      setSent(true);
-      setReply("");
+
+      if (!mountedRef.current || controller.signal.aborted) return;
+      setReader((current) => ({
+        ...current,
+        replies: appendReply(current.replies, createdReply),
+      }));
+      setSentLocally(savedLocally);
+      if (replyAttemptRef.current?.requestKey === attempt.requestKey) {
+        replyAttemptRef.current = null;
+      }
+      if (replyDraftRef.current.trim() === attempt.text) {
+        replyDraftRef.current = "";
+        setReply("");
+        setSent(true);
+      }
     } catch (error) {
+      if (controller.signal.aborted || !mountedRef.current) return;
       if (error instanceof ApiRequestError) {
+        if (
+          error.code === "IDEMPOTENCY_KEY_REUSED" &&
+          replyAttemptRef.current?.requestKey === attempt.requestKey
+        ) {
+          replyAttemptRef.current = null;
+        }
         const failure = describeReaderFailure(error);
         setReplyError(
           error.code === "SHARE_TOKEN_REVOKED" || error.code === "SHARE_TOKEN_EXPIRED"
@@ -585,7 +629,8 @@ function App() {
         setReplyError(error instanceof Error ? error.message : "回复发送失败");
       }
     } finally {
-      setSubmitting(false);
+      if (replyControllerRef.current === controller) replyControllerRef.current = null;
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 
@@ -623,10 +668,15 @@ function App() {
         ? "继续系统朗读"
         : "播放系统朗读";
 
+  const selectReaderFontSize = (value: ReaderFontSize) => {
+    setReaderFontSize(value);
+    writeReaderFontSize(value);
+  };
+
   return (
-    <main className="reader-shell">
+    <main className="reader-shell" data-reader-font-size={readerFontSize}>
       <EnvironmentBadge />
-      <a className="skip-link" href="#letter-content">
+      <a className="skip-link" href="#letter-content" onClick={skipToLetterContent}>
         跳到家书正文
       </a>
       <header className="topbar">
@@ -636,6 +686,30 @@ function App() {
         </div>
         <span className="date">{formatDate(reader.publishedAt)}</span>
       </header>
+
+      <div className="reader-settings">
+        <span className="reader-settings-label" id="reader-font-size-label">
+          阅读字号
+        </span>
+        <div
+          className="reader-font-size-control"
+          role="group"
+          aria-labelledby="reader-font-size-label"
+        >
+          {readerFontSizeOptions.map((option) => (
+            <button
+              className="reader-font-size-button"
+              data-testid={`reader-font-size-${option.value}`}
+              type="button"
+              key={option.value}
+              aria-pressed={readerFontSize === option.value}
+              onClick={() => selectReaderFontSize(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <article id="letter-content" className="letter" aria-labelledby="letter-title" tabIndex={-1}>
         <div className="letter-heading">
@@ -684,48 +758,57 @@ function App() {
               const attempt = mediaAttempts[source.id] || 0;
               const refreshing = mediaRefreshing[source.id];
               return (
-                <figure className="memory-photo" key={source.id} data-testid="source-image">
-                  {expired ? (
-                    <div className="media-fallback" role="status">
-                      <AlertCircle aria-hidden="true" size={23} />
-                      <span>图片访问已到期</span>
-                      <button
-                        type="button"
-                        disabled={refreshing}
-                        onClick={() => void retryMedia(source.id)}
-                      >
-                        <RefreshCw aria-hidden="true" size={15} />
-                        {refreshing ? "刷新中…" : "重新获取"}
-                      </button>
-                    </div>
-                  ) : failed ? (
-                    <div className="media-fallback" role="status" aria-live="polite">
-                      <ImageIcon aria-hidden="true" size={23} />
-                      <span>图片暂时无法加载</span>
-                      <button
-                        type="button"
-                        disabled={refreshing}
-                        onClick={() => void retryMedia(source.id)}
-                      >
-                        <RefreshCw aria-hidden="true" size={15} />
-                        {refreshing ? "刷新中…" : "重新获取"}
-                      </button>
-                    </div>
-                  ) : (
-                    <img
-                      key={attempt}
-                      src={source.mediaUrl!}
-                      alt={source.name}
-                      width={640}
-                      height={480}
-                      loading={index === 0 ? "eager" : "lazy"}
-                      fetchPriority={index === 0 ? "high" : "auto"}
-                      referrerPolicy="no-referrer"
-                      onLoad={() => markMediaLoaded(source.id)}
-                      onError={() => markMediaFailed(source.id)}
-                    />
-                  )}
-                  <figcaption>{source.name}</figcaption>
+                <figure
+                  className={`memory-photo memory-photo-${source.type}`}
+                  key={source.id}
+                  data-testid="source-image"
+                >
+                  <div className="memory-photo-frame">
+                    {expired ? (
+                      <div className="media-fallback" role="status">
+                        <AlertCircle aria-hidden="true" size={23} />
+                        <span>图片访问已到期</span>
+                        <button
+                          type="button"
+                          disabled={refreshing}
+                          onClick={() => void retryMedia(source.id)}
+                        >
+                          <RefreshCw aria-hidden="true" size={15} />
+                          {refreshing ? "刷新中…" : "重新获取"}
+                        </button>
+                      </div>
+                    ) : failed ? (
+                      <div className="media-fallback" role="status" aria-live="polite">
+                        <ImageIcon aria-hidden="true" size={23} />
+                        <span>图片暂时无法加载</span>
+                        <button
+                          type="button"
+                          disabled={refreshing}
+                          onClick={() => void retryMedia(source.id)}
+                        >
+                          <RefreshCw aria-hidden="true" size={15} />
+                          {refreshing ? "刷新中…" : "重新获取"}
+                        </button>
+                      </div>
+                    ) : (
+                      <img
+                        key={attempt}
+                        src={source.mediaUrl!}
+                        alt={source.name}
+                        width={640}
+                        height={480}
+                        loading={index === 0 ? "eager" : "lazy"}
+                        fetchPriority={index === 0 ? "high" : "auto"}
+                        referrerPolicy="no-referrer"
+                        onLoad={() => markMediaLoaded(source.id)}
+                        onError={() => markMediaFailed(source.id)}
+                      />
+                    )}
+                  </div>
+                  <figcaption>
+                    <span className="memory-source-type">{sourceMeta[source.type].label}</span>
+                    <span className="memory-source-name">{source.name}</span>
+                  </figcaption>
                 </figure>
               );
             })}
@@ -871,24 +954,93 @@ function App() {
         </div>
 
         {reader.replies.length > 0 ? (
-          <section className="reply-history" aria-label="家人的回复">
-            {reader.replies.map((item) => (
-              <article className="reply-item" key={item.id}>
-                <div>
-                  <span className="reply-author">
-                    <strong>{item.authorName}</strong>
-                    {!item.authorVerified ? <small>未验证身份</small> : null}
-                  </span>
-                  <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
-                </div>
-                <p>{item.text}</p>
-              </article>
-            ))}
+          <section className="reply-history" aria-labelledby="reply-history-title">
+            <div className="reply-history-heading">
+              <h3 id="reply-history-title">家人的回复</h3>
+              <span>{reader.replies.length} 条</span>
+            </div>
+            {hiddenReplyCount > 0 ? (
+              <button
+                className="reply-history-toggle"
+                type="button"
+                onClick={() => setReplyHistoryExpanded((value) => !value)}
+                aria-expanded={replyHistoryExpanded}
+                aria-controls="reply-list"
+              >
+                <span>
+                  {replyHistoryExpanded
+                    ? "收起较早回复"
+                    : `查看较早的 ${hiddenReplyCount} 条回复`}
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={replyHistoryExpanded ? "chevron-open" : ""}
+                  size={18}
+                />
+              </button>
+            ) : null}
+            <ol className="reply-list" id="reply-list">
+              {visibleReplies.map((item) => (
+                <li className="reply-item" key={item.id}>
+                  <div>
+                    <span className="reply-author">
+                      <strong>{item.authorName}</strong>
+                      {!item.authorVerified ? <small>未验证身份</small> : null}
+                    </span>
+                    <time dateTime={item.createdAt}>{formatDateTime(item.createdAt)}</time>
+                  </div>
+                  <p>{item.text}</p>
+                </li>
+              ))}
+            </ol>
           </section>
         ) : null}
 
+        <div className="reply-composer">
+          <textarea
+            ref={replyInputRef}
+            data-testid="reply-input"
+            value={reply}
+            onChange={(event) => {
+              const nextDraft = event.target.value;
+              replyDraftRef.current = nextDraft;
+              replyAttemptRef.current = retainReplyAttemptForDraft(
+                replyAttemptRef.current,
+                nextDraft,
+              );
+              setReply(nextDraft);
+              setSent(false);
+              setSentLocally(false);
+              if (replyError) setReplyError("");
+            }}
+            name="reply"
+            autoComplete="off"
+            placeholder="例如：收到信了，周末给你打电话…"
+            maxLength={240}
+            aria-label="回复内容"
+            aria-invalid={Boolean(replyError)}
+            aria-describedby={replyError ? "reply-error" : undefined}
+            disabled={submitting}
+          />
+          {replyError ? (
+            <p id="reply-error" className="reply-error" role="alert" aria-live="polite">
+              {replyError}
+            </p>
+          ) : null}
+          <button
+            className="send-button"
+            data-testid="reply-submit"
+            type="button"
+            onClick={sendReply}
+            disabled={submitting}
+          >
+            <Send aria-hidden="true" size={18} />
+            {submitting ? "发送中…" : "发送回复"}
+          </button>
+        </div>
+
         {sent ? (
-          <div className="sent-state" role="status">
+          <div className="sent-state" data-testid="reply-success" role="status" aria-live="polite">
             <Check aria-hidden="true" size={22} />
             <div>
               <strong>
@@ -896,47 +1048,13 @@ function App() {
                   ? "演示回复已保存在本页"
                   : "回复已经送达"}
               </strong>
+              <p>输入框已清空，可以继续写下一条回复。</p>
               {__WARM_LETTER_DEMO_BUILD__ && sentLocally ? (
                 <p>这条回复没有发送给任何人，刷新页面后会消失。</p>
               ) : null}
-              {replyError ? <p>{replyError}</p> : null}
             </div>
           </div>
-        ) : (
-          <div className="reply-composer">
-            <textarea
-              ref={replyInputRef}
-              data-testid="reply-input"
-              value={reply}
-              onChange={(event) => {
-                setReply(event.target.value);
-                if (replyError) setReplyError("");
-              }}
-              name="reply"
-              autoComplete="off"
-              placeholder="例如：收到信了，周末给你打电话…"
-              maxLength={240}
-              aria-label="回复内容"
-              aria-invalid={Boolean(replyError)}
-              aria-describedby={replyError ? "reply-error" : undefined}
-            />
-            {replyError ? (
-              <p id="reply-error" className="reply-error" role="alert" aria-live="polite">
-                {replyError}
-              </p>
-            ) : null}
-            <button
-              className="send-button"
-              data-testid="reply-submit"
-              type="button"
-              onClick={sendReply}
-              disabled={submitting}
-            >
-              <Send aria-hidden="true" size={18} />
-              {submitting ? "发送中…" : "发送回复"}
-            </button>
-          </div>
-        )}
+        ) : null}
       </section>
 
       <footer>AI 辅助整理 · 由本人确认后寄出 · 素材可追溯</footer>
