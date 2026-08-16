@@ -167,6 +167,90 @@
   text-align: justify;
 }
 
+.paragraph-source {
+  margin-top: 12rpx;
+  border-top: 2rpx solid #e3dfd6;
+}
+
+.paragraph-source-toggle,
+.paragraph-source-empty {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14rpx;
+  width: 100%;
+  min-height: 88rpx;
+  padding: 12rpx 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.paragraph-source-empty {
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 68rpx;
+}
+
+.paragraph-source-kicker {
+  color: #245a4b;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.paragraph-source-summary {
+  min-width: 0;
+  color: #606863;
+  font-size: 24rpx;
+  overflow-wrap: anywhere;
+}
+
+.paragraph-source-action {
+  width: 180rpx;
+  color: #245a4b;
+  font-size: 23rpx;
+  font-weight: 650;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.paragraph-source-list {
+  padding: 0 0 12rpx 26rpx;
+  border-left: 4rpx solid #b8cec3;
+}
+
+.paragraph-source-row {
+  display: grid;
+  grid-template-columns: 160rpx minmax(0, 1fr);
+  gap: 14rpx;
+  padding: 12rpx 0;
+  border-bottom: 2rpx solid #e3dfd6;
+}
+
+.paragraph-source-row:last-child {
+  border-bottom: 0;
+}
+
+.paragraph-source-row.is-unavailable {
+  color: #7d302b;
+}
+
+.paragraph-source-type,
+.paragraph-source-name {
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.paragraph-source-type {
+  font-weight: 650;
+}
+
+.paragraph-source-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .letter-closing {
   margin-top: 36rpx;
   font-family: serif;
@@ -226,30 +310,74 @@
   display: inline-flex;
   flex-direction: column;
   width: 248rpx;
-  height: 242rpx;
+  height: 322rpx;
   margin-right: 18rpx;
-  padding: 0;
-  border-radius: 6rpx;
-  background: transparent;
   text-align: left;
   vertical-align: top;
 }
 
+.image-preview,
 .letter-image,
 .image-placeholder {
   width: 248rpx;
-  height: 184rpx;
+  height: 264rpx;
   border-radius: 6rpx;
+}
+
+.image-preview {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  background: #e7e2d7;
+}
+
+.letter-image {
+  display: block;
+}
+
+.image-loading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(244, 241, 234, 0.92);
+  color: #59635e;
+  font-size: 24rpx;
 }
 
 .image-placeholder {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12rpx;
+  padding: 14rpx;
   border: 2rpx solid #d0ccc2;
   background: #e7e2d7;
   color: #74756f;
-  font-size: 28rpx;
+  text-align: center;
+}
+
+.image-placeholder-text {
+  font-size: 22rpx;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.image-retry-button {
+  width: 190rpx;
+  height: 88rpx;
+  padding: 0 12rpx;
+  border: 2rpx solid #245a4b;
+  border-radius: 6rpx;
+  background: #fff;
+  color: #245a4b;
+  font-size: 24rpx;
+  line-height: 1.2;
 }
 
 .image-name {
@@ -262,6 +390,10 @@
   white-space: nowrap;
 }
 
+.voice-item {
+  border-top: 2rpx solid #d5d1c8;
+}
+
 .voice-row {
   display: grid;
   grid-template-columns: 86rpx minmax(0, 1fr);
@@ -270,7 +402,7 @@
   width: 100%;
   min-height: 104rpx;
   padding: 12rpx 0;
-  border-top: 2rpx solid #d5d1c8;
+  border: 0;
   border-radius: 0;
   background: transparent;
   text-align: left;
@@ -300,6 +432,43 @@
   margin-top: 5rpx;
   color: #5f6863;
   font-size: 22rpx;
+}
+
+.media-action-error,
+.reply-action-error {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16rpx;
+  padding: 18rpx;
+  border: 2rpx solid #a64b42;
+  border-radius: 6rpx;
+  background: #fff6f4;
+  color: #7d302b;
+}
+
+.media-action-error {
+  margin: 0 0 18rpx;
+}
+
+.media-action-error-text,
+.reply-action-error-text {
+  min-width: 0;
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+
+.media-retry-button,
+.reply-retry-button {
+  min-width: 180rpx;
+  height: 88rpx;
+  padding: 0 18rpx;
+  border: 2rpx solid #7d302b;
+  border-radius: 6rpx;
+  background: #fff;
+  color: #7d302b;
+  font-size: 25rpx;
+  line-height: 1.2;
 }
 
 .evidence-note {
@@ -346,9 +515,36 @@
   line-height: 1.6;
 }
 
+.reply-input-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-top: 10rpx;
+  color: #626b66;
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+
+.reply-helper {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.reply-count {
+  flex: none;
+  min-width: 160rpx;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .reply-button {
   width: 100%;
   margin-top: 16rpx;
+}
+
+.reply-action-error {
+  margin-top: 18rpx;
 }
 
 .reply-list {
@@ -376,6 +572,7 @@
 .reply-text {
   font-size: 29rpx;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .reply-date {
@@ -404,6 +601,26 @@
   font-size: 28rpx;
 }
 
+.font-large .image-placeholder-text,
+.font-large .media-action-error-text,
+.font-large .reply-action-error-text,
+.font-large .paragraph-source-kicker,
+.font-large .paragraph-source-action,
+.font-large .reply-helper,
+.font-large .reply-count {
+  font-size: 28rpx;
+}
+
+.font-extra .image-placeholder-text,
+.font-extra .media-action-error-text,
+.font-extra .reply-action-error-text,
+.font-extra .paragraph-source-kicker,
+.font-extra .paragraph-source-action,
+.font-extra .reply-helper,
+.font-extra .reply-count {
+  font-size: 31rpx;
+}
+
 .font-large .band-title,
 .font-large .voice-name,
 .font-large .evidence-note,
@@ -417,5 +634,43 @@
 .font-extra .evidence-note,
 .font-extra .evidence-row,
 .font-extra .reply-text {
+  font-size: 36rpx;
+}
+
+.font-large .paragraph-source-summary,
+.font-large .paragraph-source-type,
+.font-large .paragraph-source-name {
+  font-size: 30rpx;
+}
+
+.font-extra .paragraph-source-summary,
+.font-extra .paragraph-source-type,
+.font-extra .paragraph-source-name {
+  font-size: 34rpx;
+}
+
+.font-large .reply-input {
+  min-height: 174rpx;
+  font-size: 34rpx;
+}
+
+.font-extra .reply-input {
+  min-height: 198rpx;
+  font-size: 38rpx;
+}
+
+.font-large .reader-error-title {
+  font-size: 42rpx;
+}
+
+.font-extra .reader-error-title {
+  font-size: 46rpx;
+}
+
+.font-large .reader-error-detail {
+  font-size: 32rpx;
+}
+
+.font-extra .reader-error-detail {
   font-size: 36rpx;
 }

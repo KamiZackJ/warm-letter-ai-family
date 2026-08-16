@@ -7,6 +7,7 @@ import type {
   Material,
   ReaderLetter,
   ReaderSource,
+  Reply,
 } from "../types/domain";
 import { createId } from "../utils/id";
 import { mockApi } from "./mock-api";
@@ -608,13 +609,22 @@ export const realApi = {
     return { ...mapLetter(response.letter), shareToken: response.shareToken };
   },
 
-  async addReply(id: string, text: string, shareToken?: string): Promise<ReaderLetter> {
+  async addReply(
+    id: string,
+    text: string,
+    shareToken?: string,
+    requestKey?: string,
+  ): Promise<Reply> {
     const token = requireShareToken(id, shareToken);
-    await request<{ reply: ServerReply }>(
+    const response = await request<{ reply: ServerReply }>(
       `/letters/${id}/replies?token=${encodeURIComponent(token)}`,
-      { method: "POST", data: { text, authorName: "家人" } },
+      {
+        method: "POST",
+        headers: requestKey ? { "idempotency-key": requestKey } : undefined,
+        data: { text, authorName: "家人" },
+      },
     );
-    return realApi.getReader(id, token);
+    return response.reply;
   },
 };
 

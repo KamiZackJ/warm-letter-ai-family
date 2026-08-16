@@ -6,6 +6,7 @@ import type {
   LetterSummary,
   Material,
   ReaderLetter,
+  Reply,
 } from "../types/domain";
 import { createId } from "../utils/id";
 import {
@@ -17,6 +18,31 @@ import {
 
 const wait = <T>(value: T, delay = 280): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), delay));
+
+const replyRequestsByKey = new Map<
+  string,
+  { requestFingerprint: string; replyId: string }
+>();
+
+function sameMaterial(left: Material, right: Material): boolean {
+  return (
+    left.id === right.id &&
+    left.type === right.type &&
+    left.name === right.name &&
+    left.localPath === right.localPath &&
+    left.text === right.text &&
+    left.durationSeconds === right.durationSeconds &&
+    left.createdAt === right.createdAt
+  );
+}
+
+function replyFingerprint(text: string): string {
+  return JSON.stringify({ text: text.normalize("NFKC").trim(), authorName: "家人" });
+}
+
+function idempotencyConflict(subject: "素材" | "回复"): Error {
+  return new Error(`该${subject}请求标识已用于其他内容`);
+}
 
 function requireLetter(id: string): Letter {
   const letter = getLetters().find((item) => item.id === id);
@@ -113,7 +139,13 @@ export const mockApi = {
   },
 
   async saveMaterial(material: Material): Promise<Material> {
-    const next = [material, ...getMaterials().filter((item) => item.id !== material.id)];
+    const materials = getMaterials();
+    const existing = materials.find((item) => item.id === material.id);
+    if (existing) {
+      if (!sameMaterial(existing, material)) throw idempotencyConflict("素材");
+      return wait(existing);
+    }
+    const next = [material, ...materials];
     saveMaterials(next);
     return wait(material);
   },
@@ -228,14 +260,35 @@ export const mockApi = {
     );
   },
 
-  async addReply(id: string, text: string, shareToken?: string): Promise<ReaderLetter> {
+  async addReply(
+    id: string,
+    text: string,
+    shareToken?: string,
+    requestKey?: string,
+  ): Promise<Reply> {
     const current = requireLetter(id);
     if (shareToken && shareToken !== current.shareToken) {
       throw new Error("阅读链接已失效，请重新确认家书");
     }
+    const normalizedText = text.normalize("NFKC").trim();
+    const requestFingerprint = replyFingerprint(normalizedText);
+    const lookupKey = requestKey ? JSON.stringify([id, requestKey]) : "";
+    if (lookupKey) {
+      const existingRequest = replyRequestsByKey.get(lookupKey);
+      if (existingRequest) {
+        if (existingRequest.requestFingerprint !== requestFingerprint) {
+          throw idempotencyConflict("回复");
+        }
+        const existingReply = current.replies.find(
+          (reply) => reply.id === existingRequest.replyId,
+        );
+        if (existingReply) return wait(existingReply);
+        replyRequestsByKey.delete(lookupKey);
+      }
+    }
     const reply = {
       id: createId("reply"),
-      text,
+      text: normalizedText,
       authorName: "家人",
       authorVerified: false,
       createdAt: new Date().toISOString(),
@@ -245,6 +298,12 @@ export const mockApi = {
       replies: [...current.replies, reply],
       updatedAt: reply.createdAt,
     });
-    return mockApi.getReader(id, shareToken);
+    if (lookupKey) {
+      replyRequestsByKey.set(lookupKey, {
+        requestFingerprint,
+        replyId: reply.id,
+      });
+    }
+    return wait(reply);
   },
 };

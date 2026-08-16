@@ -32,7 +32,26 @@
       <text class="letter-salutation">{{letter.draft.salutation}}</text>
 
       <view class="letter-body">
-        <text wx:for="{{letter.draft.paragraphs}}" wx:key="id" class="letter-paragraph">{{item.text}}</text>
+        <view wx:for="{{paragraphs}}" wx:key="id" wx:for-item="paragraph" class="letter-paragraph-block">
+          <text class="letter-paragraph">{{paragraph.text}}</text>
+          <view class="paragraph-source">
+            <button wx:if="{{paragraph.sourceCount > 0}}" class="paragraph-source-toggle" aria-label="{{paragraph.sourcesExpanded ? '收起本段来源：' + paragraph.sourceSummary : '展开本段 ' + paragraph.sourceCount + ' 条来源：' + paragraph.sourceSummary}}" aria-expanded="{{paragraph.sourcesExpanded}}" aria-controls="paragraph-sources-{{paragraph.id}}" data-id="{{paragraph.id}}" bindtap="toggleParagraphSources">
+              <text class="paragraph-source-kicker">内容来源</text>
+              <text class="paragraph-source-summary">{{paragraph.sourceSummary}}</text>
+              <text class="paragraph-source-action">{{paragraph.sourcesExpanded ? '收起' : '展开 ' + paragraph.sourceCount + ' 条'}}</text>
+            </button>
+            <view wx:else class="paragraph-source-empty">
+              <text class="paragraph-source-kicker">内容来源</text>
+              <text class="paragraph-source-summary">{{paragraph.sourceSummary}}</text>
+            </view>
+            <view wx:if="{{paragraph.sourcesExpanded}}" id="paragraph-sources-{{paragraph.id}}" class="paragraph-source-list">
+              <view wx:for="{{paragraph.sources}}" wx:key="id" wx:for-item="source" class="paragraph-source-row {{source.available ? '' : 'is-unavailable'}}">
+                <text class="paragraph-source-type">{{source.typeLabel}}</text>
+                <text class="paragraph-source-name">{{source.name}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
       </view>
 
       <text class="letter-closing">{{letter.draft.closing}}</text>
@@ -42,23 +61,35 @@
     <view wx:if="{{imageMaterials.length > 0}}" class="media-band">
       <text class="band-title">信里的照片</text>
       <scroll-view class="image-strip" scroll-x enable-flex>
-        <button wx:for="{{imageMaterials}}" wx:key="id" class="image-item" aria-label="查看照片：{{item.name}}" data-id="{{item.id}}" data-path="{{item.mediaUrl}}" bindtap="previewImage">
-          <image wx:if="{{item.mediaUrl}}" class="letter-image" src="{{item.mediaUrl}}" mode="aspectFill" />
-          <view wx:else class="image-placeholder">照片</view>
+        <view wx:for="{{imageMaterials}}" wx:key="id" class="image-item">
+          <button wx:if="{{item.imageState !== 'error' && item.mediaUrl}}" class="image-preview" aria-label="查看照片：{{item.name}}" aria-disabled="{{item.imageState !== 'ready'}}" disabled="{{item.imageState !== 'ready'}}" data-id="{{item.id}}" bindtap="previewImage">
+            <image class="letter-image" src="{{item.mediaUrl}}" mode="aspectFill" data-id="{{item.id}}" data-url="{{item.mediaUrl}}" data-attempt="{{item.imageAttempt}}" bindload="handleImageLoad" binderror="handleImageError" />
+            <view wx:if="{{item.imageState === 'loading'}}" class="image-loading" aria-live="polite">图片加载中…</view>
+          </button>
+          <view wx:else class="image-placeholder" aria-role="alert" aria-live="assertive">
+            <text class="image-placeholder-text">{{item.imageError || '照片暂时无法显示'}}</text>
+            <button class="image-retry-button" aria-label="重新获取照片：{{item.name}}" loading="{{item.imageRetrying}}" disabled="{{item.imageRetrying || refreshingMedia}}" data-id="{{item.id}}" bindtap="retryImage">{{item.imageRetrying ? '正在获取…' : '重新获取'}}</button>
+          </view>
           <text class="image-name">{{item.name}}</text>
-        </button>
+        </view>
       </scroll-view>
     </view>
 
     <view wx:if="{{voiceMaterials.length > 0}}" class="media-band">
       <text class="band-title">听听声音</text>
-      <button wx:for="{{voiceMaterials}}" wx:key="id" class="voice-row" aria-label="{{playingId === item.id ? '暂停语音：' : '播放语音：'}}{{item.name}}" aria-pressed="{{playingId === item.id}}" data-id="{{item.id}}" data-path="{{item.mediaUrl}}" bindtap="playVoice">
-        <text class="voice-control">{{playingId === item.id ? '暂停' : '播放'}}</text>
-        <view class="voice-info">
-          <text class="voice-name">{{item.name}}</text>
-          <text class="voice-duration">{{item.durationSeconds || 0}} 秒</text>
+      <view wx:for="{{voiceMaterials}}" wx:key="id" class="voice-item">
+        <button class="voice-row" aria-label="{{playingId === item.id ? '暂停语音：' : '播放语音：'}}{{item.name}}" aria-pressed="{{playingId === item.id}}" disabled="{{retryingVoiceId || refreshingMedia}}" data-id="{{item.id}}" bindtap="playVoice">
+          <text class="voice-control">{{playingId === item.id ? '暂停' : '播放'}}</text>
+          <view class="voice-info">
+            <text class="voice-name">{{item.name}}</text>
+            <text class="voice-duration">{{item.durationSeconds || 0}} 秒</text>
+          </view>
+        </button>
+        <view wx:if="{{audioErrorId === item.id}}" class="media-action-error" aria-role="alert" aria-live="assertive">
+          <text class="media-action-error-text">{{audioError}}</text>
+          <button class="media-retry-button" loading="{{retryingVoiceId === item.id}}" disabled="{{retryingVoiceId || refreshingMedia}}" data-id="{{item.id}}" bindtap="retryVoice">重新播放</button>
         </view>
-      </button>
+      </view>
     </view>
 
     <view class="evidence-band">
@@ -74,8 +105,17 @@
 
     <view class="reply-band">
       <text class="band-title">回一句话</text>
-      <textarea class="reply-input" aria-label="回复内容" maxlength="240" placeholder="例如：看到了，放心吧。你也照顾好自己。" value="{{replyText}}" bindinput="updateReply" />
-      <button class="primary-button reply-button" loading="{{sendingReply}}" disabled="{{sendingReply}}" bindtap="sendReply">送出回复</button>
+      <textarea class="reply-input" aria-label="回复内容" maxlength="{{replyLimit}}" disabled="{{sendingReply}}" placeholder="例如：看到了，放心吧。你也照顾好自己…" value="{{replyText}}" bindinput="updateReply" />
+      <view class="reply-input-meta">
+        <text class="reply-helper">回复会显示在这封家书下方。</text>
+        <text class="reply-count" aria-label="已输入 {{replyCount}} 字，共可输入 {{replyLimit}} 字">{{replyCount}} / {{replyLimit}}</text>
+      </view>
+      <button class="primary-button reply-button" loading="{{sendingReply}}" disabled="{{sendingReply}}" bindtap="sendReply">{{sendingReply ? '正在发送…' : '送出回复'}}</button>
+
+      <view wx:if="{{replyError}}" class="reply-action-error" aria-role="alert" aria-live="assertive">
+        <text class="reply-action-error-text">{{replyError}}</text>
+        <button class="reply-retry-button" loading="{{sendingReply}}" disabled="{{sendingReply}}" bindtap="retryReply">重新发送</button>
+      </view>
 
       <view wx:if="{{replies.length > 0}}" class="reply-list">
         <view wx:for="{{replies}}" wx:key="id" class="reply-row">
