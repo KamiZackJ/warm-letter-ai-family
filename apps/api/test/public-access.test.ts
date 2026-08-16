@@ -374,15 +374,15 @@ describe("public share, media, and reply security", () => {
 
   it("revokes old reader, media, and reply capabilities on reissue and explicit revoke", async () => {
     const fixture = await publishFixture(app, "revoke");
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`,
-          payload: { text: "重签前回复" },
-        })
-      ).statusCode,
-    ).toBe(201);
+    const replyHeaders = { "idempotency-key": "reply_before_share_reissue_20260816" };
+    const initialReply = await app.inject({
+      method: "POST",
+      url: `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`,
+      headers: replyHeaders,
+      payload: { text: "重签前回复" },
+    });
+    expect(initialReply.statusCode).toBe(201);
+    const initialReplyId = json<{ reply: { id: string } }>(initialReply).reply.id;
 
     const reissue = await app.inject({
       method: "POST",
@@ -397,7 +397,8 @@ describe("public share, media, and reply security", () => {
       {
         method: "POST",
         url: `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`,
-        payload: { text: "旧凭据不可回复" },
+        headers: replyHeaders,
+        payload: { text: "重签前回复" },
       },
     ];
     for (const request of oldRequests) {
@@ -409,6 +410,14 @@ describe("public share, media, and reply security", () => {
     const replacementReader = await app.inject({ method: "GET", url: replacement.readerUrl });
     expect(replacementReader.statusCode).toBe(200);
     expect(json<{ reader: { replies: unknown[] } }>(replacementReader).reader.replies).toHaveLength(1);
+    const replacementReplay = await app.inject({
+      method: "POST",
+      url: `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(replacement.shareToken)}`,
+      headers: replyHeaders,
+      payload: { text: "重签前回复" },
+    });
+    expect(replacementReplay.statusCode).toBe(201);
+    expect(json<{ reply: { id: string } }>(replacementReplay).reply.id).toBe(initialReplyId);
     const replacementMediaUrl = json<{
       reader: { sources: Array<{ mediaUrl?: string }> };
     }>(replacementReader).reader.sources.find((source) => source.mediaUrl)?.mediaUrl;
@@ -452,6 +461,282 @@ describe("public share, media, and reply security", () => {
       }),
     ).letter;
     expect(ownerAfterRevoke.confirmedDraft).toEqual(ownerBeforeRevoke.confirmedDraft);
+  });
+
+  it("replays a reply idempotently and rejects reusing the key for different content", async () => {
+    const fixture = await publishFixture(app, "reply-idempotency");
+    const url = `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`;
+    const headers = { "idempotency-key": "reply_retry_after_lost_response_20260816" };
+
+    const first = await app.inject({
+      method: "POST",
+      url,
+      headers,
+      payload: { text: "第一条回复", authorName: "家人" },
+    });
+    const replay = await app.inject({
+      method: "POST",
+      url,
+      headers,
+      payload: { text: "第一条回复", authorName: "家人" },
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(201);
+    expect(json<{ reply: { id: string } }>(replay).reply.id).toBe(
+      json<{ reply: { id: string } }>(first).reply.id,
+    );
+
+    const reader = await app.inject({ method: "GET", url: fixture.readerUrl });
+    expect(json<{ reader: { replies: unknown[] } }>(reader).reader.replies).toHaveLength(1);
+
+    const conflict = await app.inject({
+      method: "POST",
+      url,
+      headers,
+      payload: { text: "同一个键不能改成另一条回复", authorName: "家人" },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(errorCode(conflict)).toBe("IDEMPOTENCY_KEY_REUSED");
+  });
+
+  it("replays a committed reply before safety validation and rejects changed content", async () => {
+    let safetyUnavailable = false;
+    let validationCount = 0;
+    const policy: ReplySafetyPolicy = {
+      validate(text) {
+        validationCount += 1;
+        if (safetyUnavailable) throw new Error("safety unavailable");
+        return text.normalize("NFKC").trim();
+      },
+    };
+    await rebuild({
+      replySafetyPolicy: policy,
+      publicRateLimits: { reply: { perIp: 50, perCredential: 50 } },
+    });
+    const fixture = await publishFixture(app, "reply-replay-before-safety");
+    const url = `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`;
+    const headers = { "idempotency-key": "reply_replay_before_safety_20260816" };
+    const payload = { text: "收到这封信了", authorName: "家人" };
+
+    const first = await app.inject({ method: "POST", url, headers, payload });
+    expect(first.statusCode).toBe(201);
+    expect(validationCount).toBe(2);
+    safetyUnavailable = true;
+
+    const replay = await app.inject({ method: "POST", url, headers, payload });
+    expect(replay.statusCode).toBe(201);
+    expect(json<{ reply: { id: string } }>(replay).reply.id).toBe(
+      json<{ reply: { id: string } }>(first).reply.id,
+    );
+    expect(validationCount).toBe(2);
+
+    const conflict = await app.inject({
+      method: "POST",
+      url,
+      headers,
+      payload: { ...payload, text: "同一个键改成另一条回复" },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(errorCode(conflict)).toBe("IDEMPOTENCY_KEY_REUSED");
+    expect(validationCount).toBe(2);
+
+    const unavailable = await app.inject({
+      method: "POST",
+      url,
+      headers: { "idempotency-key": "reply_new_request_safety_down_20260816" },
+      payload: { text: "一条新的回复" },
+    });
+    expect(unavailable.statusCode).toBe(503);
+    expect(errorCode(unavailable)).toBe("CONTENT_SAFETY_UNAVAILABLE");
+    expect(validationCount).toBe(3);
+  });
+
+  it("does not store a reply when its share is revoked during safety validation", async () => {
+    let validationStarted: (() => void) | undefined;
+    let releaseValidation: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      validationStarted = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      releaseValidation = resolve;
+    });
+    let blocked = false;
+    const policy: ReplySafetyPolicy = {
+      async validate(text) {
+        if (!blocked) {
+          blocked = true;
+          validationStarted?.();
+          await gate;
+        }
+        return text.normalize("NFKC").trim();
+      },
+    };
+    await rebuild({
+      replySafetyPolicy: policy,
+      replySafetyTimeoutMs: 5_000,
+      publicRateLimits: { reply: { perIp: 50, perCredential: 50 } },
+    });
+    const fixture = await publishFixture(app, "reply-revoked-during-safety");
+    const pendingReply = app.inject({
+      method: "POST",
+      url: `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`,
+      headers: { "idempotency-key": "reply_revoked_during_safety_20260816" },
+      payload: { text: "审核期间撤销后不能保存" },
+    });
+
+    await started;
+    const revoked = await app.inject({
+      method: "DELETE",
+      url: `/v1/letters/${fixture.letterId}/share`,
+      headers: auth(fixture.ownerToken),
+    });
+    expect(revoked.statusCode).toBe(204);
+    releaseValidation?.();
+
+    const response = await pendingReply;
+    expect(response.statusCode).toBe(410);
+    expect(errorCode(response)).toBe("SHARE_TOKEN_REVOKED");
+    const stored = await app.inject({
+      method: "GET",
+      url: `/v1/letters/${fixture.letterId}/replies`,
+      headers: auth(fixture.ownerToken),
+    });
+    expect(json<{ replies: unknown[] }>(stored).replies).toHaveLength(0);
+  });
+
+  it("replays a committed reply after its write rate limit is exhausted", async () => {
+    await rebuild({
+      publicRateLimits: {
+        windowMs: 60_000,
+        reply: { perIp: 100, perCredential: 1 },
+      },
+    });
+    const fixture = await publishFixture(app, "reply-replay-after-rate-limit");
+    const url = `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`;
+    const headers = { "idempotency-key": "reply_replay_after_rate_limit_20260816" };
+    const payload = { text: "第一次已经保存" };
+
+    const first = await app.inject({ method: "POST", url, headers, payload });
+    const replay = await app.inject({ method: "POST", url, headers, payload });
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(201);
+    expect(json<{ reply: { id: string } }>(replay).reply.id).toBe(
+      json<{ reply: { id: string } }>(first).reply.id,
+    );
+
+    const conflict = await app.inject({
+      method: "POST",
+      url,
+      headers,
+      payload: { text: "同键改内容仍应稳定冲突" },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(errorCode(conflict)).toBe("IDEMPOTENCY_KEY_REUSED");
+
+    const limited = await app.inject({
+      method: "POST",
+      url,
+      headers: { "idempotency-key": "reply_new_key_after_limit_20260816" },
+      payload: { text: "新的回复仍受限流" },
+    });
+    expect(limited.statusCode).toBe(429);
+    expect(errorCode(limited)).toBe("RATE_LIMITED");
+    expect(limited.headers["retry-after"]).toBe("60");
+  });
+
+  it("collapses concurrent retries with the same key to one reply", async () => {
+    const requestCount = 20;
+    let firstPassCount = 0;
+    let releaseFirstPass: (() => void) | undefined;
+    const firstPassGate = new Promise<void>((resolve) => {
+      releaseFirstPass = resolve;
+    });
+    const synchronizedPolicy: ReplySafetyPolicy = {
+      async validate(text) {
+        firstPassCount += 1;
+        if (firstPassCount === requestCount) releaseFirstPass?.();
+        await firstPassGate;
+        return text.normalize("NFKC").trim();
+      },
+    };
+    await rebuild({
+      replySafetyPolicy: synchronizedPolicy,
+      replySafetyTimeoutMs: 5_000,
+      publicRateLimits: { reply: { perIp: 100, perCredential: 100 } },
+    });
+    const fixture = await publishFixture(app, "concurrent-reply-idempotency");
+    const url = `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`;
+    const headers = { "idempotency-key": "reply_concurrent_same_content_20260816" };
+
+    const responses = await Promise.all(
+      Array.from({ length: requestCount }, () =>
+        app.inject({
+          method: "POST",
+          url,
+          headers,
+          payload: { text: "并发重试也只能保存一次", authorName: "家人" },
+        }),
+      ),
+    );
+    expect(responses.every((response) => response.statusCode === 201)).toBe(true);
+    expect(
+      new Set(responses.map((response) => json<{ reply: { id: string } }>(response).reply.id)).size,
+    ).toBe(1);
+    const stored = await app.inject({
+      method: "GET",
+      url: `/v1/letters/${fixture.letterId}/replies`,
+      headers: auth(fixture.ownerToken),
+    });
+    expect(json<{ replies: unknown[] }>(stored).replies).toHaveLength(1);
+  });
+
+  it("allows only one winner when concurrent requests reuse a key for different content", async () => {
+    const requestCount = 12;
+    let firstPassCount = 0;
+    let releaseFirstPass: (() => void) | undefined;
+    const firstPassGate = new Promise<void>((resolve) => {
+      releaseFirstPass = resolve;
+    });
+    const synchronizedPolicy: ReplySafetyPolicy = {
+      async validate(text) {
+        firstPassCount += 1;
+        if (firstPassCount === requestCount) releaseFirstPass?.();
+        await firstPassGate;
+        return text.normalize("NFKC").trim();
+      },
+    };
+    await rebuild({
+      replySafetyPolicy: synchronizedPolicy,
+      replySafetyTimeoutMs: 5_000,
+      publicRateLimits: { reply: { perIp: 100, perCredential: 100 } },
+    });
+    const fixture = await publishFixture(app, "concurrent-reply-key-conflict");
+    const url = `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`;
+    const headers = { "idempotency-key": "reply_concurrent_different_content_20260816" };
+
+    const responses = await Promise.all(
+      Array.from({ length: requestCount }, (_, index) =>
+        app.inject({
+          method: "POST",
+          url,
+          headers,
+          payload: { text: `并发冲突内容 ${index + 1}`, authorName: "家人" },
+        }),
+      ),
+    );
+    expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(1);
+    const conflicts = responses.filter((response) => response.statusCode === 409);
+    expect(conflicts).toHaveLength(requestCount - 1);
+    expect(conflicts.every((response) => errorCode(response) === "IDEMPOTENCY_KEY_REUSED")).toBe(
+      true,
+    );
+    const stored = await app.inject({
+      method: "GET",
+      url: `/v1/letters/${fixture.letterId}/replies`,
+      headers: auth(fixture.ownerToken),
+    });
+    expect(json<{ replies: unknown[] }>(stored).replies).toHaveLength(1);
   });
 
   it("rate limits reader, media, reply, and invalid-token guessing with Retry-After", async () => {
@@ -665,19 +950,33 @@ describe("public share, media, and reply security", () => {
     });
     const fixture = await publishFixture(app, "reply-cap");
     const replyUrl = `/v1/letters/${fixture.letterId}/replies?token=${encodeURIComponent(fixture.shareToken)}`;
+    const firstReplyHeaders = { "idempotency-key": "reply_replay_after_cap_reached_20260816" };
+    let firstReplyId: string | undefined;
     for (let index = 0; index < 100; index += 1) {
       const response = await app.inject({
         method: "POST",
         url: replyUrl,
+        headers: index === 0 ? firstReplyHeaders : undefined,
         payload: { text: `第 ${index + 1} 条回复`, authorName: "妈妈" },
       });
       expect(response.statusCode).toBe(201);
       expect(json<{ reply: { authorVerified: boolean } }>(response).reply.authorVerified).toBe(false);
+      if (index === 0) firstReplyId = json<{ reply: { id: string } }>(response).reply.id;
     }
+
+    const replayAtCapacity = await app.inject({
+      method: "POST",
+      url: replyUrl,
+      headers: firstReplyHeaders,
+      payload: { text: "第 1 条回复", authorName: "妈妈" },
+    });
+    expect(replayAtCapacity.statusCode).toBe(201);
+    expect(json<{ reply: { id: string } }>(replayAtCapacity).reply.id).toBe(firstReplyId);
 
     const overLimit = await app.inject({
       method: "POST",
       url: replyUrl,
+      headers: { "idempotency-key": "reply_new_key_after_cap_reached_20260816" },
       payload: { text: "超过总量的回复" },
     });
     expect(overLimit.statusCode).toBe(409);

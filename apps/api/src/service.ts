@@ -25,6 +25,13 @@ const defaultSettings: LetterSettings = { tone: "warm", length: "medium" };
 const maxRepliesPerLetter = 100;
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/u;
 
+function replyRequestFingerprint(text: string, authorName?: string): string {
+  return JSON.stringify({
+    text: text.normalize("NFKC").trim(),
+    authorName: authorName?.normalize("NFKC").trim() || "家人",
+  });
+}
+
 function decodeCanonicalBase64Url(value: string): Buffer | undefined {
   if (!value || !base64UrlPattern.test(value)) return undefined;
   try {
@@ -52,6 +59,11 @@ export interface RegisterMaterialInput {
   objectKey?: string;
   textContent?: string;
   uploading?: boolean;
+}
+
+export interface RegisterMaterialResult {
+  material: Material;
+  replayed: boolean;
 }
 
 export interface CreateLetterInput {
@@ -140,7 +152,11 @@ export class WarmLetterService {
     return user;
   }
 
-  registerMaterial(userId: string, input: RegisterMaterialInput): Material {
+  registerMaterial(
+    userId: string,
+    input: RegisterMaterialInput,
+    idempotencyKey?: string,
+  ): RegisterMaterialResult {
     if (!MATERIAL_TYPES.includes(input.type)) {
       throw new ApiError(400, "INVALID_MATERIAL_TYPE", "不支持的素材类型");
     }
@@ -154,21 +170,41 @@ export class WarmLetterService {
       throw new ApiError(400, "INVALID_MATERIAL", "媒体素材必须包含 objectKey");
     }
 
-    return this.repository.saveMaterial({
-      id: randomUUID(),
-      userId,
+    const normalizedName = input.name.trim();
+    const normalizedTextContent = input.textContent?.trim();
+    const requestFingerprint = JSON.stringify({
       type: input.type,
-      name: input.name.trim(),
+      name: normalizedName,
       contentType: input.contentType,
-      objectKey: input.objectKey,
-      textContent: input.textContent?.trim(),
-      status: input.uploading ? "UPLOADING" : "READY",
-      createdAt: new Date().toISOString(),
+      textContent: normalizedTextContent,
+      uploading: input.uploading === true,
     });
+    const result = this.repository.saveMaterialIdempotently(
+      {
+        id: randomUUID(),
+        userId,
+        type: input.type,
+        name: normalizedName,
+        contentType: input.contentType,
+        objectKey: input.objectKey,
+        textContent: normalizedTextContent,
+        status: input.uploading ? "UPLOADING" : "READY",
+        createdAt: new Date().toISOString(),
+      },
+      idempotencyKey,
+      requestFingerprint,
+    );
+    if (result.replayed && result.requestFingerprint !== requestFingerprint) {
+      throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该素材请求标识已用于其他内容");
+    }
+    return { material: result.material, replayed: result.replayed };
   }
 
   completeMaterial(userId: string, materialId: string, input: { textContent?: string }): Material {
     const material = this.requireOwnedMaterial(userId, materialId);
+    if (material.status === "READY") {
+      return material;
+    }
     if (material.status !== "UPLOADING") {
       throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材不处于上传状态");
     }
@@ -424,10 +460,18 @@ export class WarmLetterService {
     shareToken: string | undefined,
     text: string,
     authorName?: string,
+    idempotencyKey?: string,
   ): Promise<Reply> {
     const { letter } = this.resolveShareAccess(letterId, shareToken);
-    if (this.repository.listReplies(letter.id).length >= maxRepliesPerLetter) {
-      throw new ApiError(409, "REPLY_LIMIT_REACHED", "这封家书的回复数量已达到上限");
+    const requestFingerprint = replyRequestFingerprint(text, authorName);
+    if (idempotencyKey) {
+      const replay = this.repository.findReplyByIdempotencyKey(letter.id, idempotencyKey);
+      if (replay) {
+        if (replay.requestFingerprint !== requestFingerprint) {
+          throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该回复请求标识已用于其他内容");
+        }
+        return replay.reply;
+      }
     }
     let safeText: string;
     let safeAuthorName: string;
@@ -440,6 +484,7 @@ export class WarmLetterService {
       if (error instanceof ApiError) throw error;
       throw new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "回复安全检查暂时不可用，请稍后重试");
     }
+    this.resolveShareAccess(letter.id, shareToken);
     const reply = {
       id: randomUUID(),
       letterId,
@@ -448,11 +493,38 @@ export class WarmLetterService {
       authorVerified: false,
       createdAt: this.now().toISOString(),
     } satisfies Reply;
-    const savedReply = this.repository.saveReplyIfBelowLimit(reply, maxRepliesPerLetter);
-    if (!savedReply) {
+    const result = this.repository.saveReplyIdempotentlyIfBelowLimit(
+      reply,
+      maxRepliesPerLetter,
+      requestFingerprint,
+      idempotencyKey,
+    );
+    if (!result) {
       throw new ApiError(409, "REPLY_LIMIT_REACHED", "这封家书的回复数量已达到上限");
     }
-    return savedReply;
+    if (
+      result.replayed &&
+      result.requestFingerprint !== requestFingerprint
+    ) {
+      throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该回复请求标识已用于其他内容");
+    }
+    return result.reply;
+  }
+
+  findReplyReplay(
+    letterId: string,
+    shareToken: string | undefined,
+    text: string,
+    authorName: string | undefined,
+    idempotencyKey: string,
+  ): Reply | undefined {
+    const { letter } = this.resolveShareAccess(letterId, shareToken);
+    const replay = this.repository.findReplyByIdempotencyKey(letter.id, idempotencyKey);
+    if (!replay) return undefined;
+    if (replay.requestFingerprint !== replyRequestFingerprint(text, authorName)) {
+      throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该回复请求标识已用于其他内容");
+    }
+    return replay.reply;
   }
 
   listReplies(userId: string, letterId: string): Reply[] {

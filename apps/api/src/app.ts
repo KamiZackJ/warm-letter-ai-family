@@ -74,7 +74,7 @@ function idempotencyKeyFrom(request: FastifyRequest): string | undefined {
     value.length > 120 ||
     !/^[A-Za-z0-9._:-]+$/.test(value)
   ) {
-    throw new ApiError(400, "INVALID_IDEMPOTENCY_KEY", "生成请求标识无效");
+    throw new ApiError(400, "INVALID_IDEMPOTENCY_KEY", "请求标识无效");
   }
   return value;
 }
@@ -296,8 +296,16 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     if (body.type !== "text") {
       throw new ApiError(400, "MEDIA_UPLOAD_REQUIRED", "媒体素材必须通过上传流程提交");
     }
-    const material = service.registerMaterial(user.id, body as unknown as RegisterMaterialInput);
-    return reply.status(201).send({ material });
+    const { material, replayed } = service.registerMaterial(
+      user.id,
+      {
+        type: "text",
+        name: stringValue(body.name, "name")!,
+        textContent: stringValue(body.textContent, "textContent")!,
+      },
+      idempotencyKeyFrom(request),
+    );
+    return reply.status(replayed ? 200 : 201).send({ material });
   });
 
   app.post("/v1/materials/presign", async (request, reply) => {
@@ -310,17 +318,36 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       stringValue(body.contentType, "contentType", false),
     );
     const objectKey = `${user.id}/${crypto.randomUUID()}${policy.extension}`;
-    const material = service.registerMaterial(user.id, {
-      type: body.type as RegisterMaterialInput["type"],
-      name,
-      contentType: policy.contentType,
-      objectKey,
-      uploading: true,
-    });
+    const { material, replayed } = service.registerMaterial(
+      user.id,
+      {
+        type: body.type as RegisterMaterialInput["type"],
+        name,
+        contentType: policy.contentType,
+        objectKey,
+        uploading: true,
+      },
+      idempotencyKeyFrom(request),
+    );
+    if (!material.objectKey) {
+      throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材缺少上传信息");
+    }
     reply.header("cache-control", "no-store");
-    return reply.status(201).send({
+    if (material.status === "READY") {
+      return reply.status(200).send({
+        materialId: material.id,
+        objectKey: material.objectKey,
+        completed: true,
+        material,
+      });
+    }
+    if (material.status !== "UPLOADING") {
+      throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材不处于上传状态");
+    }
+    return reply.status(replayed ? 200 : 201).send({
       materialId: material.id,
-      objectKey,
+      objectKey: material.objectKey,
+      completed: false,
       uploadUrl: `${publicBaseUrl}/v1/materials/${material.id}/content`,
       headers: {
         "content-type": policy.contentType,
@@ -380,6 +407,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const body = record(request.body);
     const materialId = stringValue(body.materialId, "materialId")!;
     const material = requireOwnedMaterial(service, user.id, materialId);
+    if (material.status === "READY") {
+      return { material };
+    }
     if (material.status !== "UPLOADING") {
       throw new ApiError(409, "INVALID_MATERIAL_STATE", "素材不处于上传状态");
     }
@@ -541,11 +571,49 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const shareToken = queryTokenFrom(request, "token");
+      let text: string;
+      let authorName: string | undefined;
+      let idempotencyKey: string | undefined;
+      try {
+        const body = record(request.body);
+        text = stringValue(body.text, "text")!;
+        authorName = stringValue(body.authorName, "authorName", false);
+        idempotencyKey = idempotencyKeyFrom(request);
+      } catch (error) {
+        enforcePublicRateLimit("reply", request, reply, shareToken);
+        throw error;
+      }
+      if (idempotencyKey) {
+        try {
+          const replayedReply = service.findReplyReplay(
+            id,
+            shareToken,
+            text,
+            authorName,
+            idempotencyKey,
+          );
+          if (replayedReply) {
+            return reply
+              .header("cache-control", "no-store")
+              .status(201)
+              .send({ reply: replayedReply });
+          }
+        } catch (error) {
+          if (error instanceof ApiError && error.code === "IDEMPOTENCY_KEY_REUSED") {
+            throw error;
+          }
+          enforcePublicRateLimit("reply", request, reply, shareToken);
+          throw error;
+        }
+      }
       enforcePublicRateLimit("reply", request, reply, shareToken);
-      const body = record(request.body);
-      const text = stringValue(body.text, "text")!;
-      const authorName = stringValue(body.authorName, "authorName", false);
-      const createdReply = await service.createReply(id, shareToken, text, authorName);
+      const createdReply = await service.createReply(
+        id,
+        shareToken,
+        text,
+        authorName,
+        idempotencyKey,
+      );
       return reply
         .header("cache-control", "no-store")
         .status(201)

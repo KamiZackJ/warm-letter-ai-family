@@ -11,10 +11,19 @@ export class MemoryRepository {
   private readonly users = new Map<string, User>();
   private readonly usersByOpenId = new Map<string, string>();
   private readonly materials = new Map<string, Material>();
+  private readonly materialRequestsByIdempotencyKey = new Map<
+    string,
+    { materialId: string; requestFingerprint: string }
+  >();
   private readonly letters = new Map<string, Letter>();
   private readonly jobs = new Map<string, GenerationJob>();
   private readonly replies = new Map<string, Reply>();
+  private readonly replyRequestsByIdempotencyKey = new Map<
+    string,
+    { replyId: string; requestFingerprint: string }
+  >();
   private readonly shareAccess = new Map<string, ShareAccess>();
+  private readonly shareAccessIdsByTokenHash = new Map<string, string>();
 
   findUserByOpenId(openId: string): User | undefined {
     const userId = this.usersByOpenId.get(openId);
@@ -42,6 +51,40 @@ export class MemoryRepository {
   saveMaterial(material: Material): Material {
     this.materials.set(material.id, material);
     return material;
+  }
+
+  saveMaterialIdempotently(
+    material: Material,
+    idempotencyKey: string | undefined,
+    requestFingerprint: string,
+  ): { material: Material; replayed: boolean; requestFingerprint: string } {
+    if (!idempotencyKey) {
+      return {
+        material: this.saveMaterial(material),
+        replayed: false,
+        requestFingerprint,
+      };
+    }
+
+    const lookupKey = JSON.stringify([material.userId, idempotencyKey]);
+    const existingRequest = this.materialRequestsByIdempotencyKey.get(lookupKey);
+    if (existingRequest) {
+      const existingMaterial = this.materials.get(existingRequest.materialId);
+      if (existingMaterial) {
+        return {
+          material: existingMaterial,
+          replayed: true,
+          requestFingerprint: existingRequest.requestFingerprint,
+        };
+      }
+    }
+
+    const saved = this.saveMaterial(material);
+    this.materialRequestsByIdempotencyKey.set(lookupKey, {
+      materialId: saved.id,
+      requestFingerprint,
+    });
+    return { material: saved, replayed: false, requestFingerprint };
   }
 
   getLetter(id: string): Letter | undefined {
@@ -95,8 +138,43 @@ export class MemoryRepository {
     return reply;
   }
 
+  findReplyByIdempotencyKey(
+    letterId: string,
+    idempotencyKey: string,
+  ): { reply: Reply; requestFingerprint: string } | undefined {
+    const lookupKey = JSON.stringify([letterId, idempotencyKey]);
+    const request = this.replyRequestsByIdempotencyKey.get(lookupKey);
+    if (!request) return undefined;
+    const reply = this.replies.get(request.replyId);
+    return reply ? { reply, requestFingerprint: request.requestFingerprint } : undefined;
+  }
+
+  saveReplyIdempotentlyIfBelowLimit(
+    reply: Reply,
+    maximum: number,
+    requestFingerprint: string,
+    idempotencyKey?: string,
+  ): { reply: Reply; replayed: boolean; requestFingerprint: string } | undefined {
+    if (idempotencyKey) {
+      const existing = this.findReplyByIdempotencyKey(reply.letterId, idempotencyKey);
+      if (existing) return { ...existing, replayed: true };
+    }
+
+    const saved = this.saveReplyIfBelowLimit(reply, maximum);
+    if (!saved) return undefined;
+    if (idempotencyKey) {
+      const lookupKey = JSON.stringify([reply.letterId, idempotencyKey]);
+      this.replyRequestsByIdempotencyKey.set(lookupKey, {
+        replyId: saved.id,
+        requestFingerprint,
+      });
+    }
+    return { reply: saved, replayed: false, requestFingerprint };
+  }
+
   saveShareAccess(access: ShareAccess): ShareAccess {
     this.shareAccess.set(access.id, access);
+    this.shareAccessIdsByTokenHash.set(access.tokenHash, access.id);
     return access;
   }
 
@@ -105,7 +183,8 @@ export class MemoryRepository {
   }
 
   findShareAccessByTokenHash(tokenHash: string): ShareAccess | undefined {
-    return [...this.shareAccess.values()].find((access) => access.tokenHash === tokenHash);
+    const id = this.shareAccessIdsByTokenHash.get(tokenHash);
+    return id ? this.shareAccess.get(id) : undefined;
   }
 
   listShareAccess(letterId: string): ShareAccess[] {
