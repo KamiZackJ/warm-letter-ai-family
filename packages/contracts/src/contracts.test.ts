@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ConfirmLetterResponseSchema,
   CreateMaterialUploadRequestSchema,
+  CreateMaterialUploadResponseSchema,
   CreateReplyRequestSchema,
   ErrorResponseSchema,
   GetJobResponseSchema,
@@ -51,6 +52,84 @@ describe("material contracts", () => {
         textContent: "今天一切顺利。",
       }).success,
     ).toBe(true);
+  });
+
+  it("models pending and completed upload retries as distinct response states", () => {
+    expect(
+      CreateMaterialUploadResponseSchema.parse({
+        materialId: id,
+        objectKey: `${otherId}/${id}.png`,
+        completed: false,
+        uploadUrl: `https://uploads.example.test/v1/materials/${id}/content`,
+        headers: { "content-type": "image/png" },
+      }),
+    ).toMatchObject({ completed: false });
+
+    expect(
+      CreateMaterialUploadResponseSchema.parse({
+        materialId: id,
+        objectKey: `${otherId}/${id}.png`,
+        completed: true,
+        material: {
+          id,
+          userId: otherId,
+          type: "photo",
+          name: "family.png",
+          contentType: "image/png",
+          objectKey: `${otherId}/${id}.png`,
+          status: "READY",
+          createdAt: timestamp,
+        },
+      }),
+    ).toMatchObject({ completed: true, material: { status: "READY" } });
+
+    expect(
+      CreateMaterialUploadResponseSchema.safeParse({
+        materialId: id,
+        objectKey: `${otherId}/${id}.png`,
+        completed: true,
+        uploadUrl: `https://uploads.example.test/v1/materials/${id}/content`,
+        headers: {},
+      }).success,
+    ).toBe(false);
+
+    expect(
+      CreateMaterialUploadResponseSchema.safeParse({
+        materialId: id,
+        objectKey: `${otherId}/${id}.png`,
+        completed: true,
+        uploadUrl: `https://uploads.example.test/v1/materials/${id}/content`,
+        headers: {},
+        material: {
+          id,
+          userId: otherId,
+          type: "photo",
+          name: "family.png",
+          contentType: "image/png",
+          objectKey: `${otherId}/${id}.png`,
+          status: "READY",
+          createdAt: timestamp,
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      CreateMaterialUploadResponseSchema.safeParse({
+        materialId: id,
+        objectKey: `${otherId}/${id}.png`,
+        completed: true,
+        material: {
+          id,
+          userId: otherId,
+          type: "photo",
+          name: "family.png",
+          contentType: "image/png",
+          objectKey: `${otherId}/${id}.png`,
+          status: "UPLOADING",
+          createdAt: timestamp,
+        },
+      }).success,
+    ).toBe(false);
   });
 });
 

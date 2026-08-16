@@ -60,14 +60,31 @@ export const CreateMaterialUploadRequestSchema = z
   })
   .strict();
 
-export const CreateMaterialUploadResponseSchema = z
+const PendingMaterialUploadResponseSchema = z
   .object({
     materialId: EntityIdSchema,
     objectKey: z.string().min(1),
+    completed: z.literal(false),
     uploadUrl: z.string().min(1),
     headers: z.record(z.string()),
   })
   .strict();
+
+const ReadyMaterialSchema = MaterialSchema.extend({ status: z.literal("READY") });
+
+const CompletedMaterialUploadResponseSchema = z
+  .object({
+    materialId: EntityIdSchema,
+    objectKey: z.string().min(1),
+    completed: z.literal(true),
+    material: ReadyMaterialSchema,
+  })
+  .strict();
+
+export const CreateMaterialUploadResponseSchema = z.discriminatedUnion("completed", [
+  PendingMaterialUploadResponseSchema,
+  CompletedMaterialUploadResponseSchema,
+]);
 
 export const CompleteMaterialUploadRequestSchema = z
   .object({

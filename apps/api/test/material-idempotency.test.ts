@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { CreateMaterialUploadResponseSchema } from "@warm-letter/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import {
@@ -153,14 +154,9 @@ describe("material idempotency", () => {
       payload,
     });
     expect(first.statusCode).toBe(201);
-    const firstPresign = json<{
-      materialId: string;
-      objectKey: string;
-      completed: boolean;
-      uploadUrl: string;
-      headers: Record<string, string>;
-    }>(first);
+    const firstPresign = CreateMaterialUploadResponseSchema.parse(json<unknown>(first));
     expect(firstPresign.completed).toBe(false);
+    if (firstPresign.completed) throw new Error("Expected a pending upload response");
 
     now = new Date("2026-08-16T08:00:02.000Z");
     const uploadingReplay = await app.inject({
@@ -170,13 +166,10 @@ describe("material idempotency", () => {
       payload,
     });
     expect(uploadingReplay.statusCode).toBe(200);
-    const replayedPresign = json<{
-      materialId: string;
-      objectKey: string;
-      completed: boolean;
-      uploadUrl: string;
-      headers: Record<string, string>;
-    }>(uploadingReplay);
+    const replayedPresign = CreateMaterialUploadResponseSchema.parse(
+      json<unknown>(uploadingReplay),
+    );
+    if (replayedPresign.completed) throw new Error("Expected a pending upload replay");
     expect(replayedPresign).toMatchObject({
       materialId: firstPresign.materialId,
       objectKey: firstPresign.objectKey,
@@ -232,16 +225,11 @@ describe("material idempotency", () => {
       payload,
     });
     expect(replayAfterLostCompleteResponse.statusCode).toBe(200);
-    expect(
-      json<{
-        materialId: string;
-        objectKey: string;
-        completed: boolean;
-        material: { id: string; status: string };
-        uploadUrl?: string;
-        headers?: Record<string, string>;
-      }>(replayAfterLostCompleteResponse),
-    ).toEqual({
+    const completedPresign = CreateMaterialUploadResponseSchema.parse(
+      json<unknown>(replayAfterLostCompleteResponse),
+    );
+    if (!completedPresign.completed) throw new Error("Expected a completed upload replay");
+    expect(completedPresign).toEqual({
       materialId: firstPresign.materialId,
       objectKey: firstPresign.objectKey,
       completed: true,
