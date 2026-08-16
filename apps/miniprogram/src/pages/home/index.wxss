@@ -31,12 +31,13 @@
 
 .demo-link {
   width: 100%;
-  height: 72rpx;
+  min-height: 88rpx;
   margin-top: 10rpx;
+  padding: 16rpx 20rpx;
   background: transparent;
   color: #52645e;
   font-size: 25rpx;
-  line-height: 72rpx;
+  line-height: 1.35;
   text-decoration: underline;
 }
 

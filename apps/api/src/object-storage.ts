@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, type FileHandle } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 export interface StoredObjectMetadata {
@@ -20,6 +20,13 @@ export interface ObjectStorage {
   delete(objectKey: string): Promise<void>;
 }
 
+export class ObjectAlreadyExistsError extends Error {
+  constructor() {
+    super("Object already exists");
+    this.name = "ObjectAlreadyExistsError";
+  }
+}
+
 interface FileMetadata extends StoredObjectMetadata {
   version: 1;
 }
@@ -37,6 +44,10 @@ export class FileSystemObjectStorage implements ObjectStorage {
   ): Promise<StoredObjectMetadata> {
     const objectPath = this.resolveObjectPath(objectKey);
     const metadataPath = this.metadataPath(objectPath);
+    let objectFile: FileHandle | undefined;
+    let metadataFile: FileHandle | undefined;
+    let objectCreated = false;
+    let metadataCreated = false;
     const metadata: FileMetadata = {
       version: 1,
       contentType: input.contentType,
@@ -45,13 +56,27 @@ export class FileSystemObjectStorage implements ObjectStorage {
 
     try {
       await mkdir(dirname(objectPath), { recursive: true });
-      await writeFile(objectPath, input.bytes);
-      await writeFile(metadataPath, JSON.stringify(metadata), "utf8");
-    } catch {
+      objectFile = await this.openNewFile(objectPath);
+      objectCreated = true;
+      await objectFile.writeFile(input.bytes);
+      await objectFile.close();
+      objectFile = undefined;
+
+      metadataFile = await this.openNewFile(metadataPath);
+      metadataCreated = true;
+      await metadataFile.writeFile(JSON.stringify(metadata), "utf8");
+      await metadataFile.close();
+      metadataFile = undefined;
+    } catch (error) {
       await Promise.allSettled([
-        rm(objectPath, { force: true }),
-        rm(metadataPath, { force: true }),
+        objectFile?.close() ?? Promise.resolve(),
+        metadataFile?.close() ?? Promise.resolve(),
       ]);
+      await Promise.allSettled([
+        objectCreated ? rm(objectPath, { force: true }) : Promise.resolve(),
+        metadataCreated ? rm(metadataPath, { force: true }) : Promise.resolve(),
+      ]);
+      if (error instanceof ObjectAlreadyExistsError) throw error;
       throw new Error("Object storage write failed");
     }
     return metadata;
@@ -127,6 +152,15 @@ export class FileSystemObjectStorage implements ObjectStorage {
     return `${objectPath}.warm-letter-metadata.json`;
   }
 
+  private async openNewFile(path: string): Promise<FileHandle> {
+    try {
+      return await open(path, "wx");
+    } catch (error) {
+      if (this.isFileAlreadyExists(error)) throw new ObjectAlreadyExistsError();
+      throw error;
+    }
+  }
+
   private parseMetadata(value: string): FileMetadata {
     const parsed = JSON.parse(value) as Partial<FileMetadata>;
     if (
@@ -146,6 +180,14 @@ export class FileSystemObjectStorage implements ObjectStorage {
       error instanceof Error &&
       "code" in error &&
       (error as NodeJS.ErrnoException).code === "ENOENT"
+    );
+  }
+
+  private isFileAlreadyExists(error: unknown): boolean {
+    return (
+      error instanceof Error &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "EEXIST"
     );
   }
 }

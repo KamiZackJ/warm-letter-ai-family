@@ -22,12 +22,12 @@
   <block wx:else>
     <view class="section editor-section">
       <text class="field-label">标题</text>
-      <input class="input title-input" data-field="title" maxlength="40" value="{{draft.title}}" bindinput="updateField" />
+      <input class="input title-input" aria-label="标题" data-field="title" maxlength="40" value="{{draft.title}}" bindinput="updateField" />
     </view>
 
     <view class="section editor-section">
       <text class="field-label">称呼</text>
-      <input class="input" data-field="salutation" maxlength="30" value="{{draft.salutation}}" bindinput="updateField" />
+      <input class="input" aria-label="称呼" data-field="salutation" maxlength="30" value="{{draft.salutation}}" bindinput="updateField" />
     </view>
 
     <view class="paragraphs-section">
@@ -36,7 +36,7 @@
           <text class="paragraph-number">正文 {{index + 1}}</text>
           <button class="delete-paragraph" data-index="{{index}}" bindtap="removeParagraph">删除</button>
         </view>
-        <textarea class="textarea paragraph-textarea" data-index="{{index}}" maxlength="1000" value="{{item.text}}" bindinput="updateParagraph" />
+        <textarea class="textarea paragraph-textarea" aria-label="正文第 {{index + 1}} 段" data-index="{{index}}" maxlength="1000" value="{{item.text}}" bindinput="updateParagraph" />
         <view class="source-trace">
           <text class="source-label">内容依据</text>
           <text class="source-value">{{paragraphSourceLabels[index]}}</text>
@@ -47,12 +47,12 @@
 
     <view class="section editor-section">
       <text class="field-label">结尾</text>
-      <textarea class="textarea compact-textarea" data-field="closing" maxlength="300" value="{{draft.closing}}" bindinput="updateField" />
+      <textarea class="textarea compact-textarea" aria-label="结尾" data-field="closing" maxlength="300" value="{{draft.closing}}" bindinput="updateField" />
     </view>
 
     <view class="section editor-section">
       <text class="field-label">署名</text>
-      <input class="input" data-field="signature" maxlength="30" value="{{draft.signature}}" bindinput="updateField" />
+      <input class="input" aria-label="署名" data-field="signature" maxlength="30" value="{{draft.signature}}" bindinput="updateField" />
     </view>
 
     <button class="regenerate-button" bindtap="regenerate">重新生成草稿</button>

@@ -9,40 +9,40 @@
 
   <view class="section form-section">
     <text class="field-label">写给谁</text>
-    <input class="input" maxlength="20" placeholder="例如：妈妈、爷爷、爸爸妈妈" value="{{recipient}}" bindinput="updateRecipient" />
+    <input class="input" aria-label="写给谁" maxlength="20" placeholder="例如：妈妈、爷爷、爸爸妈妈" value="{{recipient}}" bindinput="updateRecipient" />
   </view>
 
   <view class="section form-section">
     <text class="field-label">今天最想让对方知道什么</text>
-    <textarea class="textarea" maxlength="500" placeholder="用平常说话的方式写就好" value="{{message}}" bindinput="updateMessage" />
+    <textarea class="textarea" aria-label="今天最想让对方知道什么" maxlength="500" placeholder="用平常说话的方式写就好" value="{{message}}" bindinput="updateMessage" />
   </view>
 
   <view class="section form-section">
     <text class="field-label">语气</text>
     <view class="segmented">
-      <button class="segment {{tone === 'warm' ? 'is-active' : ''}}" data-value="warm" bindtap="chooseTone">温暖</button>
-      <button class="segment {{tone === 'concise' ? 'is-active' : ''}}" data-value="concise" bindtap="chooseTone">简洁</button>
-      <button class="segment {{tone === 'lively' ? 'is-active' : ''}}" data-value="lively" bindtap="chooseTone">轻松</button>
+      <button class="segment {{tone === 'warm' ? 'is-active' : ''}}" aria-pressed="{{tone === 'warm'}}" data-value="warm" bindtap="chooseTone">温暖</button>
+      <button class="segment {{tone === 'concise' ? 'is-active' : ''}}" aria-pressed="{{tone === 'concise'}}" data-value="concise" bindtap="chooseTone">简洁</button>
+      <button class="segment {{tone === 'lively' ? 'is-active' : ''}}" aria-pressed="{{tone === 'lively'}}" data-value="lively" bindtap="chooseTone">轻松</button>
     </view>
   </view>
 
   <view class="section form-section">
     <text class="field-label">篇幅</text>
     <view class="segmented">
-      <button class="segment {{length === 'short' ? 'is-active' : ''}}" data-value="short" bindtap="chooseLength">短笺</button>
-      <button class="segment {{length === 'medium' ? 'is-active' : ''}}" data-value="medium" bindtap="chooseLength">标准</button>
-      <button class="segment {{length === 'long' ? 'is-active' : ''}}" data-value="long" bindtap="chooseLength">长信</button>
+      <button class="segment {{length === 'short' ? 'is-active' : ''}}" aria-pressed="{{length === 'short'}}" data-value="short" bindtap="chooseLength">短笺</button>
+      <button class="segment {{length === 'medium' ? 'is-active' : ''}}" aria-pressed="{{length === 'medium'}}" data-value="medium" bindtap="chooseLength">标准</button>
+      <button class="segment {{length === 'long' ? 'is-active' : ''}}" aria-pressed="{{length === 'long'}}" data-value="long" bindtap="chooseLength">长信</button>
     </view>
   </view>
 
   <view class="section form-section">
     <text class="field-label">想强调的事</text>
-    <input class="input" maxlength="120" placeholder="例如：让她放心，也谢谢她" value="{{focus}}" bindinput="updateFocus" />
+    <input class="input" aria-label="想强调的事" maxlength="120" placeholder="例如：让她放心，也谢谢她" value="{{focus}}" bindinput="updateFocus" />
   </view>
 
   <view class="section form-section">
     <text class="field-label">不要写进信里的内容</text>
-    <textarea class="textarea compact-textarea" maxlength="200" placeholder="例如：收入、公司名称、具体住址" value="{{exclusions}}" bindinput="updateExclusions" />
+    <textarea class="textarea compact-textarea" aria-label="不要写进信里的内容" maxlength="200" placeholder="例如：收入、公司名称、具体住址" value="{{exclusions}}" bindinput="updateExclusions" />
     <text class="helper">生成时会按这里的要求避开，确认前也请再次检查。</text>
   </view>
 

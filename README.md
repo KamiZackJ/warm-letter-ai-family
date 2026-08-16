@@ -59,6 +59,7 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 - [2026-08-16 阶段进度、计划与问题](./docs/PROGRESS_2026-08-16.md)
 - [W1 阶段进度、计划与问题](./docs/W1_PROGRESS_2026-08-15.md)
 - [验收清单](./docs/ACCEPTANCE_CHECKLIST.md)
+- [外部验收与参赛取证手册](./docs/evidence/EXTERNAL_VALIDATION_RUNBOOK.md)
 - [架构基线](./docs/ARCHITECTURE.md)
 - [开发说明](./docs/DEVELOPMENT.md)
 - [参赛作品完整计划](./暖笺_AI家书_参赛作品完整计划.docx)

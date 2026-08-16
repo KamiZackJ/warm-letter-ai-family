@@ -33,6 +33,20 @@ function displayMaterial(material: Material): DisplayMaterial {
   return { ...material, typeLabel: TYPE_LABELS[material.type], detail };
 }
 
+function confirmMaterialDeletion(name: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    wx.showModal({
+      title: "删除这项素材？",
+      content: `删除“${name}”后，它将不再用于当前家书。`,
+      confirmText: "删除",
+      confirmColor: "#8A3E34",
+      cancelText: "保留",
+      success: (result: { confirm: boolean }) => resolve(result.confirm),
+      fail: () => resolve(false),
+    });
+  });
+}
+
 Page({
   data: {
     ...environmentView,
@@ -185,6 +199,8 @@ Page({
 
   async deleteMaterial(event: { currentTarget: { dataset: { id: string } } }) {
     const id = event.currentTarget.dataset.id;
+    const material = this.data.materials.find((item) => item.id === id);
+    if (!material || !(await confirmMaterialDeletion(material.name))) return;
     await api.deleteMaterial(id);
     const materials = this.data.materials.filter((item) => item.id !== id);
     saveCurrentMaterialIds(materials.map((item) => item.id));

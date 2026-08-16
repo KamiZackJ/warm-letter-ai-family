@@ -21,6 +21,7 @@ import {
 } from "./media-policy.js";
 import {
   FileSystemObjectStorage,
+  ObjectAlreadyExistsError,
   type ObjectStorage,
 } from "./object-storage.js";
 import { MemoryRepository } from "./repository.js";
@@ -360,10 +361,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     }
     const policy = resolveMediaUploadPolicy(material.type, material.name, material.contentType);
     validateMediaBytes(request.body, policy, maxMediaUploadBytes);
-    await objectStorage.put(material.objectKey, {
-      bytes: request.body,
-      contentType: material.contentType,
-    });
+    try {
+      await objectStorage.put(material.objectKey, {
+        bytes: request.body,
+        contentType: material.contentType,
+      });
+    } catch (error) {
+      if (error instanceof ObjectAlreadyExistsError) {
+        throw new ApiError(409, "UPLOAD_ALREADY_RECEIVED", "上传文件已经接收，不能重复覆盖");
+      }
+      throw error;
+    }
     return reply.status(204).send();
   });
 

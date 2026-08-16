@@ -38,6 +38,7 @@
     <text class="field-label">直接写下一点近况</text>
     <textarea
       class="textarea material-textarea"
+      aria-label="直接写下一点近况"
       maxlength="500"
       placeholder="例如：最近开始学做饭，工作有点忙，但我一切都好。"
       value="{{textDraft}}"
@@ -62,7 +63,7 @@
           <text class="material-name">{{item.name}}</text>
           <text class="material-detail">{{item.detail}}</text>
         </view>
-        <button class="remove-button" aria-label="删除素材" data-id="{{item.id}}" bindtap="deleteMaterial">删</button>
+        <button class="remove-button" aria-label="删除素材：{{item.name}}" data-id="{{item.id}}" bindtap="deleteMaterial">删</button>
       </view>
     </view>
   </view>

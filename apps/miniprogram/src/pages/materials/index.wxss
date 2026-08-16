@@ -4,7 +4,7 @@
 
 .demo-button {
   width: 100%;
-  min-height: 80rpx;
+  min-height: 88rpx;
   margin-top: 28rpx;
   border: 2rpx solid #9eb6ab;
   border-radius: 8rpx;

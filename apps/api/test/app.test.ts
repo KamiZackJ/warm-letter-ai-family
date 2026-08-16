@@ -569,6 +569,22 @@ describe("Warm Letter API", () => {
       contentType: "image/jpeg",
       sizeBytes: jpegBytes.length,
     });
+    const replacementBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0x11, 0x22, 0x33, 0x44]);
+    const replayBeforeComplete = await app.inject({
+      method: "PUT",
+      url: new URL(presigned.uploadUrl).pathname,
+      headers: presigned.headers,
+      payload: replacementBytes,
+    });
+    expect(replayBeforeComplete.statusCode).toBe(409);
+    expect(json<{ error: { code: string } }>(replayBeforeComplete).error.code).toBe(
+      "UPLOAD_ALREADY_RECEIVED",
+    );
+    expect(await objectStorage.read(presigned.objectKey)).toEqual({
+      bytes: jpegBytes,
+      contentType: "image/jpeg",
+      sizeBytes: jpegBytes.length,
+    });
     const uploadedButNotCompleted = await app.inject({
       method: "GET",
       url: "/v1/materials",
@@ -625,6 +641,57 @@ describe("Warm Letter API", () => {
     expect(readAfterDelete.statusCode).toBe(404);
   });
 
+  it("atomically accepts only one concurrent upload for a presigned material", async () => {
+    const token = await login(app, "concurrent-upload-owner");
+    const presignResponse = await app.inject({
+      method: "POST",
+      url: "/v1/materials/presign",
+      headers: auth(token),
+      payload: { type: "photo", filename: "concurrent.jpg", contentType: "image/jpeg" },
+    });
+    const presigned = json<{
+      materialId: string;
+      objectKey: string;
+      uploadUrl: string;
+      headers: Record<string, string>;
+    }>(presignResponse);
+    const uploadPath = new URL(presigned.uploadUrl).pathname;
+    const attempts = await Promise.all(
+      [
+        Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x10, 0x11, 0x12, 0x13]),
+        Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0x20, 0x21, 0x22, 0x23]),
+      ].map(async (bytes) => ({
+        bytes,
+        response: await app.inject({
+          method: "PUT",
+          url: uploadPath,
+          headers: presigned.headers,
+          payload: bytes,
+        }),
+      })),
+    );
+
+    expect(attempts.map(({ response }) => response.statusCode).sort()).toEqual([204, 409]);
+    const accepted = attempts.find(({ response }) => response.statusCode === 204)!;
+    const rejected = attempts.find(({ response }) => response.statusCode === 409)!;
+    expect(json<{ error: { code: string } }>(rejected.response).error.code).toBe(
+      "UPLOAD_ALREADY_RECEIVED",
+    );
+    expect(await objectStorage.read(presigned.objectKey)).toEqual({
+      bytes: accepted.bytes,
+      contentType: "image/jpeg",
+      sizeBytes: accepted.bytes.length,
+    });
+
+    const completeResponse = await app.inject({
+      method: "POST",
+      url: "/v1/materials/complete",
+      headers: auth(token),
+      payload: { materialId: presigned.materialId },
+    });
+    expect(completeResponse.statusCode).toBe(200);
+  });
+
   it("transfers uploaded media through a real HTTP listener", async () => {
     const address = await app.listen({ port: 0, host: "127.0.0.1" });
     const loginResponse = await fetch(`${address}/v1/auth/wx-login`, {
@@ -657,6 +724,19 @@ describe("Warm Letter API", () => {
       body: jpegBytes,
     });
     expect(uploadResponse.status).toBe(204);
+
+    const replacementBytes = Buffer.from([
+      0xff, 0xd8, 0xff, 0xe1, 0x52, 0x45, 0x50, 0x4c,
+    ]);
+    const replayBeforeComplete = await fetch(`${address}${contentPath}`, {
+      method: "PUT",
+      headers: presigned.headers,
+      body: replacementBytes,
+    });
+    expect(replayBeforeComplete.status).toBe(409);
+    expect(
+      ((await replayBeforeComplete.json()) as { error: { code: string } }).error.code,
+    ).toBe("UPLOAD_ALREADY_RECEIVED");
 
     const completeResponse = await fetch(`${address}/v1/materials/complete`, {
       method: "POST",
