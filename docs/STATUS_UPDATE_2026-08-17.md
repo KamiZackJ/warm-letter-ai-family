@@ -10,12 +10,19 @@
 - 每个代码批次均在 `D:\tmp\warm-letter-ai-family\runs\<sha>` 的干净 worktree 上完成冻结依赖安装、`pnpm check`、`pnpm build`、差异和敏感信息扫描。当前冻结回归为小程序 `118/118`、API `131/131`、contracts `12/12`、Web `68/68`。H5 生产 bundle 只使用仓库示例中的非秘密 HTTPS 占位 API 配置验证，未连接或部署生产服务。
 - 已发布的前置提交包括：`34a26be`（项目进度基线）、`b2bdaea`（素材上传 pending/completed 共享契约）和 `fc29692`（401 恢复、素材幂等、列表并发清理）。
 
+## 当前批次（本地验证，待推送）
+
+- `fc994bd0c0658a63439d64b1a39449e2312cde4d` 实现 `FIX-022`：段落使用 `ai`、`needs-review`、`sources-confirmed`、`user-supplied` 四态归因。人工改写或新增段落会清空旧引用并进入待核对；只有重选至少一份当前素材，或明确标记为本人补充后，服务端才允许确认发布。
+- 服务端拒绝客户端把改写文字伪装为 AI 整理，或替换 AI 段落的原始引用；确认版本与公开 Reader 保留重核/本人补充的披露。小程序编辑端提供逐段素材勾选和本人补充选项，小程序与 H5 Reader 均显示归因状态。
+- `D:\tmp\warm-letter-ai-family\runs\fc994bd\repo` 的冻结安装、`pnpm check`、`pnpm build`、H5 production bundle verifier、敏感信息扫描和差异检查均通过：小程序 `121/121`、API `132/132`、contracts `13/13`、Web `69/69`。H5 demo 在 320px 真浏览器中显示归因标签，`scrollWidth/clientWidth = 305/320`；临时截图和日志位于 `D:\tmp\warm-letter-ai-family\ui\fix-022-2026-08-17`。
+- 本节仅证明本地开发/演示验证。`fc994bd` 尚未推送，不能替代 GitHub Actions、真实 OpenAI、微信真机或生产验收。
+
 ## 下一步计划
 
-1. 在真实 OpenAI 四素材闭环、正式微信 AppID/HTTPS 和双真机可用后，执行寄信端到收信端的真实端到端验收并归档脱敏证据。
-2. 完成 VoiceOver/TalkBack、微信开发者工具系统大字号和真实弱网重试验收；代码级通过不能替代这些设备证据。
-3. 建立生产持久化、正式内容审核、删除 SLA、监控、备份和真实后端联调，再评估封闭测试或比赛材料资格。
-4. 每批继续显式暂存文件，禁止 `git add -A`；临时文件、浏览器缓存、测试工件和干净 worktree 统一放在 `D:\tmp\warm-letter-ai-family`。
+1. 推送 `110a04c`、`fc994bd` 和本台账提交，等待 PR 最新 HEAD 的 push/PR 两条 `verify` 均成功。
+2. 在真实 OpenAI 四素材闭环、正式微信 AppID/HTTPS 和双真机可用后，执行寄信端到收信端的真实端到端验收并归档脱敏证据。
+3. 完成 VoiceOver/TalkBack、微信开发者工具系统大字号和真实弱网重试验收；随后实现同一确认版本的长图导出，再规划短片复用该冻结版本。
+4. 建立生产持久化、正式内容审核、删除 SLA、监控、备份和真实后端联调，再评估封闭测试或比赛材料资格。
 
 ## 未关闭问题与门禁
 
@@ -29,4 +36,4 @@
 
 - 主项目经理维护批次顺序、证据边界和阶段性汇总；交付项目经理复核提交 SHA、测试日志、敏感信息扫描与双 CI。
 - 子代理只用于独立、可验证的专项；其结论必须经过主流程复核，不能替代提交后的远端证据。
-- GitHub CLI 已登录并用于草稿 PR 和远端 CI 状态复核；发布结论始终绑定提交 SHA 与 push/PR 两条成功检查。
+- GitHub CLI 已在项目固定 Node 运行时下复核为 `KamiZackJ` 的有效登录，具备 `repo` 与 `workflow` scope；发布结论始终绑定提交 SHA 与 push/PR 两条成功检查。
