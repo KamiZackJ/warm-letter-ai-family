@@ -107,4 +107,47 @@ describe("mock API idempotency", () => {
     ).rejects.toThrow("该回复请求标识已用于其他内容");
     expect(getLetters()[0]?.replies).toEqual([first]);
   });
+
+  it("rejects forged AI attribution for edited mock drafts", async () => {
+    const now = "2026-08-17T08:00:00.000Z";
+    const aiParagraph = {
+      id: "paragraph-ai",
+      text: "AI 根据照片整理的一段话。",
+      sourceRefs: ["photo-1"],
+      sourceAttribution: "ai" as const,
+    };
+    const draft = {
+      title: "写给奶奶的一封信",
+      salutation: "奶奶：",
+      paragraphs: [aiParagraph],
+      closing: "愿你每天都好。",
+      signature: "想念你的我",
+    };
+    const letter: Letter = {
+      id: "letter-attribution",
+      status: "EDITING",
+      materialIds: ["photo-1"],
+      intent: {
+        recipient: "奶奶",
+        message: "报个平安",
+        tone: "warm",
+        length: "short",
+        focus: "最近一切都好",
+        exclusions: "",
+      },
+      draft,
+      replies: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    saveLetters([letter]);
+
+    await expect(
+      mockApi.updateDraft(letter.id, {
+        ...draft,
+        paragraphs: [{ ...aiParagraph, text: "写信人改写后的内容。" }],
+      }),
+    ).rejects.toThrow("只有原始 AI 整理段落可以保留 AI 归因");
+    expect(getLetters()[0]?.draft).toEqual(draft);
+  });
 });

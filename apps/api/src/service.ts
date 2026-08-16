@@ -649,11 +649,15 @@ export class WarmLetterService {
         sourceRefs = paragraph.sourceRefs;
         sourceAttribution = "sources-confirmed";
       } else if (requestedAttribution === "ai") {
-        if (textChanged || !previous) {
+        if (
+          textChanged ||
+          !previous ||
+          (previous.sourceAttribution !== undefined && previous.sourceAttribution !== "ai")
+        ) {
           throw new ApiError(
             400,
             "INVALID_SOURCE_ATTRIBUTION",
-            "修改后的段落不能标记为 AI 整理，请重新核对依据或标记为本人补充",
+            "只有原始 AI 整理段落可以保留 AI 归因，请重新核对依据或标记为本人补充",
           );
         }
         if (

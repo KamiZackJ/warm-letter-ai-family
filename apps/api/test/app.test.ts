@@ -305,6 +305,32 @@ describe("Warm Letter API", () => {
       },
     });
     expect(reviewedResponse.statusCode).toBe(200);
+    const reviewed = json<{
+      letter: {
+        draft: {
+          paragraphs: Array<{ text: string; sourceRefs: string[]; sourceAttribution?: string }>;
+        };
+      };
+    }>(reviewedResponse).letter;
+
+    const reclassifyAsAiResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/letters/${letterId}`,
+      headers: auth(token),
+      payload: {
+        draft: {
+          paragraphs: reviewed.draft.paragraphs.map((paragraph, index) => ({
+            text: paragraph.text,
+            sourceRefs: paragraph.sourceRefs,
+            sourceAttribution: index === 0 ? "ai" : paragraph.sourceAttribution,
+          })),
+        },
+      },
+    });
+    expect(reclassifyAsAiResponse.statusCode).toBe(400);
+    expect(json<{ error: { code: string } }>(reclassifyAsAiResponse).error.code).toBe(
+      "INVALID_SOURCE_ATTRIBUTION",
+    );
 
     const confirmResponse = await app.inject({
       method: "POST",

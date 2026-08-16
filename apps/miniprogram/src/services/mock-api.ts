@@ -144,14 +144,34 @@ function normalizeDraftAttribution(previous: LetterDraft | undefined, draft: Let
     ...draft,
     paragraphs: draft.paragraphs.map((paragraph, index) => {
       const previousParagraph = previous?.paragraphs[index];
+      const textChanged = !previousParagraph || previousParagraph.text !== paragraph.text;
       if (!paragraph.sourceAttribution) {
-        if (!previousParagraph || previousParagraph.text !== paragraph.text) {
+        if (textChanged) {
           return { ...paragraph, sourceRefs: [], sourceAttribution: "needs-review" };
         }
         return {
           ...paragraph,
           sourceRefs: previousParagraph.sourceRefs,
           sourceAttribution: previousParagraph.sourceAttribution ?? "ai",
+        };
+      }
+      if (paragraph.sourceAttribution === "ai") {
+        if (
+          textChanged ||
+          (previousParagraph?.sourceAttribution !== undefined &&
+            previousParagraph.sourceAttribution !== "ai")
+        ) {
+          throw new Error(
+            "只有原始 AI 整理段落可以保留 AI 归因，请重新核对依据或标记为本人补充",
+          );
+        }
+        if (!sameSourceRefs(paragraph.sourceRefs, previousParagraph?.sourceRefs ?? [])) {
+          throw new Error("AI 整理段落不能由客户端更换素材引用");
+        }
+        return {
+          ...paragraph,
+          sourceRefs: previousParagraph?.sourceRefs ?? [],
+          sourceAttribution: "ai",
         };
       }
       return {
@@ -161,6 +181,12 @@ function normalizeDraftAttribution(previous: LetterDraft | undefined, draft: Let
       };
     }),
   };
+}
+
+function sameSourceRefs(left: string[], right: string[]): boolean {
+  if (left.length !== right.length || new Set(left).size !== left.length) return false;
+  const rightRefs = new Set(right);
+  return left.every((sourceRef) => rightRefs.has(sourceRef));
 }
 
 function assertDraftReadyForConfirmation(draft: LetterDraft): void {
