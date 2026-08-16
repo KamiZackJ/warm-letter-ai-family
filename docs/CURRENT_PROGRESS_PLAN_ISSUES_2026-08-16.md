@@ -1,32 +1,32 @@
 # 暖笺当前进度、推进计划与问题清单
 
-- 更新时间：2026-08-16 20:20（Asia/Shanghai）
+- 更新时间：2026-08-16 20:52（Asia/Shanghai）
 - 仓库：`KamiZackJ/warm-letter-ai-family`
 - 分支：`codex/warm-letter-mvp`
-- 本次更新前远端 HEAD：`53024e7efe1f81446f92103829bb3c738e25a682`
+- 本次更新前远端 HEAD：`55f6c7d674dfd1787d98bc1ba2a6e8f416681b43`
 - 已发布功能基线：`cf097586f6eeb09eb7b5bc383c07e492065c5141`
-- 上一文档提交：`53024e7`（已推送，push 与 pull request 两条 CI 均成功）
+- 上一文档提交：`55f6c7d`（已推送，push run `31947065882` 与 pull request run `31947067397` 均成功）
 - 草稿 PR：[PR #1](https://github.com/KamiZackJ/warm-letter-ai-family/pull/1)
 - 文档性质：项目经理阶段快照。只有完成“测试 -> 独立复核 -> 提交 -> 推送 -> 远端 CI 全绿”的内容才计为“已发布”；工作树中的实现统一计为“进行中”。
 
 ## 1. 阶段结论
 
-暖笺当前已具备可运行的 Fastify API、React H5 和微信小程序开发/演示骨架，`G0` 内部开发门禁已通过，`W2` 本地/单实例分享安全已有基线。远端 `cf09758` 已发布 API 素材/回复幂等加固：素材同键重放与异内容冲突、预签名/complete 恢复、回复重放先于限流和内容安全、并发同键只写一条、审核期间撤销分享不落库，以及分享 token hash 的 O(1) 索引均已进入草稿 PR。管理文档 HEAD 已推进到 `53024e7`，其 push 与 pull request 两条 GitHub Actions 也均成功：
+暖笺当前已具备可运行的 Fastify API、React H5 和微信小程序开发/演示骨架，`G0` 内部开发门禁已通过，`W2` 本地/单实例分享安全已有基线。远端 `cf09758` 已发布 API 素材/回复幂等加固：素材同键重放与异内容冲突、预签名/complete 恢复、回复重放先于限流和内容安全、并发同键只写一条、审核期间撤销分享不落库，以及分享 token hash 的 O(1) 索引均已进入草稿 PR。管理文档 HEAD 已推进到 `55f6c7d`，其 push 与 pull request 两条 GitHub Actions 均成功：
 
-- [push run 31944395546](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31944395546)
-- [pull_request run 31944397879](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31944397879)
+- [push run 31947065882](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31947065882)
+- [pull_request run 31947067397](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31947067397)
 
-当前未提交批次集中在 Web 和微信小程序。2026-08-16 20:14 前，使用固定 Node.js 与 D 盘临时目录完成小程序 session/revision 快照批次验证：定向 `43/43`、小程序全量 `102/102`、typecheck 与 `git diff --check` 均通过；此前根级快照为 API `131/131`、Web `62/62`、contracts `11/11`，API/Web typecheck 与 Web `build:test` 通过。这些结果来自包含未提交改动的工作树，只能作为候选证据，不能绑定为 `cf09758` 或 `53024e7` 的已发布功能证据。
+当前未提交批次集中在 Web 和微信小程序。小程序在录音 epoch 改动前已达到全量 `114/114` 与 typecheck 通过；加入录音 ABA 防护后的最新 materials 定向为 `40/41`，唯一失败是旧测试仍断言录音启动一次，而该场景现在会先启动 R1、再经重试启动 R2，正确次数应为两次。该断言尚未修正，全量门禁也尚未重跑，因此当前不能沿用上一轮绿色结论。此前根级快照为 API `131/131`、Web `66/66`、contracts `11/11`，API/Web typecheck 与 Web `build:test` 通过。这些结果均来自包含未提交改动的工作树，只能作为候选证据，不能绑定为 `cf09758` 或 `55f6c7d` 的已发布功能证据。
 
-Web 已完成真实 Chromium 验收：24/24 布局矩阵（320/390/768/1440 × root 100%/200% × 标准/大字/特大）无横向溢出，额外 24/24 裁切/关键区域重叠审计通过；三档字号刷新持久化 3/3、未保存草稿 `beforeunload`、回复丢响应后同键重试且只落一条均通过，最终控制台 `0 errors / 0 warnings`。证据目录包含 58 个文件和 36 张有效 PNG，全部位于 D 盘。该验收使用 Playwright route 模拟 API，只证明前端真实浏览器行为，不替代真实后端联调。
+Web 已完成设计高优先返修：照片与聊天截图采用不同裁切策略，回复成功后编辑器保持可用，回复历史默认展示最近三条并支持展开/收起，同时补充跨页面品牌 CSS token。专项自测为定向 `4/4`、Web 全量 `66/66`、typecheck、`build:test` 与 `git diff --check` 通过。真实 Chromium 证据目录包含 58 个文件、36 张有效 PNG 和 24 组矩阵结果，`BAD_PNG=0`，全部位于 D 盘；证据使用 Playwright route 模拟 API，且尚未显式绑定冻结 SHA/tree，因此仍需主流程复核，不能替代真实后端联调。
 
-小程序两个 P1 已完成本地返修。家书失效 ID 清理现在基于写回时的最新列表只删除已确认失效项；素材选择已升级为 `{sessionId, revision, ids}` 原子快照，首页同步锁定启动、把 session 写入导航 URL，导航失败恢复上一选择与待生成状态，素材页拒绝缺失/过期 session，以 revision 防止同 session 的 A→B→A，并最多自动重读三次。保存、批量保存、删除和旧页面晚返均按最新快照合并；legacy ID 会过滤、去重、迁移并删除旧键。独立评审对该批次给出 go，无阻断问题。
+小程序恢复批次已继续加固。家书失效 ID 清理基于写回时的最新列表只删除已确认失效项；素材选择采用 `{sessionId, revision, ids}` 原子快照，`goIntent()` 在导航前校验 session、revision、可见 ID 与 `loadError`，重读期间 session 失效会立即返回首页。导航失败不再恢复已暴露给旧 writer 的 session A，而是把旧 IDs 恢复到新的 rollback session C，使 A/B writer 均失效。保存、批量保存、删除和旧页面晚返均按最新快照合并；legacy ID 会过滤、去重、迁移并删除旧键。session 静态复核已给出 go，但最新录音 epoch 改动仍需独立复核。
 
-在上述完整验证之后，素材页又增加了一处尚未验证的小补丁：`goIntent()` 在存在 `loadError` 时禁止继续，并在进入意图页前再次核对 session、revision 和可见 ID；session 失效时返回首页，revision/ID 不一致时重新读取。WXML 的“下一步”按钮也增加了 `loadError` 禁用条件。该补丁尚未补测试、尚未重跑全量，因此当前小程序工作树仍不能提交。Mock 素材/回复幂等契约、录音停止互斥、同页重试身份边界和真实微信运行态证据仍未关闭。
+小程序 Mock 契约已本地修复：素材同 ID 同内容重放，异内容冲突；回复按 `[letterId, requestKey]` 同内容重放原回复，异内容冲突，并新增 `mock-idempotency.test.ts`。录音停止已增加 `stoppingRecord`，并引入 `recordingEpoch`：每次录音重新绑定捕获 epoch 的回调，阻止旧录音的迟到 `onStop/onError` 污染新录音。当前只剩一处旧测试期望未同步，修正后必须覆盖“error -> 新录音 -> 旧 stop”和“stop -> 新录音 -> 旧 error”两条 ABA 时序并交独立评审。
 
-小程序 reader 与适老布局也已继续推进：每段展示 `sourceRefs` 来源摘要和展开列表，覆盖失效来源/无来源兜底；大字/特大模式覆盖回复框、来源、错误和辅助文字，回复计数按 Unicode 字符处理；首页草稿提示达到 AA 对比度，长标题/收信人支持两行，素材入口改为两列并放大字号、换行和触控区。这些改动已进入 `102/102` 工作树快照，但仍待按批次提交和远端 CI。
+小程序 reader 与适老布局也已继续推进：每段展示 `sourceRefs` 来源摘要和展开列表，覆盖失效来源/无来源兜底；大字/特大模式覆盖回复框、来源、错误和辅助文字，回复计数按 Unicode 字符处理；首页草稿提示达到 AA 对比度，长标题/收信人支持两行，素材入口改为两列并放大字号、换行和触控区。这些改动已进入录音 epoch 改动前的 `114/114` 工作树快照，但仍待按批次提交和远端 CI。
 
-设计工作已完成一轮工具调研：Anthropic `frontend-design` skill 固定在提交 `2235be7c60b551f5de82ade908fd3816455afcda` 安装，Web Interface Guidelines 本轮规则固定在 `4e799d45c17aec1498c269287a83b9dba22b966b`。后续设计返修将按固定版本审计，不把滚动规则变化混入同一验收结论。
+设计工作已完成一轮工具调研并应用现有 `frontend-design`、Web Interface Guidelines 与 Playwright 流程。第三方候选包括 Apache-2.0 的 `pbakaus/impeccable` 以及 MIT 的 `wshobson/agents` accessibility/design-system skills；目前尚未安装，后续若采用必须固定 commit、完整审阅 `SKILL.md` 与外部依赖后再进入项目流程。
 
 真实 OpenAI 四素材闭环、微信开发者工具/双真机闭环、正式内容审核、完整删除生命周期、生产持久化与监控、长图短片和比赛提交材料仍未关闭。当前不得宣称达到 `G1`、`G2`、MVP、公测、生产或比赛提交候选。
 
@@ -44,32 +44,29 @@ Web 已完成真实 Chromium 验收：24/24 布局矩阵（320/390/768/1440 × r
 
 | 工作流 | 已实现或已验证 | 当前状态与剩余工作 |
 | --- | --- | --- |
-| H5 阅读字号与回复可靠性 | 已实现 `20/24/28px` 三档字号和偏好持久化；回复使用稳定幂等键，失败重试复用同键，同步锁阻止同帧重复提交，媒体刷新与回复按 ID 合并；关键辅助文字已提升到至少 14px，非空草稿已启用 `beforeunload`；Web `62/62`、typecheck、`build:test` 通过 | 真实 Chromium 24/24 布局、24/24 裁切/重叠、3/3 刷新持久化、草稿保护、同键重试和最终控制台 `0/0` 均通过；待独立差异复核、拆分提交和远端 CI。模拟 API 不替代真实后端联调 |
+| H5 阅读字号、回复与设计返修 | 已实现 `20/24/28px` 三档字号和偏好持久化；回复使用稳定幂等键，失败重试复用同键；照片/截图分流裁切、编辑器持续可用、最近三条历史及展开/收起、品牌 token 已完成；Web `66/66`、typecheck、`build:test` 通过 | D 盘 Chromium 证据已生成且 `BAD_PNG=0`；待主流程复核差异、矩阵和 SHA/tree 绑定，再拆分提交并等待远端 CI。模拟 API 不替代真实后端联调 |
 | API 素材/回复幂等 | `cf09758` 已发布素材同键重放/冲突、预签名与 complete 恢复、回复重放先于限流和内容安全、同键并发收敛、撤销分享竞态保护和 tokenHash 索引；API `131/131`、typecheck 与双 CI 通过 | 已发布到草稿 PR；仍受 `MemoryRepository` 单进程边界约束，不能宣称生产幂等 |
 | 小程序首页与收信页 | 已覆盖旧数据保留/重试、失败回复复用同一幂等键、编辑中的新输入不被旧成功请求清空、媒体刷新不覆盖新回复、旧音频回调不影响新播放、卸载后不再写 UI 状态；首页 `4/4`、收信页 `11/11` 通过 | 本地实现完成，待独立审查、全量门禁、拆分提交和远端 CI |
-| 小程序素材 session/revision 流程 | 已把选择存储升级为 `{sessionId, revision, ids}` 原子快照；首页同步启动锁、URL 绑定 session、导航失败恢复；素材页校验 session/revision、最多三次重读，保存/批量保存/删除按最新 ID 合并，旧页晚返不污染新流程；legacy IDs 会迁移；独立复核 go，定向 `43/43` | 完整验证后又修改了 `goIntent()` 和下一步按钮门禁，尚需补“`loadError` 禁止继续”“stale revision 触发重读”“一致快照正常导航”三类测试，并重跑全量/typecheck/`git diff --check` |
+| 小程序素材 session/revision 流程 | 选择存储为 `{sessionId, revision, ids}` 原子快照；首页同步启动锁、URL 绑定 session；`goIntent()` 校验 session/revision/可见 ID/`loadError`；导航失败使用全新 rollback session C；素材页最多三次重读，session 失效立即回首页，legacy IDs 会迁移 | session 静态复核 go；需修正最新 materials 测试旧期望并重跑定向、全量、typecheck、`git diff --check`，再复核录音 epoch 与导航时序 |
 | 小程序服务与 401 恢复 | 已实现素材上传丢响应恢复与稳定幂等键；业务请求遇到 401 后单飞 `wx.login`，并发请求共享登录，原操作最多重放一次，第二次 401 清 token 并上抛；`listLetters()` 已改为基于写回时最新列表只删除已确认失效 ID；包含列表回归的 P1 定向 `40/40` 通过 | 本地返修已完成但未提交；401 仍缺正式微信运行态证据，列表原子清理仍需在冻结提交上复跑并绑定远端 CI |
-| 小程序 Demo 幂等契约 | 真实 API 客户端会转发稳定 `requestKey`，收信页失败重试复用同键 | P2：Mock 同一素材 ID 的异内容会直接覆盖，`mockApi.addReply` 也忽略 `requestKey` 并产生重复回复；Demo 与真实 API 契约不一致，需修复并补契约测试 |
-| 小程序 reader 与适老设计 | 已增加每段来源摘要/展开列表、失效/无来源兜底、Unicode 回复计数；大字/特大覆盖回复框、来源和辅助文字；首页与素材页完成 AA 对比度、两列入口、换行、触控区和双行截断返修 | 已进入最近 `102/102` 工作树快照；仍需独立设计差异复核、按所有权拆分提交和远端 CI。Web 聊天截图裁切、回复成功后编辑器持续可用、长回复历史收纳和跨端 token 统一仍未完成 |
-| 小程序全量 | 2026-08-16 20:14 前的 session/revision 工作树快照为 `102/102`，typecheck 和 `git diff --check` 通过 | 只证明最新 `goIntent()` 补丁之前的脏工作树；补丁补测前不能沿用该结论，仍需冻结提交 SHA、干净副本复跑和微信运行态验收 |
+| 小程序 Demo 幂等契约 | Mock 素材同 ID 同内容重放、异内容冲突；回复按 `[letterId, requestKey]` 同内容重放原回复、异内容冲突；已新增契约测试 | 本地实现完成，尚未在最新录音 epoch 工作树上完成全量门禁、独立复核、拆分提交和远端 CI |
+| 小程序 reader 与适老设计 | 已增加每段来源摘要/展开列表、失效/无来源兜底、Unicode 回复计数；大字/特大覆盖回复框、来源和辅助文字；首页与素材页完成 AA 对比度、两列入口、换行、触控区和双行截断返修 | 本地实现完成；Web 对应的媒体裁切、编辑器持续可用、历史收纳和品牌 token 也已返修。两端仍需主流程设计复核、拆分提交和远端 CI |
+| 小程序全量 | 录音 epoch 改动前最近一次全量为 `114/114`，typecheck 通过 | 最新 materials 定向为 `40/41`；唯一失败是旧断言应从一次更新为两次。修正后必须重跑全量/typecheck/diff-check，并绑定冻结提交 SHA 与远端双 CI |
 | 项目经理与发布复核 | 主项目经理负责收口与推进，独立交付项目经理核对发布证据；Web 浏览器专项已完成，小程序发布复核仍在进行 | 小程序审查问题需返修；每批必须绑定提交 SHA、测试日志和双 CI |
 
-除本进度文档外，当前工作树快照包含 15 个已修改代码文件和 13 个未跟踪代码/测试文件，横跨 Web、小程序页面、服务层和测试。该批次必须按所有权边界拆分审查和提交，禁止一次性 `git add -A`。
+除本进度文档外，当前工作树快照包含 15 个已修改代码文件和 15 个未跟踪代码/测试文件，横跨 Web、小程序页面、服务层和测试。该批次必须按所有权边界拆分审查和提交，禁止一次性 `git add -A`。
 
 ## 4. 推进计划
 
 ### P0：收口当前本地批次
 
-1. 为最新 `goIntent()` 补三类回归：`loadError` 禁止继续、stale revision/IDs 阻止导航并触发重读、当前快照一致时正常进入 intent；同步校验 WXML 下一步按钮门禁。
-2. 使用 `D:\tmp\warm-letter-ai-family` 作为唯一任务临时目录，重跑 materials 定向、小程序全量、typecheck 与 `git diff --check`，然后交由独立评审复核该小补丁。
-3. 收口 Mock 幂等契约：同素材 ID 异内容返回冲突，回复同键同内容重放原回复、同键异内容冲突；补 Mock 契约测试。
-4. 为录音停止增加 `stoppingRecord` 或等价互斥，覆盖快速双击、`onStop/onError` 乱序和卸载边界；真机证据仍作为外部门禁。
-5. 明确“同页重试”边界：决定是否持久化素材/回复待重试身份；若暂不实现，产品与验收文档必须明确卸载后不保证恢复同一幂等键。
-6. 完成 Web 设计高优先返修：聊天截图避免被统一 `object-fit: cover` 裁切，回复成功后编辑器仍可继续使用，长回复历史折叠或分页，并统一 Web/小程序品牌与设计 token。固定使用已安装的 `frontend-design` skill 和本轮 Web Interface Guidelines 规则版本复核。
-7. 复跑 API、Web、小程序、contracts 全量测试与各端 typecheck，以及根级 `pnpm check`、`pnpm build`、Web `build:test` 和 production bundle verifier；执行敏感信息扫描和 `git diff --check`，把证据绑定到冻结 SHA/tree。
-8. 按“小程序 auth/list/service 回归”“素材 session/storage/home/materials”“reader 来源与适老”“Mock/录音”“Web 字号/回复/草稿与设计返修”拆分提交；显式暂存文件，禁止 `git add -A`。
-9. 每个提交推送后分别等待 push 与 pull request 两条 CI 成功；失败即回到对应批次修复，不把后续批次覆盖为绿色结论。
-10. 全部 CI 通过后同步 `STATUS_UPDATE_2026-08-16.md`、`PROJECT_STATUS.md`、`ACCEPTANCE_CHECKLIST.md` 和证据索引中的最新 HEAD、测试数与未关闭门禁。
+1. 修正 `materials-page.test.ts` 中录音重试场景的旧期望：`recorderStart` 应调用两次；立即重跑 materials 定向。
+2. 重跑小程序全量、typecheck 与 `git diff --check`；独立复核 `recordingEpoch` 的“error -> 新录音 -> 旧 stop”和“stop -> 新录音 -> 旧 error”两条 ABA 时序。
+3. 主流程复核 Web 设计差异和 D 盘 Chromium 证据，覆盖 320/390/1440、200% 字体、截图完整显示、历史展开、编辑器持续可用、焦点与控制台。
+4. 复跑 API、Web、小程序、contracts 全量测试与各端 typecheck，以及根级 `pnpm check`、`pnpm build`、Web `build:test` 和 production bundle verifier；执行敏感信息扫描和 `git diff --check`，把证据绑定到冻结 SHA/tree。
+5. 按“小程序 auth/list/service 回归”“素材 session/storage/home/materials”“reader 来源与适老”“Mock/录音”“Web 字号/回复/草稿与设计返修”拆分提交；显式暂存文件，禁止 `git add -A`。
+6. 每个提交推送后分别等待 push 与 pull request 两条 CI 成功；失败即回到对应批次修复，不把后续批次覆盖为绿色结论。
+7. 全部 CI 通过后同步 `README.md`、`PROJECT_STATUS.md`、`ACCEPTANCE_CHECKLIST.md` 和证据索引中的最新 HEAD、测试数与未关闭门禁。
 
 ### P1：补齐外部验收
 
@@ -87,12 +84,12 @@ Web 已完成真实 Chromium 验收：24/24 布局矩阵（320/390/768/1440 × r
 - 工作树混合多条工作流且差异较大；必须分批审查、显式暂存文件并独立提交。
 - `MemoryRepository` 的素材/回复幂等只覆盖单进程内存，无法提供跨进程重启、多实例或生产持久化保证。
 - 已返修、待发布：素材选择旧快照覆盖问题已改为 session/revision 原子快照与条件更新，`listLetters()` 也已基于写回时最新 ID 清理失效项；两项均有本地回归证据，但尚未拆分提交、推送和绑定远端 CI。
-- 当前最高优先级未验证点：最新 `goIntent()` 导航前快照校验和 WXML `loadError` 门禁是在 `102/102`、typecheck 与独立复核之后加入的，必须补测试并重跑，不能复用上一快照的绿色结论。
-- P2：`apps/miniprogram/src/services/mock-api.ts` 对同一素材 ID 的异内容会直接覆盖，`mockApi.addReply` 也忽略 `requestKey` 并生成重复回复；Demo 与真实 API 幂等契约不一致。
+- 当前唯一已知测试阻塞：`materials-page.test.ts` 的录音失败重试用例仍期望 `recorderStart` 调用一次；实现现在正确启动 R1 和重试后的 R2，断言应更新为两次。
+- `recordingEpoch` 已实现但尚未经过修正断言后的全量门禁与独立复核；两条跨代迟到回调时序仍是当前 P1 发布门禁。
+- Mock 素材/回复幂等已修复并补测试，但仍只覆盖单进程内存，尚未拆分提交、推送和绑定远端 CI。
 - P2：素材失败动作与回复幂等键只保存在页面实例；卸载后丢响应无法复用同一身份，生产弱网承诺目前只能限定为“同页重试”。
-- 录音停止缺少“正在停止”互斥，快速双击与 `onStop/onError` 乱序需要状态保护和真机验证。
 - 小程序回复输入框、来源、错误和辅助文字已随大字/特大模式覆盖；仍需在冻结提交上完成独立设计差异复核和真机字号验收。
-- Web 仍有四项设计高优先问题：聊天截图可能被统一 `object-fit: cover` 裁切；回复成功后编辑器不应永久隐藏；长回复历史缺少折叠/分页；Web 与小程序品牌及设计 token 未统一。
+- Web 四项设计高优先问题已完成本地返修，但证据尚未绑定冻结 SHA/tree，主流程也尚未完成最终差异与浏览器复核。
 - H5 本轮真实浏览器验收已完成且控制台 `0 errors / 0 warnings`，但 API 由 Playwright route 模拟；仍缺真实后端联调、弱网和双设备端到端证据。
 - 当前全量测试计数来自脏工作树，尚未绑定独立提交 SHA/tree，也未形成每批干净副本日志；不能替代提交后的两条远端 `verify`。
 - 小程序 401 自动恢复已有本地测试，但真实 `wx.login` 过期、弱网丢响应、录音权限/双击停止、图片同 URL 重载和音频切换仍缺微信运行态证据。
@@ -114,13 +111,13 @@ Web 已完成真实 Chromium 验收：24/24 布局矩阵（320/390/768/1440 × r
 | 独立交付项目经理 | 核对提交边界、SHA/tree、测试日志、敏感信息、远端双 CI 和外部门禁 | 每个发布结论均可追溯到干净提交与远端证据；未关闭门禁明确保留 |
 | API 素材/回复幂等专项 | 实现并验证稳定请求身份、丢响应恢复、并发收敛和撤销分享竞态 | 已发布 `cf09758` 且双 CI 通过；生产持久化仍作为独立门禁 |
 | Web 回复与字号 | 收口公开回复重试、字号、草稿保护和浏览器证据 | 全量测试/构建通过，浏览器矩阵通过，适老问题关闭或明确保留门禁 |
-| 小程序恢复专项 | 收口首页、素材页、收信页的竞争、重试和卸载边界 | session/revision 主批次已通过独立审查；最新导航门禁补测、全量/typecheck 和补丁复核通过后方可退出 |
+| 小程序恢复专项 | 收口首页、素材页、收信页的竞争、重试、录音 epoch 和卸载边界 | session/revision 静态复核已通过；修正测试旧期望、全量/typecheck、两条录音 ABA 独立复核通过后方可退出 |
 | 设计专项 | 使用固定版本设计 skill 与界面规则复核 reader、适老布局、媒体裁切、编辑器持续可用、历史收纳和跨端 token | 设计 P1 有定向/全量证据并通过独立差异复核；未完成项明确保留为发布门禁 |
 
 - 项目经理每个阶段只更新三类事实：已完成证据、新增问题、下一项可执行工作。
 - 任一实现只有在“测试通过 -> 独立复核 -> 提交 -> 推送 -> 最新远端 CI 全绿”后才从“进行中”改为“已发布”。
 - 子代理可由项目经理按风险开启，但子代理的自报结果必须由主流程复核，不能直接作为发布结论。
-- 当前推进顺序固定为：最新 `goIntent()` 补测与复核 -> Mock/录音边界 -> Web 设计高优先返修 -> 全量门禁 -> 拆分提交 -> 每批远端双 CI -> 管理文档同步 -> 外部验收。
+- 当前推进顺序固定为：修正唯一旧测试期望 -> 小程序全量与录音 epoch 独立复核 -> Web 设计证据主流程复核 -> 根级全量门禁 -> 拆分提交 -> 每批远端双 CI -> 管理文档同步 -> 外部验收。
 - 下一次阶段汇报触发条件：专项代理返回、任一全量门禁失败、至少一个独立提交推送且两条 CI 成功，或出现新的 P0 阻塞。
 
 ## 7. 临时文件与证据约束
