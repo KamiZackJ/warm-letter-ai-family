@@ -10,10 +10,10 @@
 
 ## 1. 当前结论
 
-本次状态以仓库远端 HEAD `3a2d1b7f5b056a623e5badd3537ad0db824637e4` 为基线。该提交已经包含本地实现提交 `1802740` 及其进度文档同步；PR #1 最新 HEAD 的两条 GitHub Actions `verify` 已成功：
+本次状态以仓库远端 HEAD `e9c5fbfc8d102bb83aa27d823857813e0007782a` 为基线。该提交已经包含本地实现提交 `1802740`、进度文档同步和本文件；PR #1 最新 HEAD 的两条 GitHub Actions `verify` 已成功：
 
-- [CI run 31936875969](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31936875969)
-- [CI run 31936873808](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31936873808)
+- [CI run 31937953173](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31937953173)
+- [CI run 31937950651](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/31937950651)
 
 已验证的范围是“可运行的开发/演示骨架、本地代码门禁和单实例分享安全”。这不等于 G1、G2、MVP、公测、生产放行或比赛提交候选。真实 OpenAI 四素材闭环、微信 `code2Session` 与 HTTPS 双设备闭环、正式内容审核、完整删除生命周期和生产基础设施仍未关闭。
 
@@ -38,8 +38,8 @@
 ### 2.2 GitHub 状态
 
 - 当前分支已推送到 `origin/codex/warm-letter-mvp`。
-- PR #1 保持草稿状态，最新远端 HEAD 为 `3a2d1b7`。
-- 本次新增状态文档会单独提交；工作树中 FIX-026 的代码与测试不纳入本次提交。
+- PR #1 保持草稿状态，最新远端 HEAD 为 `e9c5fbf`。
+- 工作树中 FIX-026 的代码与测试不纳入本次文档提交。
 
 ## 3. 当前放行判断
 
