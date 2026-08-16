@@ -75,16 +75,61 @@
   margin-top: 34rpx;
 }
 
+.recent-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10rpx;
+  margin-top: 18rpx;
+  padding: 26rpx 0;
+  border-top: 2rpx solid #cda9a2;
+  border-bottom: 2rpx solid #cda9a2;
+}
+
+.recent-error-title,
+.recent-error-message,
+.recent-error-hint {
+  display: block;
+}
+
+.recent-error-title {
+  color: #65352f;
+  font-size: 29rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.recent-error-message {
+  color: #4f5552;
+  font-size: 25rpx;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.recent-error-hint {
+  color: #68706c;
+  font-size: 23rpx;
+  line-height: 1.55;
+}
+
+.recent-retry {
+  min-width: 220rpx;
+  min-height: 88rpx;
+  margin-top: 6rpx;
+}
+
 .section-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 24rpx;
 }
 
 .section-note {
-  color: #7a7f7c;
-  font-size: 22rpx;
+  color: #535955;
+  font-size: 28rpx;
+  line-height: 1.45;
 }
 
 .letter-list {
@@ -111,21 +156,25 @@
 
 .letter-title,
 .letter-meta {
-  display: block;
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .letter-title {
-  font-size: 29rpx;
+  font-size: 30rpx;
   font-weight: 650;
+  line-height: 1.4;
 }
 
 .letter-meta {
   margin-top: 8rpx;
-  color: #747976;
-  font-size: 23rpx;
+  color: #616763;
+  font-size: 26rpx;
+  line-height: 1.5;
 }
 
 .row-arrow {

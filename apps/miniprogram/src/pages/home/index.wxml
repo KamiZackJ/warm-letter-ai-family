@@ -6,8 +6,8 @@
   <view class="brand-band">
     <text class="brand-name">暖笺</text>
     <text class="brand-line">把没来得及说的话，写成一封家书。</text>
-    <button class="primary-button main-action" bindtap="startLetter">写一封家书</button>
-    <button wx:if="{{demoEnabled}}" class="demo-link" bindtap="startDemo">快速演示完整流程</button>
+    <button class="primary-button main-action" loading="{{startingFlow}}" disabled="{{startingFlow}}" bindtap="startLetter">{{startingFlow ? '正在打开…' : '写一封家书'}}</button>
+    <button wx:if="{{demoEnabled}}" class="demo-link" disabled="{{startingFlow}}" bindtap="startDemo">快速演示完整流程</button>
   </view>
 
   <view class="trust-row" aria-label="隐私与内容说明">
@@ -27,11 +27,22 @@
       <text class="section-note">草稿会保存在本机</text>
     </view>
 
-    <view wx:if="{{loading}}" class="empty-state">正在整理家书…</view>
-    <view wx:elif="{{recentLetters.length === 0}}" class="empty-state">
+    <view wx:if="{{loadError}}" class="recent-error" aria-role="alert" aria-live="assertive">
+      <text class="recent-error-title">暂时无法读取最近家书</text>
+      <text class="recent-error-message">{{loadError}}</text>
+      <text class="recent-error-hint">可以继续写新家书；已保存的家书不会因此删除。</text>
+      <button
+        class="secondary-button recent-retry"
+        loading="{{loading}}"
+        disabled="{{loading}}"
+        bindtap="retryLetters"
+      >重新读取</button>
+    </view>
+    <view wx:if="{{loading && recentLetters.length === 0}}" class="empty-state" aria-live="polite">正在整理家书…</view>
+    <view wx:elif="{{recentLetters.length === 0 && !loadError}}" class="empty-state">
       还没有家书。添加几张照片或一段近况，就可以开始。
     </view>
-    <view wx:else class="letter-list">
+    <view wx:elif="{{recentLetters.length > 0}}" class="letter-list">
       <button
         wx:for="{{recentLetters}}"
         wx:key="id"
@@ -45,7 +56,7 @@
           <text class="letter-meta">{{item.dateLabel}} · {{item.intent.recipient}}</text>
         </view>
         <text class="status-pill">{{item.statusLabel}}</text>
-        <text class="row-arrow">›</text>
+        <text class="row-arrow" aria-hidden="true">›</text>
       </button>
     </view>
   </view>
