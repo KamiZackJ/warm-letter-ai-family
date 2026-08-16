@@ -101,6 +101,14 @@ function readIds(): string[] {
   return Array.isArray(value) ? (value as string[]) : [];
 }
 
+function isStaleLetterIdError(error: unknown): boolean {
+  return (
+    error instanceof HttpRequestError &&
+    error.statusCode === 404 &&
+    error.code === "LETTER_NOT_FOUND"
+  );
+}
+
 function saveGenerationJob(letterId: string, jobId?: string): void {
   const jobs = readRecord<string>(REAL_GENERATION_JOBS_KEY);
   if (jobId) jobs[letterId] = jobId;
@@ -230,8 +238,9 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
   };
 }
 
-async function ensureLogin(): Promise<void> {
-  if (wx.getStorageSync(ACCESS_TOKEN_KEY)) return;
+let loginInFlight: Promise<void> | null = null;
+
+async function loginWithWeChat(): Promise<void> {
   const loginResult = await new Promise<{ code: string }>((resolve, reject) => {
     wx.login({ success: resolve, fail: reject });
   });
@@ -246,9 +255,51 @@ async function ensureLogin(): Promise<void> {
   wx.setStorageSync(ACCESS_TOKEN_KEY, response.token);
 }
 
+async function ensureLogin(): Promise<void> {
+  if (wx.getStorageSync(ACCESS_TOKEN_KEY)) return;
+  if (!loginInFlight) {
+    loginInFlight = loginWithWeChat().finally(() => {
+      loginInFlight = null;
+    });
+  }
+  await loginInFlight;
+}
+
+function isUnauthorized(error: unknown): boolean {
+  return (
+    error instanceof HttpRequestError &&
+    error.statusCode === 401 &&
+    error.code === "UNAUTHORIZED"
+  );
+}
+
+function clearAccessTokenIfCurrent(accessToken: unknown): void {
+  if (wx.getStorageSync(ACCESS_TOKEN_KEY) === accessToken) {
+    wx.removeStorageSync(ACCESS_TOKEN_KEY);
+  }
+}
+
 async function authorized<T>(operation: () => Promise<T>): Promise<T> {
   await ensureLogin();
-  return operation();
+  const attemptedToken = wx.getStorageSync(ACCESS_TOKEN_KEY);
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isUnauthorized(error)) throw error;
+
+    // Protected API handlers authenticate before mutations; keyed writes reuse their closure key.
+    clearAccessTokenIfCurrent(attemptedToken);
+    await ensureLogin();
+    const retryToken = wx.getStorageSync(ACCESS_TOKEN_KEY);
+    try {
+      return await operation();
+    } catch (retryError) {
+      if (isUnauthorized(retryError)) {
+        clearAccessTokenIfCurrent(retryToken);
+      }
+      throw retryError;
+    }
+  }
 }
 
 async function getServerLetter(id: string): Promise<ServerLetter> {
@@ -298,10 +349,13 @@ export const realApi = {
       const presigned = await authorized(() =>
         request<{
           materialId: string;
-          uploadUrl: string;
-          headers: Record<string, string>;
+          uploadUrl?: string;
+          headers?: Record<string, string>;
+          completed?: boolean;
+          material?: ServerMaterial;
         }>("/materials/presign", {
           method: "POST",
+          headers: { "idempotency-key": material.id },
           data: {
             type: material.type === "voice" ? "audio" : material.type,
             filename: upload.filename,
@@ -309,11 +363,28 @@ export const realApi = {
           },
         }),
       );
-      await uploadBinary(
-        presigned.uploadUrl,
-        upload.localPath,
-        presigned.headers,
-      );
+      if (presigned.completed && presigned.material?.status === "READY") {
+        const paths = readRecord<string>(REAL_MEDIA_PATHS_KEY);
+        wx.setStorageSync(REAL_MEDIA_PATHS_KEY, {
+          ...paths,
+          [presigned.material.id]: upload.localPath,
+        });
+        return { ...mapMaterial(presigned.material), durationSeconds: material.durationSeconds };
+      }
+      if (!presigned.uploadUrl || !presigned.headers) {
+        throw new Error("上传服务没有返回可用的上传凭据");
+      }
+      try {
+        await uploadBinary(presigned.uploadUrl, upload.localPath, presigned.headers);
+      } catch (error) {
+        if (
+          !(error instanceof HttpRequestError) ||
+          error.statusCode !== 409 ||
+          error.code !== "UPLOAD_ALREADY_RECEIVED"
+        ) {
+          throw error;
+        }
+      }
       const completed = await authorized(() =>
         request<{ material: ServerMaterial }>("/materials/complete", {
           method: "POST",
@@ -331,6 +402,7 @@ export const realApi = {
     const response = await authorized(() =>
       request<{ material: ServerMaterial }>("/materials", {
         method: "POST",
+        headers: { "idempotency-key": material.id },
         data: {
           type: material.type,
           name: material.name,
@@ -346,15 +418,26 @@ export const realApi = {
   },
 
   async listLetters(): Promise<LetterSummary[]> {
+    const ids = readIds();
     const letters = await Promise.all(
-      readIds().map(async (id) => {
+      ids.map(async (id) => {
         try {
           return mapLetter(await getServerLetter(id));
-        } catch {
-          return null;
+        } catch (error) {
+          if (isStaleLetterIdError(error)) return null;
+          throw error;
         }
       }),
     );
+    if (letters.some((letter) => letter === null)) {
+      const staleIds = new Set(
+        ids.filter((_, index) => letters[index] === null),
+      );
+      wx.setStorageSync(
+        REAL_LETTER_IDS_KEY,
+        readIds().filter((id) => !staleIds.has(id)),
+      );
+    }
     return letters
       .filter((letter): letter is Letter => Boolean(letter))
       .map((letter) => ({
