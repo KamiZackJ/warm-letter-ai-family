@@ -56,6 +56,7 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 ## 进度与边界
 
 - [暖笺阶段成果展示中心（双击根目录 `暖笺_阶段成果展示.html` 即可打开）](./docs/presentation/index.html)
+- [可搬家压缩包目录说明（全部使用相对路径）](./docs/presentation/PORTABLE_BUNDLE_LAYOUT.md)
 - [2026-08-25 阶段成果汇报包（队内展示入口）](./docs/PHASE_DELIVERY_REPORT_2026-08-25.md)
 - [队内 10 分钟演示手册](./docs/INTERNAL_DEMO_RUNBOOK_2026-08-25.md)
 - [CASE-001 脱敏固定案例快照](./docs/evidence/2026-08-25/CASE_001_SAFE_SNAPSHOT.md)

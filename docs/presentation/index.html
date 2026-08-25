@@ -353,7 +353,7 @@
               <div class="console-action"><span>微信小程序创作端</span><button id="show-mini" type="button">查看导入路径</button></div>
             </div>
             <div class="path-field">
-              <label for="material-path">真实素材展示页路径（可改成队友电脑路径）</label>
+              <label for="material-path">真实素材展示页路径（压缩包默认使用相对路径）</label>
               <input id="material-path" value="C:\Users\11275\xwechat_files\wxid_d4fryu6a3ggs21_51cd\msg\file\2026-07\新建文件夹\warm-letter-ai-family\家书第二部分\家书第二部分\暖笺_真实素材家书展示.html" />
             </div>
           </div>
@@ -377,8 +377,12 @@
         toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
       }
       function pathToFileUrl(value) {
-        const normal = value.trim().replace(/\\/g, '/');
-        return 'file:///' + encodeURI(normal.replace(/^\/+/, ''));
+        const trimmed = value.trim();
+        if (/^[A-Za-z]:[\\/]/.test(trimmed)) {
+          const normal = trimmed.replace(/\\/g, '/');
+          return 'file:///' + encodeURI(normal.replace(/^\/+/, ''));
+        }
+        return new URL(trimmed.replace(/\\/g, '/'), window.location.href).href;
       }
       function openMaterial() {
         const value = document.querySelector('#material-path').value;
