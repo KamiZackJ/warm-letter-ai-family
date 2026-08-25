@@ -55,6 +55,9 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 
 ## 进度与边界
 
+- [2026-08-25 阶段成果汇报包（队内展示入口）](./docs/PHASE_DELIVERY_REPORT_2026-08-25.md)
+- [队内 10 分钟演示手册](./docs/INTERNAL_DEMO_RUNBOOK_2026-08-25.md)
+- [CASE-001 脱敏固定案例快照](./docs/evidence/2026-08-25/CASE_001_SAFE_SNAPSHOT.md)
 - [当前进度、推进计划与问题清单（2026-08-16）](./docs/CURRENT_PROGRESS_PLAN_ISSUES_2026-08-16.md)
 - [项目阶段状态](./docs/PROJECT_STATUS.md)
 - [2026-08-16 阶段进度、计划与问题](./docs/PROGRESS_2026-08-16.md)
