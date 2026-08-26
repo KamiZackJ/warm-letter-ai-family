@@ -55,6 +55,7 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 
 ## 进度与边界
 
+- [2026-08-26 阶段性交接说明（接手人先看这里）](./docs/HANDOFF_2026-08-26.md)
 - [互动产品演示（主展示入口，双击根目录 `暖笺_互动产品演示.html`）](./docs/product-demo/index.html)
 - [暖笺阶段成果展示中心（双击根目录 `暖笺_阶段成果展示.html` 即可打开）](./docs/presentation/index.html)
 - [可搬家压缩包目录说明（全部使用相对路径）](./docs/presentation/PORTABLE_BUNDLE_LAYOUT.md)
