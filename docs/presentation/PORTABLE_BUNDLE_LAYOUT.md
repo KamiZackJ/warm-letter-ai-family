@@ -25,3 +25,11 @@
 ```
 
 现场先让观看者操作产品体验包，再在被追问案例事实、隐私边界、三版家书或测试方法时打开证据附件包。照片和语音仅用于队内受控展示，不应再次上传到公开仓库或公开网盘。
+
+仓库可独立重建产品体验包，并会检查 ZIP 根目录的三个必需入口：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\create-product-demo-package.ps1
+```
+
+默认输出到 `D:\tmp\warm-letter-ai-family`。新电脑没有 D 盘时可显式传入 `-OutputRoot`；证据附件包含不入 Git 的受控原始素材，不能仅凭仓库重建。

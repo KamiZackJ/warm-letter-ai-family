@@ -12,7 +12,7 @@
 - Fastify API：素材上传与校验、家书状态机、来源追溯、分享重签/撤销和回复。
 - React H5：公开家书、真实图片与原始音频、系统朗读、来源展开、回复和失效状态。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
-- 自动化基线：全仓类型检查、合约/API 测试和生产构建；仓库同时提供 GitHub Actions 工作流，远端 CI 结果仍待发布后验证。
+- 自动化基线：Node `22.23.2` 下 contracts `17`、Web `70`、小程序 `125`、API `135`，共 `347` 项；类型检查、生产构建和 production bundle 校验均已纳入 GitHub Actions。实现基线 `f60e759` 的 [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095266241) 与 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095270181) 均通过。
 
 ## 仓库结构
 
@@ -26,18 +26,25 @@
 
 ## 本地运行
 
-需要 Node.js 22.20+ 和 pnpm 11+；仓库通过 `.node-version` 固定复验版本为 Node.js 22.23.2。
+固定使用 Node.js `22.23.2` 和 pnpm `11.19.0`；Node 24 不在当前支持范围。
 
 ```powershell
-pnpm install
+node --version
+pnpm --version
+pnpm install --frozen-lockfile
 pnpm check
 pnpm build
 ```
 
-分别启动 API 与 H5：
+API 与 H5 都是常驻进程，请分别在两个 PowerShell 窗口启动：
 
 ```powershell
+# 窗口 1
 pnpm dev:api
+```
+
+```powershell
+# 窗口 2
 pnpm dev:web
 ```
 
@@ -55,9 +62,10 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 
 ## 进度与边界
 
-- [2026-08-26 阶段性交接说明（接手人先看这里）](./docs/HANDOFF_2026-08-26.md)
-- [互动产品演示（主展示入口，双击根目录 `暖笺_互动产品演示.html`）](./docs/product-demo/index.html)
-- [暖笺阶段成果展示中心（双击根目录 `暖笺_阶段成果展示.html` 即可打开）](./docs/presentation/index.html)
+- [2026-08-28 当前交接状态（接手人先看这里）](./docs/CURRENT_HANDOFF_STATUS_2026-08-28.md)
+- [互动产品演示（主展示入口，双击即可离线打开）](./暖笺_互动产品演示.html)
+- [2026-08-26 阶段性交接说明（历史快照）](./docs/HANDOFF_2026-08-26.md)
+- [暖笺阶段成果展示中心（双击根目录即可离线打开）](./暖笺_阶段成果展示.html)
 - [可搬家压缩包目录说明（全部使用相对路径）](./docs/presentation/PORTABLE_BUNDLE_LAYOUT.md)
 - [2026-08-25 阶段成果汇报包（队内展示入口）](./docs/PHASE_DELIVERY_REPORT_2026-08-25.md)
 - [队内 10 分钟演示手册](./docs/INTERNAL_DEMO_RUNBOOK_2026-08-25.md)
