@@ -11,7 +11,7 @@
 | 项目 | 当前事实 |
 | --- | --- |
 | 分支 | `codex/warm-letter-mvp` |
-| 已验证实现基线 | `730fe47`（当前工作树含待提交的 CASE-001 展示、运行时门禁与交接更新） |
+| 已验证实现基线 | `95fc9d9`（CASE-001 展示、运行时门禁与交接更新已提交） |
 | 本地运行时 | Node `22.23.2`、pnpm `11.19.0` |
 | 自动回归 | contracts `17/17`、Web `75/75`、小程序 `125/125`、API `138/138`，共 `355/355` |
 | 本地工程门禁 | frozen install、`pnpm check`、`pnpm build`、production bundle verifier、`git diff --check` 通过 |
