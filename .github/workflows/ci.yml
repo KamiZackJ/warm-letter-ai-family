@@ -23,3 +23,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm build
+      - run: pnpm --filter @warm-letter/web verify:production-bundle
+        env:
+          WARM_LETTER_TMP_DIR: ${{ runner.temp }}

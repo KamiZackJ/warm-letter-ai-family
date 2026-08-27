@@ -150,4 +150,19 @@ describe("mock API idempotency", () => {
     ).rejects.toThrow("只有原始 AI 整理段落可以保留 AI 归因");
     expect(getLetters()[0]?.draft).toEqual(draft);
   });
+
+  it("normalizes valid signatures and rejects empty mock signatures", async () => {
+    const letter = confirmedLetter("letter-signature-validation");
+    letter.status = "EDITING";
+    saveLetters([letter]);
+
+    const updated = await settle(
+      mockApi.updateDraft(letter.id, { ...letter.draft!, signature: "  阿宁  " }),
+    );
+    expect(updated.draft?.signature).toBe("阿宁");
+
+    await expect(
+      mockApi.updateDraft(letter.id, { ...updated.draft!, signature: "   " }),
+    ).rejects.toThrow("署名必须为 1 到 30 个字符");
+  });
 });

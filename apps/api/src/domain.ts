@@ -62,6 +62,7 @@ export interface LetterDraft {
   greeting: string;
   paragraphs: DraftParagraph[];
   closing: string;
+  signature: string;
   provider: string;
   generatedAt: string;
 }

@@ -122,6 +122,7 @@ describe("OpenAIResponsesProvider", () => {
     expect(draft.provider).toBe("openai-responses:resolved-test-model");
     expect(draft.paragraphs[0]?.sourceRefs).toEqual([materialIds.text]);
     expect(draft.version).toBe(1);
+    expect(draft.signature).toBe("想念你的我");
     expect(vi.mocked(client.responses.parse).mock.calls[0]?.[0]).toMatchObject({ store: false });
   });
 

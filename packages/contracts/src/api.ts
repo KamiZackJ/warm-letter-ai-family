@@ -126,6 +126,7 @@ export const DraftPatchSchema = z
       .max(30)
       .optional(),
     closing: z.string().trim().min(1).max(500).optional(),
+    signature: z.string().trim().min(1).max(30).optional(),
   })
   .strict();
 

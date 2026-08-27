@@ -224,6 +224,7 @@ describe("Warm Letter API", () => {
       letter: {
         state: string;
         draft: {
+          signature: string;
           paragraphs: Array<{
             text: string;
             sourceRefs: string[];
@@ -233,6 +234,7 @@ describe("Warm Letter API", () => {
       };
     }>(generatedResponse).letter;
     expect(generated.state).toBe("EDITING");
+    expect(generated.draft.signature).toBe("想念你的我");
     const tracedSources = new Set(generated.draft.paragraphs.flatMap((item) => item.sourceRefs));
     expect(tracedSources).toEqual(new Set(materialIds));
     expect(generated.draft.paragraphs.every((item) => item.sourceAttribution === "ai")).toBe(true);
@@ -308,10 +310,23 @@ describe("Warm Letter API", () => {
     const reviewed = json<{
       letter: {
         draft: {
+          signature: string;
           paragraphs: Array<{ text: string; sourceRefs: string[]; sourceAttribution?: string }>;
         };
       };
     }>(reviewedResponse).letter;
+
+    const signatureResponse = await app.inject({
+      method: "PATCH",
+      url: `/v1/letters/${letterId}`,
+      headers: auth(token),
+      payload: { draft: { signature: "  Your Ning  " } },
+    });
+    expect(signatureResponse.statusCode).toBe(200);
+    expect(
+      json<{ letter: { draft: { signature: string } } }>(signatureResponse).letter.draft
+        .signature,
+    ).toBe("Your Ning");
 
     const reclassifyAsAiResponse = await app.inject({
       method: "PATCH",
@@ -340,12 +355,13 @@ describe("Warm Letter API", () => {
     expect(confirmResponse.statusCode).toBe(200);
     expect(confirmResponse.headers["cache-control"]).toBe("no-store");
     const confirmed = json<{
-      letter: { state: string };
+      letter: { state: string; confirmedDraft: { signature: string } };
       shareToken: string;
       shareExpiresAt: string;
       readerUrl: string;
     }>(confirmResponse);
     expect(confirmed.letter.state).toBe("PUBLISHED");
+    expect(confirmed.letter.confirmedDraft.signature).toBe("Your Ning");
     expect(confirmed.shareToken).toHaveLength(43);
     expect(Date.parse(confirmed.shareExpiresAt)).toBeGreaterThan(Date.now());
     expect(confirmed.letter).not.toHaveProperty("shareToken");
@@ -357,6 +373,8 @@ describe("Warm Letter API", () => {
     const reader = json<{
       reader: {
         draft: {
+          closing: string;
+          signature: string;
           paragraphs: Array<{
             text: string;
             sourceRefs: string[];
@@ -366,6 +384,8 @@ describe("Warm Letter API", () => {
         sources: Array<{ id: string; type: string; mediaUrl?: string; mediaExpiresAt?: string }>;
       };
     }>(readerResponse).reader;
+    expect(reader.draft.signature).toBe("Your Ning");
+    expect(reader.draft.signature).not.toBe(reader.draft.closing);
     expect(reader.draft.paragraphs[0]?.text).toBe(
       "I edited this paragraph before sharing it with you.",
     );

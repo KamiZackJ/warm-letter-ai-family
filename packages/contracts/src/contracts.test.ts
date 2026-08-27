@@ -25,6 +25,7 @@ const draft = {
   greeting: "妈妈：",
   paragraphs: [{ id, text: "今天路过了我们常去的公园。", sourceRefs: [otherId] }],
   closing: "祝好",
+  signature: "想念你的我",
   provider: "fake-ai",
   generatedAt: timestamp,
 };
@@ -143,6 +144,21 @@ describe("letter and public response contracts", () => {
     expect(parsed.provider).toBe("fake-ai");
     expect(parsed.aiDisclosure?.isAiGenerated).toBe(true);
     expect(parsed.paragraphs[0]?.sourceRefs).toEqual([otherId]);
+  });
+
+  it("requires a bounded signature in drafts and accepts signature edits", () => {
+    const { signature: _signature, ...unsignedDraft } = draft;
+
+    expect(LetterDraftSchema.safeParse(unsignedDraft).success).toBe(false);
+    expect(
+      UpdateLetterRequestSchema.safeParse({ draft: { signature: "阿宁" } }).success,
+    ).toBe(true);
+    expect(
+      UpdateLetterRequestSchema.safeParse({ draft: { signature: "   " } }).success,
+    ).toBe(false);
+    expect(
+      UpdateLetterRequestSchema.safeParse({ draft: { signature: "署".repeat(31) } }).success,
+    ).toBe(false);
   });
 
   it("carries transparent paragraph attribution while accepting legacy AI paragraphs", () => {

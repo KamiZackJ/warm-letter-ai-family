@@ -78,7 +78,7 @@ export interface EditLetterInput {
   recipient?: string;
   materialIds?: string[];
   settings?: Partial<LetterSettings>;
-  draft?: Partial<Pick<LetterDraft, "title" | "greeting" | "closing">> & {
+  draft?: Partial<Pick<LetterDraft, "title" | "greeting" | "closing" | "signature">> & {
     paragraphs?: Array<{
       text: string;
       sourceRefs?: string[];
@@ -347,6 +347,7 @@ export class WarmLetterService {
       throw new ApiError(409, "LETTER_NOT_READY", "请先生成并确认家书草稿");
     }
     this.validateReadyMaterials(userId, letter.materialIds);
+    letter.draft.signature = this.normalizeSignature(letter.draft.signature);
     for (const paragraph of letter.draft.paragraphs) {
       const sourceAttribution = paragraph.sourceAttribution ?? "ai";
       if (sourceAttribution === "needs-review") {
@@ -580,12 +581,17 @@ export class WarmLetterService {
 
     try {
       const materials = letter.materialIds.map((id) => this.requireReadyMaterial(letter.userId, id));
-      letter.draft = await this.aiProvider.generateLetter({
+      const previousSignature = letter.draft?.signature;
+      const generatedDraft = await this.aiProvider.generateLetter({
         recipient: letter.recipient,
         settings: letter.settings,
         materials,
         version: (letter.draft?.version ?? 0) + 1,
       });
+      letter.draft = {
+        ...generatedDraft,
+        signature: this.normalizeSignature(previousSignature ?? generatedDraft.signature),
+      };
       this.transition(letter, "EDITING");
       letter.updatedAt = new Date().toISOString();
       this.repository.saveLetter(letter);
@@ -697,8 +703,23 @@ export class WarmLetterService {
       title: input.title?.trim() || current.title,
       greeting: input.greeting?.trim() || current.greeting,
       closing: input.closing?.trim() || current.closing,
+      signature:
+        input.signature === undefined
+          ? current.signature
+          : this.normalizeSignature(input.signature),
       paragraphs: paragraphs ?? current.paragraphs,
     };
+  }
+
+  private normalizeSignature(value: unknown): string {
+    if (typeof value !== "string") {
+      throw new ApiError(400, "INVALID_DRAFT", "署名必须是字符串");
+    }
+    const signature = value.trim();
+    if (!signature || signature.length > 30) {
+      throw new ApiError(400, "INVALID_DRAFT", "署名必须为 1 到 30 个字符");
+    }
+    return signature;
   }
 
   private parseParagraphSourceAttribution(

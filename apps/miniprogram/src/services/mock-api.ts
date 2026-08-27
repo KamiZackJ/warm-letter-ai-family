@@ -140,8 +140,13 @@ function generateDraft(letter: Letter): LetterDraft {
 }
 
 function normalizeDraftAttribution(previous: LetterDraft | undefined, draft: LetterDraft): LetterDraft {
+  const signature = draft.signature.trim();
+  if (!signature || signature.length > 30) {
+    throw new Error("署名必须为 1 到 30 个字符");
+  }
   return {
     ...draft,
+    signature,
     paragraphs: draft.paragraphs.map((paragraph, index) => {
       const previousParagraph = previous?.paragraphs[index];
       const textChanged = !previousParagraph || previousParagraph.text !== paragraph.text;

@@ -44,6 +44,7 @@ const serverLetter = {
     greeting: "妈妈：",
     paragraphs: [{ id: "paragraph-1", text: "今天一切顺利。", sourceRefs: [] }],
     closing: "祝好",
+    signature: "想念你的我",
   },
   createdAt: timestamp,
   updatedAt: timestamp,

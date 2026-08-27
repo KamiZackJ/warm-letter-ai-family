@@ -268,8 +268,12 @@ Page({
     const hasEmptyParagraph = this.data.draft.paragraphs.some(
       (paragraph) => !paragraph.text.trim(),
     );
-    if (!this.data.draft.title.trim() || hasEmptyParagraph) {
-      wx.showToast({ title: "请补全标题和正文", icon: "none" });
+    if (
+      !this.data.draft.title.trim() ||
+      !this.data.draft.signature.trim() ||
+      hasEmptyParagraph
+    ) {
+      wx.showToast({ title: "请补全标题、正文和署名", icon: "none" });
       return false;
     }
     if (requireResolvedSources && draftNeedsSourceReview(this.data.draft.paragraphs)) {

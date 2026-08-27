@@ -53,6 +53,7 @@ function serverLetter(id: string, updatedAt = timestamp) {
       greeting: "Dear Mom,",
       paragraphs: [{ id: "paragraph-1", text: "Everything is well.", sourceRefs: [] }],
       closing: "With love",
+      signature: "Your child",
     },
     createdAt: timestamp,
     updatedAt,

@@ -97,6 +97,13 @@ describe("reader interface design gates", () => {
     );
   });
 
+  it("renders the confirmed closing and signature as separate fields", () => {
+    expect(mainSource).toContain('<p className="closing">{reader.draft.closing}</p>');
+    expect(mainSource).toContain('<p className="signature">{reader.draft.signature}</p>');
+    expect(mainSource).toContain("reader.draft.signature,");
+    expect(cssRule(stylesSource, "\\.signature")).toContain("text-align: right");
+  });
+
   it("keeps the three font controls in one stable row", () => {
     const controlRule = cssRule(stylesSource, "\\.reader-font-size-control");
 

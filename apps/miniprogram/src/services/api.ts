@@ -39,6 +39,7 @@ type ServerDraft = {
     sourceAttribution?: ParagraphSourceAttribution;
   }>;
   closing: string;
+  signature: string;
 };
 
 type ServerLetter = {
@@ -89,7 +90,6 @@ type ServerReader = {
 
 const REAL_LETTER_IDS_KEY = storageKey("real_letter_ids");
 const REAL_INTENTS_KEY = storageKey("real_intents");
-const REAL_SIGNATURES_KEY = storageKey("real_signatures");
 const REAL_MEDIA_PATHS_KEY = storageKey("real_media_paths");
 const REAL_SHARE_TOKENS_KEY = storageKey("real_share_tokens");
 const REAL_GENERATION_JOBS_KEY = storageKey("real_generation_jobs");
@@ -194,15 +194,14 @@ function mapReaderSource(source: ServerReaderSource): ReaderSource {
   };
 }
 
-function mapDraft(letterId: string, draft?: ServerDraft): LetterDraft | undefined {
+function mapDraft(draft?: ServerDraft): LetterDraft | undefined {
   if (!draft) return undefined;
-  const signatures = readRecord<string>(REAL_SIGNATURES_KEY);
   return {
     title: draft.title,
     salutation: draft.greeting,
     paragraphs: draft.paragraphs,
     closing: draft.closing,
-    signature: signatures[letterId] || "想念你的我",
+    signature: draft.signature,
   };
 }
 
@@ -230,7 +229,7 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
     status: serverLetter.state,
     materialIds: serverLetter.materialIds,
     intent: intents[serverLetter.id] || fallbackIntent(serverLetter),
-    draft: mapDraft(serverLetter.id, draft),
+    draft: mapDraft(draft),
     replies: replies.map((reply) => ({
       id: reply.id,
       text: reply.text,
@@ -324,11 +323,6 @@ async function getServerReplies(id: string): Promise<ServerReply[]> {
 function saveIntent(letterId: string, intent: CreateLetterInput["intent"]): void {
   const intents = readRecord<CreateLetterInput["intent"]>(REAL_INTENTS_KEY);
   wx.setStorageSync(REAL_INTENTS_KEY, { ...intents, [letterId]: intent });
-}
-
-function saveSignature(letterId: string, signature: string): void {
-  const signatures = readRecord<string>(REAL_SIGNATURES_KEY);
-  wx.setStorageSync(REAL_SIGNATURES_KEY, { ...signatures, [letterId]: signature });
 }
 
 function saveShareToken(letterId: string, shareToken: string): void {
@@ -507,7 +501,7 @@ export const realApi = {
     return {
       id: response.reader.id,
       recipient: response.reader.recipient,
-      draft: mapDraft(response.reader.id, response.reader.draft)!,
+      draft: mapDraft(response.reader.draft)!,
       sources: response.reader.sources.map(mapReaderSource),
       replies: response.reader.replies,
       publishedAt: response.reader.publishedAt,
@@ -584,7 +578,6 @@ export const realApi = {
   },
 
   async updateDraft(id: string, draft: LetterDraft): Promise<Letter> {
-    saveSignature(id, draft.signature);
     const response = await authorized(() =>
       request<{ letter: ServerLetter }>(`/letters/${id}`, {
         method: "PATCH",
@@ -594,6 +587,7 @@ export const realApi = {
             greeting: draft.salutation,
             paragraphs: draft.paragraphs,
             closing: draft.closing,
+            signature: draft.signature,
           },
         },
       }),

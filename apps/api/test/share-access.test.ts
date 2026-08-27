@@ -11,6 +11,7 @@ const draft: LetterDraft = {
   greeting: "亲爱的妈妈：",
   paragraphs: [{ id: "p-1", text: "我最近一切顺利。", sourceRefs: ["material-1"] }],
   closing: "周末再联系。",
+  signature: "想念你的我",
   provider: "test",
   generatedAt: "2026-08-15T00:00:00.000Z",
 };
@@ -157,6 +158,42 @@ describe("share access lifecycle", () => {
       sourceAttribution: "user-supplied",
       sourceRefs: [],
     });
+  });
+
+  it("freezes the edited signature in the confirmed reader snapshot", () => {
+    const now = () => new Date("2026-08-15T00:00:00.000Z");
+    const { repository, service, letter } = setup(now);
+    const edited = service.editLetter("user-1", letter.id, {
+      draft: { signature: "  永远想你的阿宁  " },
+    });
+    expect(edited.draft?.signature).toBe("永远想你的阿宁");
+
+    const published = service.confirmAndPublish("user-1", letter.id);
+    expect(published.letter.confirmedDraft?.signature).toBe("永远想你的阿宁");
+    expect(service.getReader(letter.id, published.shareToken).draft.signature).toBe(
+      "永远想你的阿宁",
+    );
+
+    repository.getLetter(letter.id)!.draft!.signature = "不应进入确认版本";
+    expect(service.getReader(letter.id, published.shareToken).draft.signature).toBe(
+      "永远想你的阿宁",
+    );
+  });
+
+  it("rejects empty and overlong signatures", () => {
+    const now = () => new Date("2026-08-15T00:00:00.000Z");
+    const { service, letter } = setup(now);
+
+    expectApiError(
+      () => service.editLetter("user-1", letter.id, { draft: { signature: "   " } }),
+      "INVALID_DRAFT",
+      400,
+    );
+    expectApiError(
+      () => service.editLetter("user-1", letter.id, { draft: { signature: "署".repeat(31) } }),
+      "INVALID_DRAFT",
+      400,
+    );
   });
 
   it("revokes old links when reissuing and supports explicit revocation", async () => {

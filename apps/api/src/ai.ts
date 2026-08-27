@@ -15,6 +15,8 @@ import type { ResponseInputContent } from "openai/resources/responses/responses"
 import { z } from "zod";
 import type { LetterDraft, LetterSettings, Material } from "./domain.js";
 
+const defaultLetterSignature = "想念你的我";
+
 export interface GenerateLetterInput {
   recipient: string;
   settings: LetterSettings;
@@ -75,6 +77,7 @@ export class FakeAIProvider implements AIProvider {
       greeting: `亲爱的${input.recipient}：`,
       paragraphs,
       closing: "愿你平安顺心，等我们下次再慢慢聊。",
+      signature: defaultLetterSignature,
       provider: this.name,
       generatedAt: new Date().toISOString(),
     };
@@ -309,6 +312,7 @@ export class OpenAIResponsesProvider implements AIProvider {
       greeting: requiredText(parsed.greeting, "问候语"),
       paragraphs,
       closing: requiredText(parsed.closing, "结尾"),
+      signature: defaultLetterSignature,
       provider: `openai-responses:${responseModel}`,
       generatedAt: new Date().toISOString(),
     };

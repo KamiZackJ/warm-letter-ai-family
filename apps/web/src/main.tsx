@@ -70,6 +70,7 @@ type ReaderData = {
     greeting: string;
     paragraphs: LetterSection[];
     closing: string;
+    signature: string;
     provider?: string;
   };
   publishedAt: string;
@@ -134,7 +135,8 @@ const demoReader: ReaderData | null = __WARM_LETTER_DEMO_BUILD__
         sourceRefs: ["note", "voice"],
       },
     ],
-    closing: "想你的，阿宁",
+    closing: "愿你平安顺心，等我们下次再慢慢聊。",
+    signature: "想你的，阿宁",
     provider: "demo-ai",
   },
   publishedAt: "2026-08-14T10:00:00.000Z",
@@ -168,6 +170,7 @@ const emptyReader: ReaderData = {
     greeting: "",
     paragraphs: [],
     closing: "",
+    signature: "",
   },
   publishedAt: "",
   sources: [],
@@ -533,6 +536,7 @@ function App() {
         reader.draft.greeting,
         ...reader.draft.paragraphs.map((paragraph) => paragraph.text),
         reader.draft.closing,
+        reader.draft.signature,
       ].join("。"),
     );
     utterance.lang = "zh-CN";
@@ -929,7 +933,8 @@ function App() {
               </div>
             </div>
           ))}
-          <p className="signature">{reader.draft.closing}</p>
+          <p className="closing">{reader.draft.closing}</p>
+          <p className="signature">{reader.draft.signature}</p>
         </div>
 
         <section className="source-panel">

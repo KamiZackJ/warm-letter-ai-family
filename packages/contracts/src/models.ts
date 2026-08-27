@@ -62,6 +62,7 @@ export const LetterDraftSchema = z
     greeting: z.string().trim().min(1).max(500),
     paragraphs: z.array(DraftParagraphSchema).min(1).max(30),
     closing: z.string().trim().min(1).max(500),
+    signature: z.string().trim().min(1).max(30),
     provider: z.string().trim().min(1).max(100),
     generatedAt: TimestampSchema,
     aiDisclosure: AiDisclosureSchema.optional(),
