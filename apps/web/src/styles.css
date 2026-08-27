@@ -252,6 +252,22 @@ h2 {
   margin-bottom: 28px;
 }
 
+.case-provenance {
+  width: fit-content;
+  max-width: 100%;
+  margin: -14px auto 24px;
+  padding: 6px 10px;
+  color: #53685f;
+  background: #e7eee9;
+  border: 1px solid #c6d6ca;
+  border-radius: 4px;
+  font-family: var(--warm-font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .voice-bar {
   min-height: 72px;
   display: grid;
@@ -327,6 +343,14 @@ h2 {
   overflow: hidden;
 }
 
+.memory-photo-layout-portrait .memory-photo-frame {
+  aspect-ratio: 720 / 1020;
+}
+
+.memory-photo-layout-landscape .memory-photo-frame {
+  aspect-ratio: 4 / 3;
+}
+
 .memory-photo-screenshot .memory-photo-frame {
   aspect-ratio: 3 / 4;
   background: #edf1f2;
@@ -349,6 +373,16 @@ h2 {
 
 .memory-photo-screenshot img {
   object-fit: contain;
+  object-position: center;
+}
+
+.memory-photo-frame img.memory-photo-image-contain {
+  object-fit: contain;
+  object-position: center;
+}
+
+.memory-photo-frame img.memory-photo-image-cover {
+  object-fit: cover;
   object-position: center;
 }
 

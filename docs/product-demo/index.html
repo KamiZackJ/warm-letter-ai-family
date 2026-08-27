@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="暖笺互动产品演示：从素材到家书阅读与回复的本地可操作闭环。" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='16' fill='%2320574d'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' fill='white'%3E%E7%AC%BA%3C/text%3E%3C/svg%3E" />
     <title>暖笺 | 互动产品演示</title>
     <style>
       :root {
@@ -118,6 +119,8 @@
         line-height: 1.6;
       }
       .demo-note b { color: #1f556a; white-space: nowrap; }
+      .demo-note a { flex: none; color: #1f556a; font-weight: 750; text-underline-offset: 3px; }
+      .demo-note a:hover { color: var(--pine); }
 
       .journey {
         display: grid;
@@ -188,17 +191,24 @@
         min-height: 116px;
         margin-top: 12px;
         border: 1px solid var(--line);
-        background: #dde5e4;
+        background: var(--paper-muted);
       }
       .privacy-view::before {
         position: absolute;
-        inset: 20px 13px 17px;
-        content: "";
-        background:
-          linear-gradient(90deg, transparent 0 4%, #78969a 4% 6%, transparent 6% 35%, #78969a 35% 37%, transparent 37% 66%, #78969a 66% 68%, transparent 68% 96%, #78969a 96% 98%, transparent 98%),
-          repeating-linear-gradient(0deg, #f3d972 0 17px, #4e8a81 17px 26px, #e68162 26px 44px, #eceee9 44px 49px);
-        border: 4px solid #47686a;
+        inset: 0;
+        content: "受控媒体未装入\A 请打开受控 CASE-001 包查看真实照片";
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+        text-align: center;
+        white-space: pre-line;
       }
+      .privacy-view.has-media { min-height: 260px; background: #16231f; }
+      .privacy-view.has-media::before { display: none; }
+      .privacy-view img { display: block; width: 100%; height: 100%; min-height: 260px; max-height: 360px; object-fit: contain; }
       .privacy-mask {
         position: absolute;
         right: 6px;
@@ -209,6 +219,12 @@
         font-family: var(--mono);
         font-size: 9px;
       }
+      .source-audio { margin-top: 10px; padding: 10px; border: 1px solid var(--line); background: var(--paper-muted); }
+      .source-audio b, .source-audio span { display: block; }
+      .source-audio b { font-size: 12px; }
+      .source-audio span { margin: 3px 0 8px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+      .source-audio audio { display: block; width: 100%; height: 34px; }
+      .source-audio a { display: inline-flex; align-items: center; min-height: 44px; margin-top: 5px; color: var(--pine); font-size: 11px; font-weight: 700; }
       .rail-footer { margin-top: 18px; padding-top: 13px; border-top: 1px solid var(--line); }
 
       .composer { position: relative; min-height: 620px; }
@@ -223,7 +239,7 @@
       .empty-state h2 { margin: 0; font-family: var(--display); font-size: 25px; }
       .empty-state p { margin: 12px auto 22px; color: var(--muted); font-size: 14px; line-height: 1.8; }
       .primary-button, .secondary-button, .state-action {
-        min-height: 40px;
+        min-height: 44px;
         border-radius: 4px;
         font-size: 13px;
         font-weight: 700;
@@ -232,13 +248,23 @@
       .primary-button:hover:not(:disabled) { background: #163f38; }
       .secondary-button { padding: 0 13px; border: 1px solid var(--line-dark); color: var(--ink); background: var(--paper); }
       .secondary-button:hover:not(:disabled) { border-color: var(--pine); color: var(--pine); }
+      .draft-picker { max-width: 670px; margin: 0 auto 12px; }
+      .draft-picker-label { display: flex; justify-content: space-between; gap: 12px; margin: 0 0 7px; color: var(--muted); font-size: 11px; }
+      .draft-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line-dark); background: var(--paper-muted); }
+      .draft-tab { min-height: 52px; padding: 7px 9px; border: 0; border-right: 1px solid var(--line); color: var(--muted); background: transparent; text-align: left; }
+      .draft-tab:last-child { border-right: 0; }
+      .draft-tab b, .draft-tab span { display: block; }
+      .draft-tab b { color: var(--ink); font-size: 12px; }
+      .draft-tab span { margin-top: 2px; font-size: 10px; }
+      .draft-tab.active { color: #fff; background: var(--pine); }
+      .draft-tab.active b { color: #fff; }
       .draft-sheet { max-width: 670px; margin: 0 auto; padding: 28px clamp(18px, 4vw, 48px) 34px; border: 1px solid #d8ddd7; background: var(--paper); box-shadow: 7px 8px 0 rgba(32, 87, 77, 0.09); }
       .letter-date { color: var(--muted); font-family: var(--mono); font-size: 11px; text-align: right; }
       .letter-title { margin: 24px 0 22px; font-family: var(--display); font-size: 29px; line-height: 1.25; text-align: center; }
       .letter-greeting, .letter-closing { margin: 16px 0; color: #30433d; font-size: 15px; line-height: 1.7; }
       .paragraph-wrap { position: relative; margin: 16px 0; padding-left: 16px; border-left: 3px solid transparent; }
       .paragraph-wrap.active { border-left-color: var(--sun); }
-      .paragraph-editor { display: block; width: 100%; min-height: 92px; resize: vertical; overflow: hidden; padding: 5px 7px; border: 1px solid transparent; border-radius: 3px; color: var(--ink); background: transparent; font-family: var(--display); font-size: 17px; line-height: 1.9; }
+      .paragraph-editor { display: block; width: 100%; min-height: 92px; resize: vertical; overflow: auto; padding: 5px 7px; border: 1px solid transparent; border-radius: 3px; color: var(--ink); background: transparent; font-family: var(--display); font-size: 17px; line-height: 1.9; }
       .paragraph-editor:hover { background: var(--paper-muted); }
       .paragraph-editor:focus { border-color: var(--pine); outline: none; background: #fff; }
       .paragraph-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 6px; padding-left: 7px; }
@@ -259,6 +285,9 @@
       }
       .source-review h3 { margin: 0 0 5px; font-size: 13px; }
       .source-review p { margin: 0; color: #70473d; font-size: 12px; line-height: 1.55; }
+      .review-source-options { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+      .review-source-option { display: inline-flex; align-items: center; min-height: 44px; gap: 8px; padding: 5px 10px; border: 1px solid #d6b6ab; color: #70473d; background: #fff; font-size: 11px; }
+      .review-source-option input { width: 20px; height: 20px; margin: 0; accent-color: var(--pine); }
       .review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
       .state-action { padding: 0 10px; border: 1px solid var(--line-dark); color: var(--ink); background: #fff; font-size: 12px; }
       .state-action:hover { border-color: var(--pine); color: var(--pine); }
@@ -296,9 +325,9 @@
       .reader-phone { overflow: hidden; border: 9px solid #18342e; border-radius: 32px; background: #f8faf7; box-shadow: 0 24px 64px rgba(23, 39, 35, 0.25); }
       .phone-top { display: flex; align-items: center; justify-content: space-between; min-height: 58px; padding: 0 14px; color: #fff; background: #18342e; }
       .phone-title { font-size: 14px; font-weight: 700; }
-      .phone-icon { width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.45); border-radius: 50%; color: #fff; background: transparent; font-size: 12px; }
+      .phone-icon { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid rgba(255,255,255,.45); border-radius: 50%; color: #fff; background: transparent; font-size: 12px; }
       .reader-controls { display: flex; justify-content: space-between; gap: 6px; padding: 11px 13px; border-bottom: 1px solid #d7ddd8; background: #fff; }
-      .reader-control { flex: 1; min-height: 31px; border: 1px solid #cdd7d0; border-radius: 3px; color: #325047; background: #f6f8f5; font-size: 11px; }
+      .reader-control { flex: 1; min-height: 44px; border: 1px solid #cdd7d0; border-radius: 3px; color: #325047; background: #f6f8f5; font-size: 11px; }
       .reader-control.active { color: #fff; background: var(--pine); border-color: var(--pine); }
       .reader-content { min-height: 530px; padding: 23px 20px; }
       .reader-content.size-large { font-size: 18px; }
@@ -308,20 +337,29 @@
       .reader-content.size-large .reader-title { font-size: 28px; }
       .reader-content.size-extra .reader-title { font-size: 30px; }
       .reader-letter { color: #263c35; font-family: var(--display); font-size: 16px; line-height: 1.95; }
+      .reader-content.size-large .reader-letter { font-size: 18px; }
+      .reader-content.size-extra .reader-letter { font-size: 20px; }
       .reader-letter p { margin: 16px 0; }
+      .reader-case-photo { overflow: hidden; margin: 14px 0 20px; border: 1px solid #cfd8d3; background: #16231f; }
+      .reader-case-photo img { display: block; width: 100%; max-height: 360px; object-fit: contain; }
+      .reader-media-caption { margin: 0; padding: 7px 9px; color: var(--muted); background: #f1f5f1; font-family: var(--body); font-size: 10px; line-height: 1.5; }
       .reader-source { display: flex; flex-wrap: wrap; gap: 5px; margin: -8px 0 13px; }
       .reader-source .source-tag { font-size: 10px; }
       .voice-bar { display: flex; align-items: center; gap: 9px; margin: 20px 0; padding: 10px; border: 1px solid #cfd8d3; background: #f1f5f1; }
-      .voice-button { display: grid; flex: 0 0 auto; width: 31px; height: 31px; place-items: center; border: 0; border-radius: 50%; color: #fff; background: var(--sky); }
+      .voice-button { display: grid; flex: 0 0 auto; width: 44px; height: 44px; place-items: center; border: 0; border-radius: 50%; color: #fff; background: var(--sky); }
       .voice-line { flex: 1; height: 3px; background: #b5c9d0; }
       .voice-line span { display: block; width: var(--voice-progress, 0%); height: 3px; background: var(--sky); transition: width .3s ease; }
       .voice-time { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+      .voice-bar.real-audio { display: block; }
+      .voice-bar.real-audio b { display: block; margin-bottom: 7px; font-family: var(--body); font-size: 11px; }
+      .voice-bar.real-audio audio { display: block; width: 100%; height: 36px; }
+      .voice-bar.real-audio a { display: inline-flex; align-items: center; min-height: 44px; margin-top: 5px; color: var(--pine); font-size: 11px; font-weight: 700; }
       .reader-signature { text-align: right; }
       .reply-area { padding: 14px; border-top: 1px solid #d7ddd8; background: #fff; }
       .reply-area h2 { margin: 0 0 8px; font-size: 14px; }
       .reply-form { display: flex; gap: 7px; }
       .reply-input { min-width: 0; flex: 1; min-height: 34px; padding: 0 9px; border: 1px solid #c8d3cc; border-radius: 3px; background: #fff; font-size: 12px; }
-      .reply-send { width: 36px; min-height: 34px; border: 1px solid var(--pine); border-radius: 3px; color: #fff; background: var(--pine); }
+      .reply-send { width: 44px; min-height: 44px; border: 1px solid var(--pine); border-radius: 3px; color: #fff; background: var(--pine); }
       .reply-list { display: grid; gap: 7px; margin-top: 12px; }
       .reply { padding: 8px 9px; border-left: 3px solid var(--sun); background: #fbf7ea; color: #4d482e; font-size: 12px; line-height: 1.5; }
       .reader-right { display: grid; gap: 16px; }
@@ -370,14 +408,16 @@
         .rail { order: 1; }
         .composer { order: 2; min-height: 0; }
         .inspector { order: 3; grid-column: auto; grid-template-columns: 1fr; }
-        .material-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .material-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .material { grid-template-columns: 1fr; min-height: 89px; gap: 5px; }
         .material-icon { width: 30px; height: 30px; }
         .material-copy b, .material-copy span { white-space: normal; }
         .select-mark { position: absolute; right: 8px; top: 7px; }
         .material { position: relative; }
-        .privacy-view { display: none; }
-        .rail-footer { display: none; }
+        .privacy-view:not(.has-media) { display: none; }
+        .privacy-view.has-media { display: block; min-height: 220px; }
+        .privacy-view img { min-height: 220px; max-height: 320px; }
+        .rail-footer { display: block; }
         .composer-head { padding: 16px; }
         .composer-head h1 { font-size: 24px; }
         .compose-body { padding: 13px; }
@@ -409,25 +449,114 @@
     <a class="skip-link" href="#demo-root">跳到演示内容</a>
     <div id="demo-root"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="./demo-case.js"></script>
     <script>
+      const emergencyCase = {
+        schemaVersion: 1,
+        caseId: "NUANJIAN-CASE-001",
+        mode: "configuration-error",
+        provenanceLabel: "受控配置未载入",
+        disclosure: "demo-case.js 缺失或无效。当前只显示脱敏应急稿，不显示任何照片或语音。",
+        photoUrl: null,
+        audioUrl: null,
+        audioDurationSeconds: 8.895,
+        recommendedDraftId: "A",
+        drafts: [{ id: "A", label: "应急稿", name: "A｜脱敏应急稿", body: "亲爱的家里人：\n\n今天上午开了个会，结束时有点累。中午的一个小惊喜让心情轻松了一点。\n\n想念你们的我" }],
+        evidenceMap: [],
+        safetyTests: [],
+      };
+
+      function isSafeMediaUrl(value) {
+        return value === null || (typeof value === "string" && /^\.\/media\/[A-Za-z0-9._-]+$/.test(value));
+      }
+
+      function isValidDemoCase(value) {
+        return Boolean(
+          value &&
+          value.schemaVersion === 1 &&
+          (typeof value.caseId === "string" || typeof value.materialId === "string") &&
+          Array.isArray(value.drafts) &&
+          value.drafts.length > 0 &&
+          value.drafts.every((draft) => draft && typeof draft.id === "string" && typeof draft.name === "string" && typeof draft.body === "string") &&
+          isSafeMediaUrl(value.photoUrl ?? null) &&
+          isSafeMediaUrl(value.audioUrl ?? null),
+        );
+      }
+
+      const suppliedCase = window.WARM_LETTER_DEMO_CASE;
+      const demoCase = isValidDemoCase(suppliedCase) ? suppliedCase : emergencyCase;
+      const controlledMedia = demoCase.mode === "controlled-review-snapshot" || demoCase.mode === "controlled-team";
+      const demoDisclosure = typeof demoCase.disclosure === "string"
+        ? demoCase.disclosure
+        : controlledMedia
+          ? "本包使用队友提供的受控媒体与固定审核稿；照片为物理裁切派生图，原始照片不在包内。"
+          : "当前仓库版不包含队友提供的照片或语音。";
+      const safetyTestIds = Array.isArray(demoCase.safetyTests)
+        ? demoCase.safetyTests.map((item) => typeof item === "string" ? item : item?.id).filter(Boolean)
+        : [];
       const materials = [
-        { id: "photo", icon: "▦", type: "photo", name: "生活照片", detail: "货架、商品与价签", selected: true },
-        { id: "voice", icon: "◖", type: "voice", name: "语音片段", detail: "8 秒 · 已脱敏转写", selected: true },
-        { id: "note", icon: "✎", type: "note", name: "文字记录", detail: "今天的小事", selected: true },
+        { id: "photo", icon: "▦", type: "photo", name: "队友提供的生活照片", detail: controlledMedia ? "物理裁切派生图 · 货架与 9.9 元价签" : "仓库不含原始照片", selected: true },
+        { id: "voice", icon: "◖", type: "voice", name: "队友提供的示例语音", detail: controlledMedia ? "原始 m4a · 8.895 秒" : "仓库不含原始语音", selected: true },
       ];
 
-      const initialParagraphs = [
-        { id: "p1", text: "家里人：今天开完会时有点累，回到住处后慢慢缓了下来。", sourceRefs: ["voice", "note"], attribution: "ai" },
-        { id: "p2", text: "外卖里附送了一杯饮品，这件小事让我觉得很开心，也想和你说一声。", sourceRefs: ["voice"], attribution: "ai" },
-        { id: "p3", text: "路过货架时看见了 9.9 元的价签，日子里这样的小发现，也让我想起和你分享近况。", sourceRefs: ["photo"], attribution: "ai" },
-      ];
+      const knownMaterialIds = new Set(materials.map((item) => item.id));
+
+      function normalizedSourceRefs(value) {
+        if (!Array.isArray(value)) return [];
+        return [...new Set(value.filter((id) => typeof id === "string" && knownMaterialIds.has(id)))];
+      }
+
+      function paragraphEvidenceForDraft(draft, index) {
+        const value = Array.isArray(draft.paragraphEvidence) ? draft.paragraphEvidence[index] : null;
+        if (!value || typeof value !== "object") {
+          return { evidenceIds: [], sourceRefs: [] };
+        }
+        return {
+          evidenceIds: Array.isArray(value.evidenceIds)
+            ? value.evidenceIds.filter((id) => typeof id === "string")
+            : [],
+          sourceRefs: normalizedSourceRefs(value.sourceRefs),
+        };
+      }
+
+      function parseApprovedDraft(draft) {
+        const blocks = draft.body.trim().split(/\r?\n\s*\r?\n/).map((item) => item.trim()).filter(Boolean);
+        const greeting = blocks[0] || "亲爱的家里人：";
+        const signature = blocks.length > 1 ? blocks[blocks.length - 1] : "想念你们的我";
+        const bodyBlocks = blocks.slice(1, -1);
+        return {
+          greeting,
+          signature,
+          paragraphs: (bodyBlocks.length ? bodyBlocks : [""]).map((text, index) => {
+            const evidence = paragraphEvidenceForDraft(draft, index);
+            return {
+              id: `${draft.id}-p${index + 1}`,
+              text,
+              evidenceIds: evidence.evidenceIds,
+              sourceRefs: evidence.sourceRefs,
+              // These paragraphs come directly from the teammate-reviewed draft.
+              // A user edit changes the attribution to needs-review before it can be confirmed.
+              attribution: "reviewed-fixed",
+            };
+          }),
+        };
+      }
+
+      const approvedDrafts = demoCase.drafts;
+      const recommendedDraft = approvedDrafts.find((draft) => draft.id === demoCase.recommendedDraftId) || approvedDrafts[0];
+      const initialDraft = parseApprovedDraft(recommendedDraft);
+      const initialParagraphs = initialDraft.paragraphs;
 
       const state = {
         generated: false,
         published: false,
+        dirty: false,
         selected: new Set(materials.filter((item) => item.selected).map((item) => item.id)),
         paragraphs: structuredClone(initialParagraphs),
-        activeParagraph: "p2",
+        greeting: initialDraft.greeting,
+        signature: initialDraft.signature,
+        selectedDraftId: recommendedDraft.id,
+        activeParagraph: initialParagraphs[0]?.id || "",
         showSources: false,
         readerSize: "standard",
         replies: [],
@@ -436,9 +565,9 @@
       };
 
       const attributionMeta = {
-        ai: { label: "AI 根据素材整理", className: "tag-ai" },
+        "reviewed-fixed": { label: "固定审核稿，依据已核对", className: "tag-ai" },
         "needs-review": { label: "修改后待核对依据", className: "tag-review" },
-        "sources-confirmed": { label: "写信人修改，已重新核对依据", className: "tag-confirmed" },
+        "sources-confirmed": { label: "已确认所选素材依据", className: "tag-confirmed" },
         "user-supplied": { label: "写信人补充，无素材依据", className: "tag-user" },
       };
 
@@ -459,12 +588,27 @@
         return refs.map((id) => materialMap[id]?.name).filter(Boolean).join(" · ");
       }
 
+      function selectedReviewSourceRefs(paragraph) {
+        return normalizedSourceRefs(paragraph.reviewSourceRefs)
+          .filter((id) => state.selected.has(id));
+      }
+
+      function draftDisplayName(draft) {
+        return draft.name.startsWith(`${draft.id}｜`)
+          ? draft.name
+          : `${draft.id}｜${draft.name}${draft.label && draft.label !== draft.name ? `（${draft.label}）` : ""}`;
+      }
+
       function needsReview() {
         return state.paragraphs.some((item) => item.attribution === "needs-review");
       }
 
       function resolvedCount() {
         return state.paragraphs.filter((item) => item.attribution !== "needs-review").length;
+      }
+
+      function hasUnsavedChanges() {
+        return state.dirty || needsReview();
       }
 
       function showToast(message) {
@@ -482,7 +626,7 @@
         const steps = [
           ["materials", "01", "挑选素材", "照片、语音、文字"],
           ["draft", "02", "整理草稿", "每段保留 sourceRefs"],
-          ["review", "03", "核对编辑", "修改不能沿用 AI 归因"],
+          ["review", "03", "核对编辑", "修改不能沿用固定稿依据"],
           ["reader", "04", "确认寄出", "阅读、来源、回复"],
         ];
         const index = steps.findIndex((step) => step[0] === current);
@@ -495,9 +639,9 @@
 
       function renderMaterials() {
         return `<aside class="rail" aria-labelledby="materials-title">
-          <p class="panel-kicker">CASE_001 / 主动选择</p>
+          <p class="panel-kicker">CASE_001 / 队友材料接入</p>
           <h2 class="panel-title" id="materials-title">把今天放进来</h2>
-          <p class="subtle">本地演示案例仅使用脱敏事实；照片不识别人，语音不保留原文件。</p>
+          <p class="subtle">${escapeHtml(demoCase.provenanceLabel)}。${controlledMedia ? "下方展示已核验媒体。" : "仓库版仅展示审核后的文字结构。"}</p>
           <div class="material-list">
             ${materials.map((item) => `<button type="button" class="material ${state.selected.has(item.id) ? "selected" : ""}" data-action="toggle-material" data-material="${item.id}" aria-pressed="${state.selected.has(item.id)}">
               <span class="material-icon ${item.type}" aria-hidden="true">${item.icon}</span>
@@ -505,37 +649,45 @@
               <span class="select-mark" aria-hidden="true">${state.selected.has(item.id) ? "✓" : "○"}</span>
             </button>`).join("")}
           </div>
-          <div class="privacy-view" role="img" aria-label="脱敏生活照片的抽象预览：只保留货架、商品与价签，不识别右侧路人。"><span class="privacy-mask">隐私视图 · 不识别人物</span></div>
-          <div class="rail-footer"><p class="subtle"><b>资料边界：</b>只提取可见货架、商品和 9.9 元价签；不推断购买、食用、功效或人物身份。</p></div>
+          <figure class="privacy-view ${controlledMedia && demoCase.photoUrl ? "has-media" : ""}">${controlledMedia && demoCase.photoUrl ? `<img src="${escapeHtml(demoCase.photoUrl)}" alt="物理裁切后的商店货架照片，可见商品和 9.9 元价签" />` : ""}<figcaption class="privacy-mask">${controlledMedia ? "物理裁切 · 原图不入包" : "受控包入口 · 无媒体"}</figcaption></figure>
+          ${controlledMedia && demoCase.audioUrl ? `<div class="source-audio"><b>队友提供的原始语音</b><span>8.895 秒 · 仅播放，不做人声克隆或身份识别</span><audio controls preload="metadata" aria-label="队友提供的原始示例语音，8.895 秒" src="${escapeHtml(demoCase.audioUrl)}">当前浏览器不支持音频播放。</audio><a href="${escapeHtml(demoCase.audioUrl)}" download="case-001-audio.m4a">播放失败？下载原始 m4a</a></div>` : ""}
+          <div class="rail-footer"><p class="subtle"><b>资料边界：</b>只提取可见货架、商品和 9.9 元价签；不推断购买、食用、功效或人物身份。</p><p class="subtle"><b>核验结果：</b>${safetyTestIds.length ? `${safetyTestIds[0]}-${safetyTestIds[safetyTestIds.length - 1]} 共 ${safetyTestIds.length} 条 PASS` : "受控配置未载入"}。</p></div>
         </aside>`;
       }
 
       function renderEmptyComposer() {
         const total = state.selected.size;
         return `<main class="composer" aria-labelledby="composer-title">
-          <header class="composer-head"><div><p class="panel-kicker">写信人工作台</p><h1 id="composer-title">一封信，从被选择的素材开始。</h1><p class="composer-meta">选择素材后，系统才会整理草稿。没有被选中的内容不会进入这封信。</p></div><span class="status-pill count">${total} / 3 已选择</span></header>
-          <section class="compose-body empty-state"><div><div class="empty-seal" aria-hidden="true">笺</div><h2>准备好再开始整理</h2><p>点击左侧素材卡可增减素材。演示里不会调用真实模型，也不会上传你的文件。</p><button type="button" class="primary-button" data-action="generate" ${total ? "" : "disabled"}>根据 ${total} 条素材整理草稿</button></div></section>
+          <header class="composer-head"><div><p class="panel-kicker">写信人工作台</p><h1 id="composer-title">一封信，从被选择的素材开始。</h1><p class="composer-meta">选择素材后，载入队友已经完成并核验的三版文字。没有被选中的内容不会进入确认版本。</p></div><span class="status-pill count">${total} / ${materials.length} 已选择</span></header>
+          <section class="compose-body empty-state"><div><div class="empty-seal" aria-hidden="true">笺</div><h2>查看队友交付的三版家书</h2><p>本步骤载入固定审核稿，不调用 OpenAI，也不会上传文件。CASE-001 的完整版本需要照片和语音两项都被选择。</p><button type="button" class="primary-button" data-action="generate" ${total === materials.length ? "" : "disabled"}>载入 ${approvedDrafts.length} 个固定审核版本</button></div></section>
         </main>`;
+      }
+
+      function renderDraftPicker() {
+        return `<div class="draft-picker"><p class="draft-picker-label"><span>队友提供的内容版本</span><span>选择后再进入本项目确认流程</span></p><div class="draft-tabs" role="tablist" aria-label="三版温柔家书">${approvedDrafts.map((draft) => `<button id="draft-tab-${escapeHtml(draft.id)}" type="button" role="tab" aria-selected="${state.selectedDraftId === draft.id}" aria-controls="draft-panel" tabindex="${state.selectedDraftId === draft.id ? "0" : "-1"}" class="draft-tab ${state.selectedDraftId === draft.id ? "active" : ""}" data-action="select-draft" data-draft="${escapeHtml(draft.id)}"><b>${escapeHtml(draftDisplayName(draft))}</b><span>${draft.id === demoCase.recommendedDraftId ? "队友主推荐" : escapeHtml(draft.label || "固定审核稿")}</span></button>`).join("")}</div></div>`;
       }
 
       function renderReview(paragraph) {
         if (paragraph.attribution !== "needs-review") return "";
+        const selectedRefs = selectedReviewSourceRefs(paragraph);
+        const eligibleMaterials = materials.filter((item) => state.selected.has(item.id));
         return `<div class="source-review" aria-label="段落来源核对">
-          <div><h3>这段文字被改过，需要重新说明依据</h3><p>编辑后不会沿用原本的 AI 归因。你可以重新核对素材，或明确标为本人补充。</p></div>
-          <div class="review-actions"><button type="button" class="state-action" data-action="confirm-source" data-paragraph="${paragraph.id}">依据语音重新核对</button><button type="button" class="state-action user" data-action="mark-user" data-paragraph="${paragraph.id}">标为本人补充</button></div>
+          <div><h3>这段文字被改过，需要重新说明依据</h3><p>固定审核稿的原有依据不会自动沿用。请只选择能支撑修改后文字的已选素材；页面不会按关键词推断，也不会重新调用模型。</p><fieldset class="review-source-options"><legend class="visually-hidden">选择本段依据</legend>${eligibleMaterials.map((item) => `<label class="review-source-option"><input class="review-source-input" type="checkbox" data-paragraph="${paragraph.id}" data-source="${item.id}" ${selectedRefs.includes(item.id) ? "checked" : ""} /><span>${iconFor(item.type)} ${escapeHtml(item.name)}</span></label>`).join("")}</fieldset></div>
+          <div class="review-actions"><button type="button" class="state-action" data-action="confirm-source" data-paragraph="${paragraph.id}" ${selectedRefs.length ? "" : "disabled"}>确认已选素材为依据</button><button type="button" class="state-action user" data-action="mark-user" data-paragraph="${paragraph.id}">标为本人补充</button></div>
         </div>`;
       }
 
       function renderDraftComposer() {
         const review = needsReview();
+        const selectedDraft = approvedDrafts.find((draft) => draft.id === state.selectedDraftId) || recommendedDraft;
         return `<main class="composer" aria-labelledby="composer-title">
-          <header class="composer-head"><div><p class="panel-kicker">LOCAL DEMO / 编辑中</p><h1 id="composer-title">写给家里人的一封信</h1><p class="composer-meta">每段文字都有来源归因。试着修改第二段，看看确认前发生什么。</p></div><span class="status-pill ${review ? "" : "count"}">${review ? "1 段待核对" : "来源已核对"}</span></header>
-          <section class="compose-body"><article class="draft-sheet" aria-label="可编辑的家书草稿"><div class="letter-date">2026.08.26 · 本地演示案例</div><h2 class="letter-title">把今天，写给家里人</h2><p class="letter-greeting">家里人：</p>
+          <header class="composer-head"><div><p class="panel-kicker">固定审核稿 / 编辑中</p><h1 id="composer-title">写给家里人的一封信</h1><p class="composer-meta">${escapeHtml(draftDisplayName(selectedDraft))}。可继续编辑；改动后必须重新核对来源才能确认。</p></div><span class="status-pill ${review ? "" : "count"}">${review ? `${state.paragraphs.filter((item) => item.attribution === "needs-review").length} 段待核对` : "固定稿依据已核对"}</span></header>
+          <section class="compose-body">${renderDraftPicker()}<article id="draft-panel" class="draft-sheet" role="tabpanel" aria-labelledby="draft-tab-${escapeHtml(selectedDraft.id)}" tabindex="0" aria-label="可编辑的家书草稿"><div class="letter-date">2026.08.28 · CASE-001 固定审核稿</div><h2 class="letter-title">${escapeHtml(demoCase.title || "写给家里人的今天")}</h2><p class="letter-greeting">${escapeHtml(state.greeting)}</p>
             ${state.paragraphs.map((paragraph) => { const meta = attributionMeta[paragraph.attribution]; return `<section class="paragraph-wrap ${state.activeParagraph === paragraph.id ? "active" : ""}" data-paragraph-wrap="${paragraph.id}">
-              <label class="visually-hidden" for="${paragraph.id}">第 ${state.paragraphs.indexOf(paragraph) + 1} 段正文</label><textarea class="paragraph-editor" id="${paragraph.id}" data-paragraph="${paragraph.id}" rows="3">${escapeHtml(paragraph.text)}</textarea>
+              <label class="visually-hidden" for="${paragraph.id}">第 ${state.paragraphs.indexOf(paragraph) + 1} 段正文</label><textarea class="paragraph-editor" id="${paragraph.id}" data-paragraph="${paragraph.id}" rows="${Math.max(3, Math.ceil(paragraph.text.length / 32))}">${escapeHtml(paragraph.text)}</textarea>
               <div class="paragraph-foot"><span class="source-tag ${meta.className}">${meta.label}</span>${paragraph.sourceRefs.length ? `<span class="source-ref">sourceRefs · ${escapeHtml(selectedNames(paragraph.sourceRefs))}</span>` : ""}</div>${renderReview(paragraph)}
             </section>`; }).join("")}
-            <p class="letter-closing">愿你也照顾好自己，等下次见面，我再把这些小事慢慢讲给你听。</p><p class="letter-signature">想念你的我</p><div class="provenance-strip"><span class="threads" aria-hidden="true"><i class="thread photo"></i><i class="thread voice"></i><i class="thread note"></i></span><span>来源轨：照片 / 语音 / 文字从素材进入段落，可见、可核对。</span></div>
+            <p class="letter-signature">${escapeHtml(state.signature)}</p><div class="provenance-strip"><span class="threads" aria-hidden="true"><i class="thread photo"></i><i class="thread voice"></i></span><span>内容来自队友固定审核稿；照片 / 语音来源进入本项目确认快照，可见、可核对。</span></div>
           </article></section>
         </main>`;
       }
@@ -545,7 +697,7 @@
         const step = !state.generated ? "materials" : review ? "review" : "draft";
         return `<aside class="inspector" aria-labelledby="status-title"><div><p class="panel-kicker">状态账本</p><h2 class="panel-title" id="status-title">这封信正处于哪里</h2><div class="state-ledger">
           <div class="ledger-row"><i class="ledger-dot current"></i><div><b>素材已主动选择</b><span>${state.selected.size} 条素材会进入本次整理。</span></div></div>
-          <div class="ledger-row"><i class="ledger-dot ${state.generated ? "current" : ""}"></i><div><b>草稿${state.generated ? "已整理" : "待整理"}</b><span>本地 Fake AI 为每段建立 sourceRefs。</span></div></div>
+          <div class="ledger-row"><i class="ledger-dot ${state.generated ? "current" : ""}"></i><div><b>队友审核稿${state.generated ? "已载入" : "待载入"}</b><span>本地不调用模型；为固定稿建立 sourceRefs。</span></div></div>
           <div class="ledger-row"><i class="ledger-dot ${review ? "review" : state.generated ? "current" : ""}"></i><div><b>${review ? "有修改待核对" : "编辑来源已解决"}</b><span>${review ? "确认发布被锁定。" : state.generated ? `${resolvedCount()} 段已有归因。` : "编辑后必须作出归因选择。"}</span></div></div>
           <div class="ledger-row"><i class="ledger-dot ${state.published ? "current" : ""}"></i><div><b>${state.published ? "确认版本已寄出" : "等待写信人确认"}</b><span>发布后才允许生成阅读入口。</span></div></div>
         </div></div>
@@ -555,18 +707,24 @@
 
       function renderComposer() {
         const current = !state.generated ? "materials" : needsReview() ? "review" : "draft";
-        return `<div class="app-shell"><header class="topbar"><a class="brand" href="#demo-root" data-action="reset" aria-label="重置暖笺本地演示"><span class="brand-mark" aria-hidden="true">笺</span><span>暖笺</span></a><div class="top-actions"><span class="local-tag">LOCAL INTERACTIVE DEMO</span><button class="quiet-button" type="button" data-action="open-evidence">查看工程依据</button><button class="icon-button" type="button" data-action="reset" aria-label="从头开始本次演示" title="从头开始">↺</button></div></header><div class="demo-note"><b>本地演示</b><span>固定案例使用“开会有点累、外卖附送饮品、货架的 9.9 元价签”等脱敏事实。页面不调用真实 OpenAI、不处理原始照片或语音，也不代表生产环境。</span></div>${renderJourney(current)}<section class="workspace" aria-label="暖笺创作工作台">${renderMaterials()}${state.generated ? renderDraftComposer() : renderEmptyComposer()}${renderInspector()}</section>${renderEvidence()}<footer class="footer"><span>暖笺互动产品演示 · 适合队内投屏或直接双击离线打开</span><span>素材主动选择 → 段落来源 → 写信人确认 → 家人阅读与回复</span></footer></div>`;
+        const controlledLink = controlledMedia ? "" : '<a href="http://127.0.0.1:4183/" target="_blank" rel="noreferrer">打开受控 CASE-001 离线包</a>';
+        return `<div class="app-shell"><header class="topbar"><a class="brand" href="#demo-root" data-action="reset" aria-label="重置暖笺本地演示"><span class="brand-mark" aria-hidden="true">笺</span><span>暖笺</span></a><div class="top-actions"><span class="local-tag">${controlledMedia ? "受控真实素材" : "脱敏仓库版"}</span><button class="quiet-button" type="button" data-action="open-evidence">查看工程依据</button><button class="icon-button" type="button" data-action="reset" aria-label="从头开始本次演示" title="从头开始">↺</button></div></header><div class="demo-note"><b>${controlledMedia ? "队友成果已接入" : "受控媒体未装入"}</b><span>${escapeHtml(demoDisclosure)} 编辑、来源核对、确认快照、阅读和回复由本项目演示承接。</span>${controlledLink}</div>${renderJourney(current)}<section class="workspace" aria-label="暖笺创作工作台">${renderMaterials()}${state.generated ? renderDraftComposer() : renderEmptyComposer()}${renderInspector()}</section>${renderEvidence()}<footer class="footer"><span>暖笺融合产品演示 · 队友内容成果 × 本项目产品闭环</span><span>素材主动选择 → 三版比较 → 来源核对 → 确认 → 阅读与回复</span></footer></div>`;
       }
 
       function renderReader() {
         const readerClass = state.readerSize === "large" ? "size-large" : state.readerSize === "extra" ? "size-extra" : "";
-        return `<div class="app-shell"><header class="topbar"><button type="button" class="brand" data-action="back-to-compose" aria-label="返回写信工作台"><span class="brand-mark" aria-hidden="true">笺</span><span>暖笺</span></button><div class="top-actions"><span class="local-tag">已确认 · 本地预览</span><button class="quiet-button" type="button" data-action="open-evidence">查看工程依据</button></div></header><div class="demo-note"><b>确认版本</b><span>此界面模拟收信人通过短期分享链接读信。真实服务已实现分享凭据、撤销、短期媒体凭据与回复安全处理；本地演示不产生外网链接。</span></div>${renderJourney("reader")}<section class="reader-stage" aria-label="家人阅读端预览"><aside class="sent-context"><p class="panel-kicker">写信人已完成</p><h1>这不是把草稿直接发出去。</h1><p>发布前，系统会拦住所有“修改后待核对依据”的段落。你刚才编辑的内容已经以“写信人修改，已重新核对依据”进入确认版本。</p><div class="sent-steps"><div class="sent-step"><b>✓</b><span><strong>来源被保留</strong><br />收信人可自行展开每段来自哪条主动提供的素材。</span></div><div class="sent-step"><b>✓</b><span><strong>可读性被照顾</strong><br />字号三档、原始语音入口与系统朗读均由收信人掌控。</span></div><div class="sent-step"><b>✓</b><span><strong>关系仍可继续</strong><br />匿名回复有幂等与失败恢复处理，避免重复发送。</span></div></div><button type="button" class="secondary-button" data-action="back-to-compose">返回创作端继续查看</button></aside>
-          <article class="reader-phone" aria-label="手机上的家书阅读页面"><header class="phone-top"><button class="phone-icon" type="button" data-action="back-to-compose" aria-label="返回创作端">‹</button><span class="phone-title">暖笺 · 家书</span><button class="phone-icon" type="button" data-action="toggle-sources" aria-label="${state.showSources ? "隐藏" : "显示"}段落来源">⌘</button></header><div class="reader-controls" aria-label="阅读控制"><button class="reader-control ${state.readerSize === "standard" ? "active" : ""}" type="button" data-action="font" data-size="standard">标准</button><button class="reader-control ${state.readerSize === "large" ? "active" : ""}" type="button" data-action="font" data-size="large">大字</button><button class="reader-control ${state.readerSize === "extra" ? "active" : ""}" type="button" data-action="font" data-size="extra">特大</button></div><main class="reader-content ${readerClass}"><div class="reader-date">今天 · 由写信人确认后寄出</div><h1 class="reader-title">把今天，写给家里人</h1><div class="reader-letter"><p>家里人：</p>${state.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph.text)}</p>${state.showSources ? `<div class="reader-source"><span class="source-tag ${attributionMeta[paragraph.attribution].className}">${attributionMeta[paragraph.attribution].label}</span>${paragraph.sourceRefs.map((ref) => `<span class="source-tag tag-ai">${iconFor(materialMap[ref].type)} ${materialMap[ref].name}</span>`).join("")}</div>` : ""}`).join("")}<div class="voice-bar"><button type="button" class="voice-button" data-action="voice" aria-label="${state.speaking ? "停止" : "播放"}本地演示语音">${state.speaking ? "■" : "▶"}</button><span class="voice-line" style="--voice-progress:${state.speaking ? "62%" : "0%"}"><span></span></span><span class="voice-time">${state.speaking ? "0:05" : "0:00"} / 0:08</span></div><p>愿你也照顾好自己，等下次见面，我再把这些小事慢慢讲给你听。</p><p class="reader-signature">想念你的我</p></div></main><section class="reply-area" aria-labelledby="reply-title"><h2 id="reply-title">留一句话</h2><form class="reply-form" data-action="reply"><label class="visually-hidden" for="reply-input">回复家书</label><input id="reply-input" class="reply-input" name="reply" maxlength="80" placeholder="读完想说的话" required /><button class="reply-send" aria-label="发送回复" title="发送回复" type="submit">↑</button></form>${state.replies.length ? `<div class="reply-list" aria-live="polite">${state.replies.map((reply) => `<div class="reply"><b>家人：</b>${escapeHtml(reply)}</div>`).join("")}</div>` : ""}</section></article>
+        const selectedDraft = approvedDrafts.find((draft) => draft.id === state.selectedDraftId) || recommendedDraft;
+        const photo = controlledMedia && demoCase.photoUrl ? `<figure class="reader-case-photo"><img src="${escapeHtml(demoCase.photoUrl)}" alt="物理裁切后的商店货架照片，可见商品和 9.9 元价签" /><figcaption class="reader-media-caption">队友提供的生活照片 · 已删除右侧无关人物像素 · 原图不进入可转发包</figcaption></figure>` : "";
+        const audio = controlledMedia && demoCase.audioUrl
+           ? `<div class="voice-bar real-audio"><b>队友提供的原始语音 · ${Number(demoCase.audioDurationSeconds).toFixed(3)} 秒</b><audio controls preload="metadata" aria-label="队友提供的原始示例语音，${Number(demoCase.audioDurationSeconds).toFixed(3)} 秒" src="${escapeHtml(demoCase.audioUrl)}">当前浏览器不支持音频播放。</audio><a href="${escapeHtml(demoCase.audioUrl)}" download="case-001-audio.m4a">播放失败？下载原始 m4a</a></div>`
+          : `<div class="voice-bar"><button type="button" class="voice-button" data-action="voice" aria-label="${state.speaking ? "停止" : "播放"}脱敏语义的系统朗读">${state.speaking ? "■" : "▶"}</button><span class="voice-line" style="--voice-progress:${state.speaking ? "62%" : "0%"}"><span></span></span><span class="voice-time">脱敏系统朗读</span></div>`;
+         return `<div class="app-shell"><header class="topbar"><button type="button" class="brand" data-action="back-to-compose" aria-label="返回写信工作台"><span class="brand-mark" aria-hidden="true">笺</span><span>暖笺</span></button><div class="top-actions"><span class="local-tag">${controlledMedia ? "受控素材" : "脱敏模式"} · 已确认</span><button class="quiet-button" type="button" data-action="open-evidence">查看工程依据</button></div></header><div class="demo-note"><b>确认快照</b><span>${escapeHtml(draftDisplayName(selectedDraft))} 已作为当前固定版本进入阅读端。内容来自队友审核稿；页面未调用实时 OpenAI，也不生成外网分享链接。</span></div>${renderJourney("reader")}<section class="reader-stage" aria-label="家人阅读端预览"><aside class="sent-context"><p class="panel-kicker">队友成果 × 本项目闭环</p><h1>固定审核稿，经过确认再进入阅读端。</h1><p>队友提供照片、语音、三版文字与安全核验；本项目把所选版本接入来源映射、确认快照、可读性控制和回复流程。</p><div class="sent-steps"><div class="sent-step"><b>✓</b><span><strong>素材已接入展示</strong><br />团队版使用队友照片的物理裁切图和原始 m4a；原始照片不进入交接包。</span></div><div class="sent-step"><b>✓</b><span><strong>内容口径不混淆</strong><br />三版来自队友固定审核稿，不冒充实时 OpenAI 输出。</span></div><div class="sent-step"><b>✓</b><span><strong>产品能力继续承接</strong><br />来源核对、确认、字号、阅读与回复沿用本项目交互。</span></div></div><button type="button" class="secondary-button" data-action="back-to-compose">返回创作端比较版本</button></aside>
+          <article class="reader-phone" aria-label="手机上的家书阅读页面"><header class="phone-top"><button class="phone-icon" type="button" data-action="back-to-compose" aria-label="返回创作端">‹</button><span class="phone-title">暖笺 · 家书</span><button class="phone-icon" type="button" data-action="toggle-sources" aria-label="${state.showSources ? "隐藏" : "显示"}段落来源">⌘</button></header><div class="reader-controls" role="group" aria-label="阅读控制"><button class="reader-control ${state.readerSize === "standard" ? "active" : ""}" type="button" data-action="font" data-size="standard" aria-pressed="${state.readerSize === "standard"}">标准</button><button class="reader-control ${state.readerSize === "large" ? "active" : ""}" type="button" data-action="font" data-size="large" aria-pressed="${state.readerSize === "large"}">大字</button><button class="reader-control ${state.readerSize === "extra" ? "active" : ""}" type="button" data-action="font" data-size="extra" aria-pressed="${state.readerSize === "extra"}">特大</button></div><main class="reader-content ${readerClass}"><div class="reader-date">2026.08.28 · 写信人确认版本 · ${escapeHtml(selectedDraft.id)}</div><h1 class="reader-title">${escapeHtml(demoCase.title || "写给家里人的今天")}</h1>${photo}<div class="reader-letter"><p>${escapeHtml(state.greeting)}</p>${state.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph.text)}</p>${state.showSources ? `<div class="reader-source"><span class="source-tag ${attributionMeta[paragraph.attribution].className}">${attributionMeta[paragraph.attribution].label}</span>${paragraph.sourceRefs.map((ref) => `<span class="source-tag tag-ai">${iconFor(materialMap[ref].type)} ${escapeHtml(materialMap[ref].name)}</span>`).join("")}</div>` : ""}`).join("")}${audio}<p class="reader-signature">${escapeHtml(state.signature)}</p></div></main><section class="reply-area" aria-labelledby="reply-title"><h2 id="reply-title">留一句话</h2><form class="reply-form" data-action="reply"><label class="visually-hidden" for="reply-input">回复家书</label><input id="reply-input" class="reply-input" name="reply" maxlength="240" placeholder="读完想说的话" required /><button class="reply-send" aria-label="发送回复" title="发送回复" type="submit">↑</button></form>${state.replies.length ? `<div class="reply-list" aria-live="polite">${state.replies.map((reply) => `<div class="reply"><b>家人：</b>${escapeHtml(reply)}</div>`).join("")}</div>` : ""}</section></article>
           <aside class="reader-right"><section class="property-sheet"><p class="panel-kicker">发布后的控制</p><h2>不是一条永不过期的公开链接</h2><dl><dt>读信凭据</dt><dd>可过期、可撤销</dd><dt>媒体访问</dt><dd>独立短期凭据</dd><dt>语音呈现</dt><dd>系统朗读，不克隆声音</dd><dt>回复处理</dt><dd>安全校验与幂等</dd></dl></section><section class="source-preview"><p class="panel-kicker" style="color:#b9dfd2">同一份产品依据</p><h2>每个动作，都有现有工程支撑。</h2><p>展开下方抽屉，可直接定位到小程序、API 和 H5 的对应实现文件。</p><button type="button" data-action="open-evidence">展开工程依据</button></section></aside></section>${renderEvidence()}<footer class="footer"><span>暖笺互动产品演示 · 本地确认版本</span><span>可回到创作端重走编辑与归因流程</span></footer></div>`;
       }
 
       function renderEvidence() {
-        return `<details class="evidence-drawer" id="evidence"><summary>工程依据：这条演示流程对应哪些已实现能力</summary><div class="evidence-content"><div><h2>从交互到代码</h2><ul class="evidence-list"><li><b>素材选择、录入和删除</b><br /><code>apps/miniprogram/src/pages/materials/index.ts</code></li><li><b>段落四态归因与编辑后的待核对规则</b><br /><code>apps/miniprogram/src/utils/paragraph-attribution.ts</code><br /><code>apps/miniprogram/src/pages/editor/index.ts</code></li><li><b>确认版本、分享重签与撤销、短期媒体凭据</b><br /><code>apps/api/src/service.ts</code><br /><code>apps/api/src/app.ts</code></li><li><b>H5 字号、来源展开、系统朗读、回复失败恢复</b><br /><code>apps/web/src/main.tsx</code></li></ul></div><div><h2>已有浏览器证据</h2><img class="evidence-shot" src="../evidence/2026-08-15/h5-1440x900.png" alt="暖笺 H5 收信端的实际浏览器验证截图" /><p class="drawer-note">截图来自既有 H5 验证。互动页本身是离线模拟，不把截图或本地状态误称为真实 AI、真实微信或生产环境调用。</p></div></div></details>`;
+        return `<details class="evidence-drawer" id="evidence"><summary>融合依据：队友材料如何接入现有产品能力</summary><div class="evidence-content"><div><h2>本轮实际接入</h2><ul class="evidence-list"><li><b>队友内容成果</b><br />照片、8.895 秒 m4a、A/B/C 三版家书、evidence_map、privacy_review 与 T01-T07。</li><li><b>隐私处理</b><br />团队包只含物理裁切派生图；原始照片不入 Git、不入可转发包，不描述或识别无关人物。</li><li><b>确认与来源</b><br /><code>apps/miniprogram/src/utils/paragraph-attribution.ts</code><br /><code>apps/api/src/service.ts</code></li><li><b>H5 阅读与回复</b><br /><code>apps/web/src/main.tsx</code></li></ul></div><div><h2>验收与边界</h2><ul class="evidence-list"><li><b>内容安全 ${safetyTestIds.length ? "PASS" : "未载入"}</b><br />${safetyTestIds.length ? `${safetyTestIds.join("、")} 共 ${safetyTestIds.length} 条固定验收通过。` : "请重新生成受控团队包。"}</li><li><b>媒体完整性</b><br />照片与语音在打包前按 SHA-256 校验；包内 manifest 仅记录相对路径。</li><li><b>能力声明</b><br />固定审核稿，不是实时 OpenAI；本地阅读预览，不是微信双真机或生产部署。</li></ul><p class="drawer-note">${escapeHtml(demoDisclosure)}</p></div></div></details>`;
       }
 
       function bindEvents() {
@@ -580,26 +738,53 @@
               render();
             }
             if (action === "generate") {
-              if (!state.selected.size) { showToast("至少选择一条素材后才能开始整理。"); return; }
+              if (state.selected.size !== materials.length) { showToast("CASE-001 需要照片和语音两项素材都被选择。"); return; }
+              const parsed = parseApprovedDraft(recommendedDraft);
               state.generated = true;
-              state.paragraphs = structuredClone(initialParagraphs).filter((paragraph) => paragraph.sourceRefs.every((ref) => state.selected.has(ref)) || paragraph.sourceRefs.some((ref) => state.selected.has(ref)));
-              if (!state.paragraphs.length) state.paragraphs = [structuredClone(initialParagraphs[0])];
+              state.dirty = false;
+              state.selectedDraftId = recommendedDraft.id;
+              state.greeting = parsed.greeting;
+              state.signature = parsed.signature;
+              state.paragraphs = structuredClone(parsed.paragraphs);
+              state.activeParagraph = state.paragraphs[0]?.id || "";
               render();
-              showToast("草稿已根据已选素材整理。试着修改第二段文字。");
+              showToast("已载入队友主推荐 A 版。可比较 B/C，或编辑后核对来源。");
+            }
+            if (action === "select-draft") {
+              const draft = approvedDrafts.find((item) => item.id === element.dataset.draft);
+              if (!draft) return;
+              if (draft.id !== state.selectedDraftId && hasUnsavedChanges() && !window.confirm("当前版本有未保存修改，切换版本会丢失这些修改。是否继续？")) return;
+              const parsed = parseApprovedDraft(draft);
+              state.selectedDraftId = draft.id;
+              state.dirty = false;
+              state.greeting = parsed.greeting;
+              state.signature = parsed.signature;
+              state.paragraphs = structuredClone(parsed.paragraphs);
+              state.activeParagraph = state.paragraphs[0]?.id || "";
+              render();
+              showToast(`已切换到队友提供的 ${draft.name}。`);
             }
             if (action === "confirm-source") {
               const paragraph = state.paragraphs.find((item) => item.id === element.dataset.paragraph);
               if (!paragraph) return;
+              const sourceRefs = selectedReviewSourceRefs(paragraph);
+              if (!sourceRefs.length) { showToast("请先选择能支撑本段文字的素材。 "); return; }
               paragraph.attribution = "sources-confirmed";
-              paragraph.sourceRefs = ["voice"];
+              paragraph.sourceRefs = sourceRefs;
+              paragraph.evidenceIds = [];
+              paragraph.reviewSourceRefs = [];
+              state.dirty = needsReview();
               render();
-              showToast("已标记为写信人修改，并重新核对语音依据。");
+              showToast(`已记录本段依据：${selectedNames(sourceRefs)}。`);
             }
             if (action === "mark-user") {
               const paragraph = state.paragraphs.find((item) => item.id === element.dataset.paragraph);
               if (!paragraph) return;
               paragraph.attribution = "user-supplied";
               paragraph.sourceRefs = [];
+              paragraph.evidenceIds = [];
+              paragraph.reviewSourceRefs = [];
+              state.dirty = needsReview();
               render();
               showToast("已标记为写信人补充，不再引用任何素材。");
             }
@@ -614,6 +799,7 @@
             if (action === "toggle-sources") { state.showSources = !state.showSources; render(); }
             if (action === "font") { state.readerSize = element.dataset.size; render(); }
             if (action === "voice") {
+              if (controlledMedia && demoCase.audioUrl) return;
               state.speaking = !state.speaking;
               if (state.speaking && "speechSynthesis" in window) {
                 window.speechSynthesis.cancel();
@@ -631,7 +817,7 @@
               drawer.scrollIntoView({ behavior: "smooth", block: "start" });
             }
             if (action === "reset") {
-              state.generated = false; state.published = false; state.selected = new Set(materials.map((item) => item.id)); state.paragraphs = structuredClone(initialParagraphs); state.activeParagraph = "p2"; state.showSources = false; state.readerSize = "standard"; state.replies = []; state.speaking = false;
+              state.generated = false; state.published = false; state.dirty = false; state.selected = new Set(materials.map((item) => item.id)); state.selectedDraftId = recommendedDraft.id; state.greeting = initialDraft.greeting; state.signature = initialDraft.signature; state.paragraphs = structuredClone(initialParagraphs); state.activeParagraph = initialParagraphs[0]?.id || ""; state.showSources = false; state.readerSize = "standard"; state.replies = []; state.speaking = false;
               if ("speechSynthesis" in window) window.speechSynthesis.cancel();
               render();
               showToast("已回到演示起点。");
@@ -652,12 +838,42 @@
             if (!paragraph || paragraph.text === editor.value) return;
             paragraph.text = editor.value;
             paragraph.attribution = "needs-review";
+            state.dirty = true;
             paragraph.sourceRefs = [];
+            paragraph.evidenceIds = [];
+            paragraph.reviewSourceRefs = [];
             state.activeParagraph = paragraph.id;
             render();
             document.querySelector(`#${paragraph.id}`)?.focus();
           });
           editor.addEventListener("focus", () => { state.activeParagraph = editor.dataset.paragraph; });
+        });
+        document.querySelectorAll(".review-source-input").forEach((input) => {
+          input.addEventListener("change", () => {
+            const paragraph = state.paragraphs.find((item) => item.id === input.dataset.paragraph);
+            const sourceId = input.dataset.source;
+            if (!paragraph || !sourceId || !knownMaterialIds.has(sourceId)) return;
+            const refs = new Set(selectedReviewSourceRefs(paragraph));
+            input.checked ? refs.add(sourceId) : refs.delete(sourceId);
+            paragraph.reviewSourceRefs = [...refs];
+            state.activeParagraph = paragraph.id;
+            render();
+            document.querySelector(`.review-source-input[data-paragraph="${paragraph.id}"][data-source="${sourceId}"]`)?.focus();
+          });
+        });
+        document.querySelectorAll(".draft-tab").forEach((tab, index, tabs) => {
+          tab.addEventListener("keydown", (event) => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const nextIndex = event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? tabs.length - 1
+                : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+            const nextTab = tabs[nextIndex];
+            nextTab?.focus();
+            nextTab?.click();
+          });
         });
         document.querySelector(".reply-form")?.addEventListener("submit", (event) => {
           event.preventDefault();

@@ -1,17 +1,21 @@
 export const DEPLOYMENT_MODES = ["demo", "test", "competition", "production"] as const;
+export const DEMO_CASES = ["synthetic", "case-001"] as const;
 
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
+export type DemoCase = (typeof DEMO_CASES)[number];
 
 type RuntimeConfigInput = {
   appEnv?: string;
   apiBaseUrl?: string;
   demoEnabled?: string;
+  demoCase?: string;
   expectedMode?: string;
 };
 
 export type WebRuntimeConfig = {
   deploymentMode: DeploymentMode;
   demoEnabled: boolean;
+  demoCase: DemoCase;
   apiBaseUrl: string;
   healthUrl: string;
   environmentLabel: string;
@@ -39,6 +43,16 @@ function parseBoolean(value: string | undefined, fieldName: string): boolean {
   if (value === "true") return true;
   if (value === "false") return false;
   throw new RuntimeConfigurationError(`${fieldName} 必须显式设置为 true 或 false`);
+}
+
+function parseDemoCase(value: string | undefined): DemoCase {
+  const normalized = value?.trim() || "synthetic";
+  if (!DEMO_CASES.includes(normalized as DemoCase)) {
+    throw new RuntimeConfigurationError(
+      `VITE_DEMO_CASE 必须设置为 ${DEMO_CASES.join("、")}`,
+    );
+  }
+  return normalized as DemoCase;
 }
 
 function mappedIpv4FromIpv6(hostname: string): number[] | undefined {
@@ -118,7 +132,7 @@ const ENVIRONMENT_COPY: Record<
 > = {
   demo: {
     environmentLabel: "演示环境",
-    environmentDetail: "模拟数据 / Fake AI",
+    environmentDetail: "合成脱敏演示 · 未加载队友真实媒体",
   },
   test: {
     environmentLabel: "开发/测试环境",
@@ -149,17 +163,29 @@ export function resolveWebRuntimeConfig(input: RuntimeConfigInput): WebRuntimeCo
   if (demoEnabled !== (deploymentMode === "demo")) {
     throw new RuntimeConfigurationError("只有 demo 环境可以启用内置演示数据");
   }
+  const demoCase = parseDemoCase(input.demoCase);
+  if (!demoEnabled && demoCase !== "synthetic") {
+    throw new RuntimeConfigurationError("只有 demo 环境可以启用受控 CASE-001 演示");
+  }
 
   const apiUrl = parseApiBaseUrl(input.apiBaseUrl, deploymentMode);
   const apiBaseUrl = apiUrl.toString().replace(/\/$/, "");
   const healthUrl = new URL("/health", apiUrl).toString();
+  const environment =
+    deploymentMode === "demo" && demoCase === "case-001"
+      ? {
+          environmentLabel: "受控演示环境",
+          environmentDetail: "队友 CASE-001 固定审核稿 / 受控本地媒体",
+        }
+      : ENVIRONMENT_COPY[deploymentMode];
 
   return {
     deploymentMode,
     demoEnabled,
+    demoCase,
     apiBaseUrl,
     healthUrl,
-    ...ENVIRONMENT_COPY[deploymentMode],
+    ...environment,
   };
 }
 

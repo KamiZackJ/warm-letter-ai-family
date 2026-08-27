@@ -10,7 +10,9 @@
     "build": "pnpm -r --if-present build",
     "check": "pnpm typecheck && pnpm test",
     "dev:api": "pnpm --filter @warm-letter/api dev",
-    "dev:web": "pnpm --filter @warm-letter/web dev",
+    "dev:web": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start-web-demo.ps1",
+    "dev:web:synthetic": "pnpm --filter @warm-letter/web dev",
+    "dev:web:case-001": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start-controlled-case-reader.ps1",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"
   },

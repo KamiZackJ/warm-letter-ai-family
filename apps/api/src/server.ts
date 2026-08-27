@@ -7,6 +7,7 @@ const runtimeConfig = loadApiRuntimeConfig(process.env);
 const objectStorage = new FileSystemObjectStorage(runtimeConfig.uploadDirectory);
 const app = buildApp({
   deploymentMode: runtimeConfig.deploymentMode,
+  authProviderMode: runtimeConfig.authProviderMode,
   logger: true,
   objectStorage,
   aiProvider: createAIProviderFromEnv(process.env, { assetReader: objectStorage }),

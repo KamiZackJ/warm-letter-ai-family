@@ -49,10 +49,13 @@ type Source = {
   id: string;
   type: SourceType;
   name: string;
+  alt?: string;
   contentType?: string;
   mediaUrl?: string;
   mediaExpiresAt?: string;
   durationSeconds?: number;
+  imageDisplay?: "cover" | "contain";
+  imageLayout?: "landscape" | "portrait";
 };
 
 type LetterSection = {
@@ -60,6 +63,7 @@ type LetterSection = {
   text: string;
   sourceRefs: string[];
   sourceAttribution?: ParagraphSourceAttribution;
+  sourceAttributionLabel?: string;
 };
 
 type ReaderData = {
@@ -106,13 +110,13 @@ const runtimeConfig = resolveWebRuntimeConfig({
   appEnv: import.meta.env.VITE_APP_ENV,
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL,
   demoEnabled: import.meta.env.VITE_DEMO_ENABLED,
+  demoCase: import.meta.env.VITE_DEMO_CASE,
   expectedMode: import.meta.env.MODE,
 });
 
 const API_BASE_URL = runtimeConfig.apiBaseUrl;
 
-const demoReader: ReaderData | null = __WARM_LETTER_DEMO_BUILD__
-  ? {
+const syntheticDemoReader: ReaderData = {
   id: "demo-letter",
   recipient: "妈妈",
   draft: {
@@ -159,7 +163,77 @@ const demoReader: ReaderData | null = __WARM_LETTER_DEMO_BUILD__
     },
   ],
   replies: [],
-    }
+};
+
+function createCase001DemoReader(caseData: ControlledCase001BuildData): ReaderData {
+  const bodyParts = caseData.recommendedDraftBody
+    .split(/\r?\n\r?\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (bodyParts.length < 3) {
+    throw new Error("受控 CASE-001 推荐审核稿格式不符合预期");
+  }
+  const [greeting, ...remainingParts] = bodyParts;
+  const signature = remainingParts.pop()!;
+  const paragraphs = remainingParts;
+  const recipient = greeting.replace(/^亲爱的/, "").replace(/[：:]$/, "").trim() || "家里人";
+
+  return {
+    id: "case-001-reader-demo",
+    recipient,
+    draft: {
+      title: caseData.title,
+      greeting,
+      paragraphs: paragraphs.map((text, index) => {
+        const evidence = caseData.recommendedDraftParagraphs[index];
+        if (!evidence) {
+          throw new Error("受控 CASE-001 推荐审核稿缺少段落依据");
+        }
+        return {
+          id: `case-001-recommended-a-${index + 1}`,
+          text,
+          sourceRefs: evidence.sourceIds,
+          sourceAttribution: "sources-confirmed",
+          sourceAttributionLabel: evidence.attributionLabel,
+        };
+      }),
+      closing: "",
+      signature,
+      provider: caseData.provenanceLabel,
+    },
+    publishedAt: "2026-08-28T00:00:00.000Z",
+    sources: [
+      {
+        id: "case-001-photo",
+        type: "photo",
+        name: "队友提供生活照片（隐私裁切图）",
+        alt: "队友生活照片的隐私裁切图，只保留货架、商品与 9.9 元价签",
+        contentType: "image/jpeg",
+        mediaUrl: `/${caseData.photoFile}`,
+        imageDisplay: "contain",
+        imageLayout: "portrait",
+      },
+      {
+        id: "case-001-audio",
+        type: "audio",
+        name: "队友提供示例语音（原始 m4a）",
+        contentType: "audio/mp4",
+        mediaUrl: `/${caseData.audioFile}`,
+        durationSeconds: caseData.audioDurationSeconds,
+      },
+    ],
+    replies: [],
+  };
+}
+
+const case001DemoReader = __WARM_LETTER_CONTROLLED_CASE_001__
+  ? createCase001DemoReader(__WARM_LETTER_CONTROLLED_CASE_001__)
+  : null;
+
+const demoReader: ReaderData | null = __WARM_LETTER_DEMO_BUILD__
+  ? __WARM_LETTER_DEMO_CASE__ === "case-001"
+    ? case001DemoReader
+    : syntheticDemoReader
   : null;
 
 const emptyReader: ReaderData = {
@@ -226,6 +300,7 @@ function paragraphAttribution(section: LetterSection): ParagraphSourceAttributio
 }
 
 function paragraphAttributionLabel(section: LetterSection): string {
+  if (section.sourceAttributionLabel) return section.sourceAttributionLabel;
   switch (paragraphAttribution(section)) {
     case "sources-confirmed":
       return "写信人修改，已重新核对依据";
@@ -407,6 +482,7 @@ function App() {
     [shareParams],
   );
   const isDemo = __WARM_LETTER_DEMO_BUILD__ && readerEntry.kind === "demo";
+  const isControlledCase001Demo = isDemo && __WARM_LETTER_DEMO_CASE__ === "case-001";
   const sourceMap = useMemo(
     () => new Map(reader.sources.map((source) => [source.id, source])),
     [reader.sources],
@@ -743,6 +819,11 @@ function App() {
           <p className="recipient">写给{reader.recipient}</p>
           <h1 id="letter-title">{reader.draft.title}</h1>
           <p className="lead">由生活素材整理，经本人确认后寄出</p>
+          {isControlledCase001Demo ? (
+            <p className="case-provenance" role="note">
+              已接入队友提供材料：隐私裁切照片、原始示例语音与固定审核稿
+            </p>
+          ) : null}
         </div>
 
         <section className="voice-bar" aria-label="系统语音朗读">
@@ -784,9 +865,13 @@ function App() {
               const failed = mediaErrors[source.id];
               const attempt = mediaAttempts[source.id] || 0;
               const refreshing = mediaRefreshing[source.id];
+              const imageLayout =
+                source.imageLayout || (source.type === "screenshot" ? "portrait" : "landscape");
+              const imageDisplay =
+                source.imageDisplay || (source.type === "screenshot" ? "contain" : "cover");
               return (
                 <figure
-                  className={`memory-photo memory-photo-${source.type}`}
+                  className={`memory-photo memory-photo-${source.type} memory-photo-layout-${imageLayout}`}
                   key={source.id}
                   data-testid="source-image"
                 >
@@ -820,10 +905,11 @@ function App() {
                     ) : (
                       <img
                         key={attempt}
+                        className={`memory-photo-image memory-photo-image-${imageDisplay}`}
                         src={source.mediaUrl!}
-                        alt={source.name}
-                        width={640}
-                        height={480}
+                        alt={source.alt || source.name}
+                        width={imageLayout === "portrait" ? 720 : 640}
+                        height={imageLayout === "portrait" ? 1020 : 480}
                         loading={index === 0 ? "eager" : "lazy"}
                         fetchPriority={index === 0 ? "high" : "auto"}
                         referrerPolicy="no-referrer"
@@ -933,7 +1019,7 @@ function App() {
               </div>
             </div>
           ))}
-          <p className="closing">{reader.draft.closing}</p>
+          {reader.draft.closing ? <p className="closing">{reader.draft.closing}</p> : null}
           <p className="signature">{reader.draft.signature}</p>
         </div>
 

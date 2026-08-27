@@ -10,6 +10,7 @@ const demoEnvironment: NodeJS.ProcessEnv = {
   DEPLOYMENT_MODE: "demo",
   NODE_ENV: "development",
   AI_PROVIDER: "fake",
+  AUTH_PROVIDER: "development",
   PUBLIC_BASE_URL: "http://127.0.0.1:8787",
   CORS_ORIGINS: "http://127.0.0.1:4173,http://localhost:4173",
   UPLOAD_DIR: "./uploads",
@@ -38,6 +39,7 @@ describe("API runtime configuration", () => {
       deploymentMode: "demo",
       nodeEnv: "development",
       aiProviderMode: "fake",
+      authProviderMode: "development",
       port: 8787,
       host: "0.0.0.0",
       corsOrigins: ["http://127.0.0.1:4173", "http://localhost:4173"],
@@ -48,8 +50,13 @@ describe("API runtime configuration", () => {
         ...demoEnvironment,
         DEPLOYMENT_MODE: "test",
         NODE_ENV: "test",
+        AUTH_PROVIDER: "wechat",
       }),
-    ).toMatchObject({ deploymentMode: "test", nodeEnv: "test" });
+    ).toMatchObject({
+      deploymentMode: "test",
+      nodeEnv: "test",
+      authProviderMode: "wechat",
+    });
   });
 
   it.each([
@@ -59,6 +66,11 @@ describe("API runtime configuration", () => {
     [{ ...demoEnvironment, NODE_ENV: "production" }, "NODE_ENV must be development"],
     [{ ...demoEnvironment, AI_PROVIDER: undefined }, "AI_PROVIDER is required"],
     [{ ...demoEnvironment, AI_PROVIDER: "fallback" }, "AI_PROVIDER must be fake or openai"],
+    [{ ...demoEnvironment, AUTH_PROVIDER: undefined }, "AUTH_PROVIDER is required"],
+    [
+      { ...demoEnvironment, AUTH_PROVIDER: "fallback" },
+      "AUTH_PROVIDER must be development or wechat",
+    ],
     [{ ...demoEnvironment, PUBLIC_BASE_URL: undefined }, "PUBLIC_BASE_URL is required"],
     [{ ...demoEnvironment, PUBLIC_BASE_URL: "localhost:8787" }, "absolute HTTP(S)"],
     [{ ...demoEnvironment, PUBLIC_BASE_URL: "https://user:pass@example.test" }, "HTTP(S) origin"],
@@ -86,6 +98,7 @@ describe("API runtime configuration", () => {
       deploymentMode: "competition",
       nodeEnv: "production",
       aiProviderMode: "openai",
+      authProviderMode: "development",
       publicBaseUrl: "https://api.evidence.example.test",
       corsOrigins: ["https://reader.evidence.example.test"],
     });
@@ -204,6 +217,7 @@ describe("API deployment disclosure", () => {
       capabilities: {
         ai: "openai",
         authentication: "development",
+        authenticationReady: false,
         repository: "memory",
         objectStorage: "local-filesystem",
         replySafety: "deterministic",
@@ -211,6 +225,39 @@ describe("API deployment disclosure", () => {
     });
     expect(response.body).not.toContain("health-test-api-key");
     expect(response.body).not.toContain("health-test-model");
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/auth/wx-login",
+      payload: { code: "must-not-be-hashed" },
+    });
+    expect(login.statusCode).toBe(503);
+    expect(json<{ error: { code: string } }>(login).error.code).toBe(
+      "AUTH_PROVIDER_UNAVAILABLE",
+    );
+    expect(login.body).not.toContain("dev.");
+  });
+
+  it("reports an explicitly selected but unavailable Wechat auth provider", async () => {
+    app = buildApp({ deploymentMode: "test", authProviderMode: "wechat" });
+
+    const health = await app.inject({ method: "GET", url: "/health" });
+    expect(json<{ capabilities: Record<string, unknown> }>(health).capabilities).toMatchObject({
+      authentication: "wechat",
+      authenticationReady: false,
+    });
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/v1/auth/wx-login",
+      payload: { code: "not-sent-to-wechat" },
+    });
+    expect(login.statusCode).toBe(503);
+    expect(json<{ error: { code: string; message: string } }>(login).error).toEqual({
+      code: "AUTH_PROVIDER_UNAVAILABLE",
+      message: "微信 code2Session 鉴权适配器尚未实现",
+    });
+    expect(login.body).not.toContain("token");
   });
 
   it("also blocks direct production app construction", () => {

@@ -8,8 +8,9 @@
 ## 2026-08-28 当前交接快照
 
 - 唯一当前入口为 [`CURRENT_HANDOFF_STATUS_2026-08-28.md`](./CURRENT_HANDOFF_STATUS_2026-08-28.md)。以下旧 SHA 和测试数按各自日期保留为历史证据。
-- 已验证实现基线 `f60e759a925e0eb4189afa23344b2489e9bb632f`：Node `22.23.2`、pnpm `11.19.0`；contracts `17/17`、Web `70/70`、小程序 `125/125`、API `135/135`，共 `347/347`；frozen install、check、build、production bundle verifier 和差异检查通过。
-- 该基线的 [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095266241) 与 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095270181) 均通过。
+- 当前工作树在 Node `22.23.2`、pnpm `11.19.0` 下本地回归为 contracts `17/17`、Web `75/75`、小程序 `125/125`、API `138/138`，共 `355/355`；`pnpm check`、`pnpm build`、production bundle verifier 和差异检查通过。
+- 远端 push/PR 链接对应早期实现基线，仅作为历史 CI 证据；CASE-001 受控包和本轮段落级来源映射以当前交接文档及工作树为准。
+- 队友 CASE-001 的真实照片隐私裁切图、原始 m4a、A/B/C 固定审核稿、段落级证据、T01-T07 和推荐 A 长图已进入可搬家受控成果包；原图、开发输入和真人测试材料仍保留在受控源目录。
 - `FIX-021` 的共享契约、服务端确认快照、小程序跨设备字段映射和 H5 展示子范围已完成；长图、短片和微信双真机仍未验证，因此不整体关闭。
 - `case_001` 已作为脱敏共享 fixture 接入 contracts/API 回归；它只证明固定事实、安全边界与 `sourceRefs` 不漂移，不证明真实 OpenAI、原始媒体处理、三版选择或真人测试。
 - 当前仍为 G0 队内开发演示；下一优先级为真实 OpenAI 四素材证据、微信双设备、生产基础设施，再实现同一确认版本的长图/短片。

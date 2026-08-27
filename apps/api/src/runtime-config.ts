@@ -5,11 +5,13 @@ import type { PublicRateLimitConfig } from "./public-rate-limit.js";
 export const DEPLOYMENT_MODES = ["demo", "test", "competition", "production"] as const;
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
 export type AIProviderMode = "fake" | "openai";
+export type AuthProviderMode = "development" | "wechat";
 
 export interface ApiRuntimeConfig {
   deploymentMode: DeploymentMode;
   nodeEnv: "development" | "test" | "production";
   aiProviderMode: AIProviderMode;
+  authProviderMode: AuthProviderMode;
   port: number;
   host: string;
   corsOrigins: string[];
@@ -63,6 +65,14 @@ function aiProviderModeFromEnv(env: NodeJS.ProcessEnv): AIProviderMode {
   const value = requiredEnv(env, "AI_PROVIDER").toLowerCase();
   if (value !== "fake" && value !== "openai") {
     throw new Error("AI_PROVIDER must be fake or openai");
+  }
+  return value;
+}
+
+function authProviderModeFromEnv(env: NodeJS.ProcessEnv): AuthProviderMode {
+  const value = requiredEnv(env, "AUTH_PROVIDER").toLowerCase();
+  if (value !== "development" && value !== "wechat") {
+    throw new Error("AUTH_PROVIDER must be development or wechat");
   }
   return value;
 }
@@ -238,18 +248,19 @@ function mediaSigningKeysFromEnv(
 export function assertApiDeploymentSupported(
   deploymentMode: DeploymentMode,
   aiProviderMode: AIProviderMode | "custom",
+  authProviderMode: AuthProviderMode = "development",
 ): void {
   if (deploymentMode === "competition" && aiProviderMode !== "openai") {
     throw new Error("DEPLOYMENT_MODE=competition requires AI_PROVIDER=openai");
   }
   if (deploymentMode !== "production") return;
 
-  const blockers = [
-    "development wx-login authentication",
-    "MemoryRepository",
-    "FileSystemObjectStorage",
-    "DeterministicReplySafetyPolicy",
-  ];
+  const blockers = ["MemoryRepository", "FileSystemObjectStorage", "DeterministicReplySafetyPolicy"];
+  blockers.unshift(
+    authProviderMode === "development"
+      ? "development wx-login authentication"
+      : "Wechat code2Session authentication adapter",
+  );
   if (aiProviderMode === "fake") blockers.push("FakeAIProvider");
   throw new Error(
     `DEPLOYMENT_MODE=production is unavailable while these adapters are active: ${blockers.join(", ")}`,
@@ -260,7 +271,8 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
   const deploymentMode = deploymentModeFromEnv(env);
   const nodeEnv = nodeEnvironmentFromEnv(env, deploymentMode);
   const aiProviderMode = aiProviderModeFromEnv(env);
-  assertApiDeploymentSupported(deploymentMode, aiProviderMode);
+  const authProviderMode = authProviderModeFromEnv(env);
+  assertApiDeploymentSupported(deploymentMode, aiProviderMode, authProviderMode);
 
   if (aiProviderMode === "openai") {
     requiredEnv(env, "OPENAI_API_KEY");
@@ -282,6 +294,7 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
     deploymentMode,
     nodeEnv,
     aiProviderMode,
+    authProviderMode,
     port: integerFromEnv(env, "PORT", 8787, 1, 65_535),
     host: env.HOST?.trim() || "0.0.0.0",
     corsOrigins,

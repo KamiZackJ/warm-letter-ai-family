@@ -27,6 +27,8 @@ function cssRule(source: string, selector: string): string {
 describe("reader interface design gates", () => {
   it("preserves complete chat screenshots while keeping photo crops intentional", () => {
     expect(mainSource).toContain("memory-photo-${source.type}");
+    expect(mainSource).toContain("memory-photo-layout-${imageLayout}");
+    expect(mainSource).toContain("memory-photo-image-${imageDisplay}");
     expect(mainSource).toContain('className="memory-photo-frame"');
     expect(cssRule(stylesSource, "\\.memory-photo-screenshot \\.memory-photo-frame")).toContain(
       "aspect-ratio: 3 / 4",
@@ -95,6 +97,17 @@ describe("reader interface design gates", () => {
     expect(cssRule(stylesSource, "\\.letter-section > \\.paragraph-attribution")).toContain(
       "font-family: var(--warm-font-ui)",
     );
+  });
+
+  it("surfaces the controlled teammate-material provenance in the reader", () => {
+    expect(mainSource).toContain("isControlledCase001Demo");
+    expect(mainSource).toContain("__WARM_LETTER_CONTROLLED_CASE_001__");
+    expect(mainSource).not.toContain("今天上午开了个会，结束时有点累。中午点的外卖");
+    expect(mainSource).toContain("已接入队友提供材料");
+    expect(mainSource).toContain("队友提供示例语音（原始 m4a）");
+    expect(mainSource).toContain("队友生活照片的隐私裁切图");
+    expect(mainSource).toContain("recommendedDraftParagraphs[index]");
+    expect(mainSource).toContain("受控 CASE-001 推荐审核稿缺少段落依据");
   });
 
   it("renders the confirmed closing and signature as separate fields", () => {

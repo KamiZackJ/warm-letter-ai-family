@@ -34,6 +34,7 @@ import type { ReplySafetyPolicy } from "./reply-safety.js";
 import {
   assertApiDeploymentSupported,
   type AIProviderMode,
+  type AuthProviderMode,
   type DeploymentMode,
 } from "./runtime-config.js";
 import {
@@ -81,6 +82,7 @@ function idempotencyKeyFrom(request: FastifyRequest): string | undefined {
 
 export interface BuildAppOptions {
   deploymentMode: DeploymentMode;
+  authProviderMode?: AuthProviderMode;
   repository?: MemoryRepository;
   aiProvider?: AIProvider;
   logger?: boolean;
@@ -146,13 +148,17 @@ function mediaContentType(request: FastifyRequest): string | undefined {
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const aiProvider = options.aiProvider ?? new FakeAIProvider();
+  const authProviderMode = options.authProviderMode ?? "development";
   const aiProviderMode: AIProviderMode | "custom" =
     aiProvider instanceof OpenAIResponsesProvider
       ? "openai"
       : aiProvider instanceof FakeAIProvider
         ? "fake"
         : "custom";
-  assertApiDeploymentSupported(options.deploymentMode, aiProviderMode);
+  assertApiDeploymentSupported(options.deploymentMode, aiProviderMode, authProviderMode);
+  const authenticationReady =
+    authProviderMode === "development" &&
+    (options.deploymentMode === "demo" || options.deploymentMode === "test");
 
   const app = Fastify({
     logger: options.logger
@@ -271,7 +277,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     nonProduction: true,
     capabilities: {
       ai: aiProviderMode,
-      authentication: "development",
+      authentication: authProviderMode,
+      authenticationReady,
       repository: "memory",
       objectStorage: "local-filesystem",
       replySafety: "deterministic",
@@ -279,6 +286,15 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   }));
 
   app.post("/v1/auth/wx-login", async (request, reply) => {
+    if (!authenticationReady) {
+      throw new ApiError(
+        503,
+        "AUTH_PROVIDER_UNAVAILABLE",
+        authProviderMode === "wechat"
+          ? "微信 code2Session 鉴权适配器尚未实现"
+          : `${options.deploymentMode} 环境禁止使用开发鉴权`,
+      );
+    }
     const body = record(request.body);
     const code = stringValue(body.code, "code", false) ?? "local-demo";
     const displayName = stringValue(body.displayName, "displayName", false);

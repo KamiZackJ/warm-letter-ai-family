@@ -17,9 +17,41 @@ describe("resolveWebRuntimeConfig", () => {
     expect(resolveWebRuntimeConfig(base)).toMatchObject({
       deploymentMode: "test",
       demoEnabled: false,
+      demoCase: "synthetic",
       apiBaseUrl: "http://127.0.0.1:8787/v1",
       healthUrl: "http://127.0.0.1:8787/health",
     });
+  });
+
+  it("resolves the controlled teammate-material demo profile", () => {
+    expect(
+      resolveWebRuntimeConfig({
+        appEnv: "demo",
+        expectedMode: "demo",
+        demoEnabled: "true",
+        demoCase: "case-001",
+        apiBaseUrl: "http://127.0.0.1:8787/v1",
+      }),
+    ).toMatchObject({
+      deploymentMode: "demo",
+      demoEnabled: true,
+      demoCase: "case-001",
+      environmentLabel: "受控演示环境",
+      environmentDetail: "队友 CASE-001 固定审核稿 / 受控本地媒体",
+    });
+  });
+
+  it("labels the default demo as synthetic and without teammate media", () => {
+    const config = resolveWebRuntimeConfig({
+      appEnv: "demo",
+      expectedMode: "demo",
+      demoEnabled: "true",
+      demoCase: "synthetic",
+      apiBaseUrl: "http://127.0.0.1:8787/v1",
+    });
+
+    expect(config.environmentLabel).toBe("演示环境");
+    expect(config.environmentDetail).toContain("未加载队友真实媒体");
   });
 
   it.each([
@@ -27,6 +59,7 @@ describe("resolveWebRuntimeConfig", () => {
     [{ ...base, appEnv: "staging" }, "VITE_APP_ENV"],
     [{ ...base, demoEnabled: undefined }, "VITE_DEMO_ENABLED"],
     [{ ...base, demoEnabled: "true" }, "只有 demo 环境"],
+    [{ ...base, demoCase: "unknown" }, "VITE_DEMO_CASE"],
     [{ ...base, expectedMode: "production" }, "不一致"],
     [{ ...base, apiBaseUrl: "" }, "VITE_API_BASE_URL"],
   ])("rejects an invalid configuration", (input, message) => {

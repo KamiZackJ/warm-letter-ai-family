@@ -79,6 +79,7 @@ describe("Warm Letter API", () => {
       capabilities: {
         ai: "fake",
         authentication: "development",
+        authenticationReady: true,
         repository: "memory",
         objectStorage: "local-filesystem",
         replySafety: "deterministic",

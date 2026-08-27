@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#102b36" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%239e3e32'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' fill='white'%3E%E7%AC%BA%3C/text%3E%3C/svg%3E" />
     <title>暖笺 · 阶段成果展示中心</title>
     <style>
       :root {
@@ -134,10 +135,41 @@
       .proof-frame::before { left: 12%; transform: rotate(-5deg); }
       .proof-frame::after { right: 12%; transform: rotate(5deg); }
       .proof-frame img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border: 1px solid rgba(16, 43, 54, 0.1); }
+      .case-proof { padding: 28px; transform: rotate(0.8deg); }
+      .case-proof::before, .case-proof::after { top: -7px; }
+      .case-proof-head { display: flex; justify-content: space-between; align-items: start; gap: 18px; padding-bottom: 21px; border-bottom: 1px solid var(--line); }
+      .case-proof-kicker { margin: 0; color: var(--vermilion-deep); font-family: Consolas, monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.11em; }
+      .case-proof-id { color: var(--ink-soft); font-family: Consolas, monospace; font-size: 11px; }
+      .case-proof h2 { max-width: 430px; margin-top: 17px; font-size: clamp(27px, 4vw, 42px); line-height: 1.12; }
+      .case-proof-media { margin: 22px 0 0; border: 1px solid var(--line); background: #16231f; }
+      .case-proof-media img { display: block; width: 100%; height: 188px; object-fit: contain; }
+      .case-proof-media figcaption { padding: 8px 10px; color: rgba(255, 253, 248, 0.78); background: rgba(16, 43, 54, 0.9); font-size: 10px; line-height: 1.45; }
+      .case-proof-media-fallback { display: none; min-height: 188px; place-items: center; padding: 20px; color: rgba(255, 253, 248, 0.82); text-align: center; font-size: 12px; line-height: 1.55; }
+      .case-proof-media.is-missing img { display: none; }
+      .case-proof-media.is-missing .case-proof-media-fallback { display: grid; }
+      .case-proof-audio { display: grid; gap: 7px; margin: 14px 0 0; padding: 11px 12px; border: 1px solid var(--line); background: var(--paper); }
+      .case-proof-audio strong { color: var(--ink); font-size: 11px; }
+      .case-proof-audio span { color: var(--ink-soft); font-size: 10px; line-height: 1.4; }
+      .case-proof-audio audio { display: block; width: 100%; height: 32px; }
+      .case-proof-audio-fallback { display: none; color: var(--vermilion-deep) !important; }
+      .case-proof-audio.is-missing audio { display: none; }
+      .case-proof-audio.is-missing .case-proof-audio-fallback { display: block; }
+      .case-proof-letter { margin: 23px 0 0; padding: 17px 18px; color: var(--ink); background: var(--paper); border-left: 3px solid var(--vermilion); font-family: Georgia, "Songti SC", serif; font-size: 17px; line-height: 1.75; }
+      .case-proof-letter span { display: block; margin-top: 8px; color: var(--ink-soft); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 11px; line-height: 1.5; }
+      .case-proof-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 20px; background: var(--line); border: 1px solid var(--line); }
+      .case-proof-stat { min-height: 74px; padding: 12px 11px; background: var(--cream); }
+      .case-proof-stat strong { display: block; color: var(--ink); font-family: Georgia, "Songti SC", serif; font-size: 20px; line-height: 1; }
+      .case-proof-stat span { display: block; margin-top: 7px; color: var(--ink-soft); font-size: 10px; line-height: 1.35; }
+      .case-proof-foot { display: flex; justify-content: space-between; gap: 15px; margin-top: 17px; color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
+      .case-proof-foot strong { color: var(--vermilion-deep); }
       .proof-caption { display: flex; justify-content: space-between; gap: 20px; padding: 14px 6px 2px; color: var(--ink-soft); font-size: 12px; }
       .proof-caption strong { color: var(--ink); }
       .annotation { margin: 24px 0 0 auto; max-width: 330px; color: var(--ink-soft); font-size: 13px; }
       .annotation b { color: var(--vermilion-deep); }
+      .case-linkline { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 18px 0 0; color: var(--ink-soft); font-size: 12px; }
+      .case-linkline span { color: var(--vermilion-deep); font-family: Consolas, monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+      .case-linkline a { color: var(--ink); font-weight: 750; text-underline-offset: 3px; }
+      .case-linkline a:hover { color: var(--vermilion-deep); }
 
       .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
       .metric { padding: 22px 20px; background: var(--cream); }
@@ -219,6 +251,9 @@
         .hero { padding: 45px 0 46px; }
         h1 { font-size: 48px; }
         .hero-copy { font-size: 16px; }
+        .case-proof { padding: 21px; }
+        .case-proof-grid { grid-template-columns: 1fr; }
+        .case-proof-stat { min-height: 0; }
         .metrics { grid-template-columns: repeat(2, 1fr); }
         .metric { padding: 18px 14px; }
         .metric strong { font-size: 27px; }
@@ -247,31 +282,45 @@
           <span class="stamp" aria-hidden="true">笺</span>
           <div>暖笺 <small>阶段成果展示中心</small></div>
         </div>
-        <div class="status">G0 · 队内可演示</div>
+        <div class="status">G0 · CASE-001 受控实材已接入</div>
       </header>
 
       <section class="hero" id="start">
         <div>
-          <p class="eyebrow">WARM LETTER / 2026.08.25</p>
+          <p class="eyebrow">WARM LETTER / 2026.08.28</p>
           <h1>把今天，写给想念的人。</h1>
-          <p class="hero-copy"><strong>暖笺把照片、语音和日常碎片整理成可核对的家书。</strong> 这一页是给队友和评审看的阶段成果现场：先看真实内容，再看产品闭环，最后看证据边界。</p>
+          <p class="hero-copy"><strong>暖笺把队友提供的照片、语音和日常碎片整理成可核对的家书。</strong> 这一页是阶段成果入口：先看 CASE-001 实材证据，再打开受控 H5 走完产品闭环，最后核对交接边界。</p>
           <div class="actions">
             <a class="button" href="#route">开始 7 分钟展示 <span class="arrow" aria-hidden="true">↓</span></a>
-            <button class="button secondary" id="open-material-top" type="button">打开真实素材页</button>
+            <a class="button secondary" href="http://127.0.0.1:4173/" target="_blank" rel="noreferrer">打开受控 H5</a>
           </div>
-          <p class="annotation"><b>现场口径：</b>当前可展示本地产品骨架、内容安全方法和真实素材成果；真实 OpenAI 四素材、微信双真机和生产放行仍在下一阶段。</p>
+          <p class="annotation"><b>现场口径：</b>当前主展示使用队友 CASE-001 的真实 m4a、物理裁切照片和 A/B/C 固定审核稿；真实 OpenAI 四素材、微信双真机和生产放行仍在下一阶段。</p>
+          <p class="case-linkline"><span>真实素材入口</span><a href="http://127.0.0.1:4183/" target="_blank" rel="noreferrer">打开受控离线包（照片 + 原始 m4a + A/B/C）</a></p>
         </div>
         <div class="hero-proof">
-          <div class="proof-frame">
-            <img src="../evidence/2026-08-15/h5-1440x900.png" alt="暖笺 H5 收信端浏览器验证截图" />
-            <div class="proof-caption"><span><strong>H5 收信端</strong> · 实际浏览器证据</span><span>1440 × 900</span></div>
+          <div class="proof-frame case-proof" aria-label="CASE-001 队友真实材料核验卡">
+            <div class="case-proof-head"><div><p class="case-proof-kicker">CONTROLLED CASE / 队友实材</p><h2>把普通的一天，轻轻寄回家</h2></div><span class="case-proof-id">NUANJIAN-CASE-001</span></div>
+            <figure class="case-proof-media" id="case-proof-media">
+              <img src="http://127.0.0.1:4183/media/case-001-photo-crop.jpg" alt="队友提供生活照片的物理裁切图，只保留货架、商品与价签" />
+              <figcaption>队友提供的生活照片 · 物理裁切派生图 · 原图不入 Git 或转发包</figcaption>
+              <div class="case-proof-media-fallback">受控照片预览未连接。<br />打开 4183 受控离线包或解压 ZIP 根目录 index.html 查看真实照片。</div>
+            </figure>
+            <div class="case-proof-audio">
+              <strong>队友提供的原始示例语音 · 8.895 秒</strong>
+              <span>仅播放原音，不做人声克隆或身份识别。</span>
+              <audio controls preload="metadata" src="http://127.0.0.1:4183/media/case-001-audio.m4a">当前浏览器不支持音频播放。</audio>
+              <span class="case-proof-audio-fallback">受控语音预览未连接。打开 4183 受控离线包或解压 ZIP 根目录 index.html 播放原始 m4a。</span>
+            </div>
+            <p class="case-proof-letter">今天上午开了个会，结束时有点累。中午点的外卖意外送了一小瓶饮品，心情也跟着轻松了一点。<span>A 版短笺 · 队友固定审核稿 · 非实时 OpenAI</span></p>
+            <div class="case-proof-grid" aria-label="CASE-001 核验指标"><div class="case-proof-stat"><strong>720×1020</strong><span>照片物理裁切<br />只保留货架、商品、价签</span></div><div class="case-proof-stat"><strong>8.895s</strong><span>队友原始 m4a<br />可在受控页播放</span></div><div class="case-proof-stat"><strong>7/7 PASS</strong><span>内容安全、隐私、验收<br />证据随包交接</span></div></div>
+            <div class="case-proof-foot"><span><strong>A · B · C</strong> 三版同一事实</span><span>原图不入包 · 路人不识别</span></div>
           </div>
         </div>
       </section>
 
       <section class="metrics" aria-label="阶段指标">
         <div class="metric"><strong>4</strong><span>端到端角色：素材、生成、阅读、回复</span></div>
-        <div class="metric"><strong>336</strong><span>本地自动化用例全绿</span></div>
+        <div class="metric"><strong>355</strong><span>本地自动化用例全绿</span></div>
         <div class="metric"><strong>7/7</strong><span>真实内容自动验收通过</span></div>
         <div class="metric"><strong>G0</strong><span>队内开发演示等级</span></div>
       </section>
@@ -285,7 +334,7 @@
           <a class="route-card" href="#content"><span class="route-no">01 / 内容</span><h3>真实素材</h3><p>照片、语音、三版家书和事实映射，先让人理解“为什么是暖笺”。</p></a>
           <a class="route-card" href="#proof"><span class="route-no">02 / 证据</span><h3>安全边界</h3><p>不猜饮品名称，不识别路人，不把商品推导成购买或功效。</p></a>
           <a class="route-card" href="#console"><span class="route-no">03 / 交互</span><h3>产品闭环</h3><p>素材选择、草稿、来源、确认、分享阅读和回复串成一次演示。</p></a>
-          <a class="route-card" href="#next"><span class="route-no">04 / 推进</span><h3>下一阶段</h3><p>固定案例、署名快照、真实 AI/双设备取证，再做长图和短片。</p></a>
+          <a class="route-card" href="#next"><span class="route-no">04 / 推进</span><h3>下一阶段</h3><p>真实 AI、双设备和真人测试取证，再做动态长图和短片。</p></a>
         </div>
       </section>
 
@@ -310,7 +359,7 @@
           <table class="boundary-table">
             <thead><tr><th>项目</th><th>状态</th><th>汇报口径</th></tr></thead>
             <tbody>
-              <tr><td>代码闭环</td><td><span class="state pass">PASS</span></td><td>本地回归小程序 122、API 132、contracts 13、Web 69。</td></tr>
+              <tr><td>代码闭环</td><td><span class="state pass">PASS</span></td><td>本地回归小程序 125、API 138、contracts 17、Web 75。</td></tr>
               <tr><td>内容安全</td><td><span class="state pass">PASS</span></td><td>固定案例 T01-T07 全部通过，照片/语音 SHA-256 已核对。</td></tr>
               <tr><td>真实 AI 四素材</td><td><span class="state wait">待取证</span></td><td>OpenAI 适配器已在代码中，真实供应商 E2E 尚未形成脱敏录像。</td></tr>
               <tr><td>真人用户测试</td><td><span class="state wait">待开始</span></td><td>工具和工作簿已准备，6 名参与者的评分尚未产生。</td></tr>
@@ -320,10 +369,10 @@
             <p class="kicker" style="color:#f4c48c">下一阶段</p>
             <h3>把展示证据推进到真实闭环。</h3>
             <ol>
-              <li>署名进入服务端确认快照。<span>换设备读取也保持一致。</span></li>
-              <li>接入脱敏 `case_001` fixture。<span>让内容成果进入自动回归。</span></li>
-              <li>完成真实 AI 和微信双设备取证。<span>记录请求、来源、失败重试与回复。</span></li>
-              <li>从确认版本导出 1080px 长图。<span>短片在同一版本链路上扩展。</span></li>
+              <li>完成真实 OpenAI 四素材端到端取证。<span>记录请求、来源、失败重试与人工事实核对。</span></li>
+              <li>完成微信两账号/两设备分享、媒体播放、回复和失效链接负向流程。</li>
+              <li>完成 3 名年轻用户和 3 名长辈测试，修复问题并形成复测结论。</li>
+              <li>从同一份 <code>confirmedDraft</code> 自动导出 1080px 长图，并在此版本链路上扩展短片。</li>
             </ol>
           </aside>
         </div>
@@ -339,8 +388,8 @@
             <h3>已准备好的证据</h3>
             <p>适合第一屏打开，先建立共同上下文，再进入代码或开发者工具。</p>
             <div class="console-list">
-              <div class="console-action"><span>真实照片 / 语音 / 三版家书</span><button id="open-material" type="button">打开内容页</button></div>
-              <div class="console-action"><span>阶段报告、整合关系、问题清单</span><a href="../PHASE_DELIVERY_REPORT_2026-08-25.md" target="_blank" rel="noreferrer">打开报告</a></div>
+              <div class="console-action"><span>真实照片 / 语音 / 三版家书</span><button id="open-material" type="button">打开受控包</button></div>
+              <div class="console-action"><span>当前交接状态、整合关系、问题清单</span><a href="../CURRENT_HANDOFF_STATUS_2026-08-28.md" target="_blank" rel="noreferrer">打开当前报告</a></div>
               <div class="console-action"><span>项目经理最新推进台账</span><a href="../PROJECT_STATUS.md" target="_blank" rel="noreferrer">打开台账</a></div>
             </div>
           </div>
@@ -348,13 +397,14 @@
             <h3>需要操作时</h3>
             <p>本页不依赖服务端；以下按钮连接到你们的本地演示环境。</p>
             <div class="console-list">
-              <div class="console-action"><span>H5 收信端（需先启动 dev:web）</span><a href="http://127.0.0.1:4173/" target="_blank" rel="noreferrer">打开 H5</a></div>
+              <div class="console-action"><span>受控 CASE-001 H5（先启动受控阅读页）</span><a href="http://127.0.0.1:4173/" target="_blank" rel="noreferrer">打开 H5</a></div>
+              <div class="console-action"><span>受控 CASE-001 离线包（本机 4183 已启动时）</span><a href="http://127.0.0.1:4183/" target="_blank" rel="noreferrer">打开离线包</a></div>
               <div class="console-action"><span>API 闭环命令（复制后在仓库执行）</span><button id="copy-api" type="button">复制命令</button></div>
               <div class="console-action"><span>微信小程序创作端</span><button id="show-mini" type="button">查看导入路径</button></div>
             </div>
             <div class="path-field">
-              <label for="material-path">真实素材展示页路径（压缩包默认使用相对路径）</label>
-              <input id="material-path" value="" placeholder="例如：../完整成果包/展示/暖笺_真实素材家书展示.html" />
+              <label for="material-path">受控包入口（解压后选择根目录 index.html）</label>
+              <input id="material-path" value="" placeholder="例如：../暖笺_CASE-001_受控团队成果包_2026-08-28/index.html" />
             </div>
           </div>
         </div>
@@ -362,7 +412,7 @@
 
       <footer class="footer">
         <a href="#start">回到开头 ↑</a>
-        <span>暖笺 · 阶段成果展示中心 · 2026-08-25 · 内部汇报使用</span>
+        <span>暖笺 · 阶段成果展示中心 · 2026-08-28 · CASE-001 内部汇报使用</span>
       </footer>
     </main>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -384,14 +434,19 @@
         }
         return new URL(trimmed.replace(/\\/g, '/'), window.location.href).href;
       }
+      document.querySelector('#case-proof-media img')?.addEventListener('error', () => {
+        document.querySelector('#case-proof-media')?.classList.add('is-missing');
+      });
+      document.querySelector('.case-proof-audio audio')?.addEventListener('error', () => {
+        document.querySelector('.case-proof-audio')?.classList.add('is-missing');
+      });
       function openMaterial() {
         const value = document.querySelector('#material-path').value;
-        if (!value.trim()) { showToast('请先填写真实素材展示页路径'); return; }
+        if (!value.trim()) { showToast('请先填写解压后的受控包入口路径'); return; }
         window.open(pathToFileUrl(value), '_blank', 'noopener');
-        showToast('已尝试打开真实素材展示页');
+        showToast('已尝试打开受控 CASE-001 包');
       }
-      document.querySelector('#open-material').addEventListener('click', openMaterial);
-      document.querySelector('#open-material-top').addEventListener('click', openMaterial);
+      document.querySelector('#open-material')?.addEventListener('click', openMaterial);
       document.querySelector('#copy-api').addEventListener('click', async () => {
         try { await navigator.clipboard.writeText(apiCommand); showToast('API 演示命令已复制'); }
         catch { showToast('复制失败，请从演示手册复制命令'); }

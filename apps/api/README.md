@@ -28,13 +28,18 @@ The runtime does not infer a deployment mode. Provide the required values shown 
 | `production` | `production` | `openai` is mandatory | Rejected while development adapters remain | Not currently available |
 
 `PUBLIC_BASE_URL` must be a credential-free HTTP(S) origin. `CORS_ORIGINS`, `UPLOAD_DIR`, and
-`AI_PROVIDER` are also required. Competition
+`AI_PROVIDER` and `AUTH_PROVIDER` are also required. `AUTH_PROVIDER=development` is usable only in
+`demo` and `test`; competition may start for configuration/evidence inspection, but its wx-login
+route fails closed until a real Wechat adapter replaces the current development login. Selecting
+`AUTH_PROVIDER=wechat` does not emulate `code2Session`: health reports it as unavailable and login
+returns `AUTH_PROVIDER_UNAVAILABLE`. Competition
 mode additionally requires `OPENAI_API_KEY`, `OPENAI_MODEL`, and stable `MEDIA_SIGNING_KEYS`.
 Missing, misspelled, or conflicting values stop startup before storage, AI clients, or the listener
 are created.
 
-`GET /health` reports `deploymentMode`, `nonProduction`, and non-sensitive capability labels. In
-competition mode it deliberately discloses that authentication is developmental, the repository is
+`GET /health` reports `deploymentMode`, `nonProduction`, and non-sensitive capability labels,
+including the configured authentication provider and whether that provider is ready. In
+competition mode it deliberately discloses that authentication is unavailable, the repository is
 in memory, object storage is local, and reply safety is deterministic. It never returns credentials
 or the configured model.
 
