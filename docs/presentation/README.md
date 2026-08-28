@@ -2,7 +2,7 @@
 
 这是给队友、项目经理和内部评审使用的现场展示首页，不替代 GitHub 仓库，也不伪装成生产环境。
 
-需要发给同学时，按 [`PORTABLE_BUNDLE_LAYOUT.md`](./PORTABLE_BUNDLE_LAYOUT.md) 的结构组包；不要把本机 `C:\Users\...` 路径写进压缩包。
+需要发给同学时，直接使用已核验的 r2 阶段汇报交付包；其结构见 [`PORTABLE_BUNDLE_LAYOUT.md`](./PORTABLE_BUNDLE_LAYOUT.md)。不要重新手工拼包，也不要把本机 `C:\Users\...` 路径写进压缩包。
 
 ## 最快打开
 
@@ -39,4 +39,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-controlled-case-demo.p
 
 这套媒介可以证明队友照片/语音/三版文字已经进入一条可操作的本地产品旅程，也可以证明内容安全方法与确认阅读交互；不能替代真实 OpenAI 四素材证据、微信双真机、真人测试或生产部署证据。
 
-需要一次性发给队友时，使用 `D:\tmp\warm-letter-ai-family\暖笺_阶段汇报交付包_2026-08-28.zip`：解压后先看根目录 PDF，再双击 `interactive/index.html`。该包把“我们的产品说明书”和“使用队友真实材料的可操作闭环”放在同一份可移机目录中；SHA-256 为 `CF1E99E917E34AC9A1648DE57FF3D230802BA8B0A4A0DDAD329B921AEE395F1A`。
+需要一次性发给队友时，使用 `D:\tmp\warm-letter-ai-family\暖笺_阶段汇报交付包_2026-08-28-r2.zip`：解压后先看根目录 8 页 PDF，再双击 `interactive/index.html`，移交时继续阅读 `handoff/README.md` 和 `adapter/README.md`。该包把“我们的产品说明书”“使用队友真实材料的可操作闭环”“确认稿长图工程适配器”和“接手清单”放在同一份可移机目录中；SHA-256 为 `431F14C6892A750FCDC6D629D525FCDBC04802A7B6490A3FD9D8AFFF3F465F82`，同级 `.zip.sha256` 可校验整个 ZIP。旧的无 `-r2` 后缀版本仅作历史留存，不再推荐发送。

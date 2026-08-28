@@ -11,24 +11,38 @@
 | 项目 | 当前事实 |
 | --- | --- |
 | 分支 | `codex/warm-letter-mvp` |
-| 已验证实现基线 | `95fc9d9`（CASE-001 展示、运行时门禁与交接更新已提交） |
+| 已验证交付实现基线 | `1c2de783f3a5812aca96868f417e67d82ce6300f`（队友材料融合、移交包与打包安全加固已提交；r2 清单绑定此提交） |
 | 本地运行时 | Node `22.23.2`、pnpm `11.19.0` |
 | 自动回归 | contracts `17/17`、Web `75/75`、小程序 `125/125`、API `138/138`，共 `355/355` |
 | 本地工程门禁 | frozen install、`pnpm check`、`pnpm build`、production bundle verifier、`git diff --check` 通过 |
 | 视觉复验 | H5 在 1440×900 和 390×844 下结尾/署名分层正常；手机端无署名溢出，控制台 0 error / 0 warning |
-| 队内主展示 | `暖笺_CASE-001_受控团队成果包_2026-08-28.zip`：队友真实照片的隐私裁切图、原始 m4a、A/B/C 固定审核稿、段落级证据、T01-T07 与 1080 px 长图均已进入同一可操作包 |
-| 远端验证 | [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095266241) 与 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095270181) 均通过 |
+| 队内主展示与移交 | `暖笺_阶段汇报交付包_2026-08-28-r2.zip`：8 页产品说明书、使用队友受控真实材料的交互闭环、长图工程适配器、进度/计划/问题和接手清单已进入同一可移机包 |
+| 最近已完成远端验证（本次推送前） | [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095266241) 与 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095270181) 均通过；本次交付提交的 Actions 结果以推送后的 GitHub 页面为准 |
 
-### 最新复验（2026-08-28 07:55:00 Asia/Shanghai）
+### 最新复验（截至 2026-08-28 21:13:00 Asia/Shanghai）
 
 - 使用 D 盘 Node `v22.23.2` 和 pnpm `11.19.0` 重跑 `pnpm check`、`pnpm build` 与 `pnpm --filter @warm-letter/web verify:production-bundle`，结果全部通过（355/355）；本轮新增 CASE-001 A/B/C 段落级精确归因回归测试。
 - `4183` 受控成果包浏览器实测已加载队友照片裁切图和原始 m4a，并完成 A/B/C 切换、确认、阅读和回复；`4173` React H5 同样实际加载 `720×1020` 照片和 `8.895s` 原始 m4a。阶段首页在 390×844 下 `scrollWidth=390`。
 - 本轮构建生成的 `dist`、`tsbuildinfo` 已移至 `D:\tmp\warm-letter-ai-family\artifacts\post-build-20260828-0729`；Vite 缓存位于 D 盘 `vite-cache`，C 盘工作区未保留本轮构建临时产物。
 - 新增 `scripts/create-confirmed-draft-long-image.ps1` 与配套验证脚本：直接读取 `LetterDraft`/`letter.confirmedDraft`，复用暖笺长图版式生成 `1080px` PNG 和审计 manifest；Windows PowerShell 5.1 与 PowerShell 7 均通过 direct/nested/非法字段验证，测试临时文件均在 D 盘。
+- 2026-08-28 21:13 重新生成 r2 阶段汇报交付包：Windows PowerShell 5.1 解析通过，非法 `PackageName` 路径穿越被拒绝且未在 `D:\tmp` 外创建文件；生成 ZIP 的相对路径、逐项内容哈希、PDF 固定哈希、payload manifest 与同级 ZIP sidecar 均通过门禁。
+- 独立只读复核无阻断：ZIP 共 25 个文件条目，24 个 payload 被 manifest 精确覆盖；原始照片字节未入包，裁切图、原始 m4a、A/B/C、5 份证据与 T01-T07 全部存在，文本及 PDF 元数据未发现本机路径或凭据。
 
 ## 2. 给队友展示什么
 
-默认发送 CASE-001 受控团队成果包，不再把脱敏合成产品原型作为对队友的主展示：
+默认发送下面的 r2 阶段汇报交付包。它不是简单整理队友材料，而是把本项目的产品说明书、使用队友真实材料的交互闭环、工程适配器和接手清单放在同一个可移机成果中；不要再把脱敏合成产品原型或旧无后缀 ZIP 作为对队友的主展示。
+
+### 推荐发送：阶段汇报交付包 r2
+
+- 文件：`D:\tmp\warm-letter-ai-family\暖笺_阶段汇报交付包_2026-08-28-r2.zip`
+- SHA-256：`431F14C6892A750FCDC6D629D525FCDBC04802A7B6490A3FD9D8AFFF3F465F82`
+- 校验文件：同目录 `暖笺_阶段汇报交付包_2026-08-28-r2.zip.sha256`。
+- 代码基线：包内 `PACKAGE_MANIFEST.json` 绑定分支 `codex/warm-letter-mvp` 与提交 `1c2de783f3a5812aca96868f417e67d82ce6300f`。
+- 打开顺序：解压后先看根目录 8 页 PDF，再双击 `interactive/index.html`，最后按需阅读 `handoff/README.md` 和 `adapter/README.md`。
+- 内容归属：PDF、融合产品交互、确认稿长图工程适配器、安全打包与移交文档是本项目成果；`interactive/` 使用队友提供并经隐私裁切、哈希校验的照片/语音/A-B-C/证据作为固定案例。
+- 可移机性：展示入口全部使用包内相对路径；`adapter/scripts/` 是开发验证工具，仍遵循受控临时目录策略，不是双击展示入口。
+
+### 受控 CASE-001 互动源包（交付包内 `interactive/` 的来源）
 
 - 目录：`D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28\`
 - 文件：`D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28.zip`
@@ -38,19 +52,19 @@
 - 已复验：照片在页面加载为 `720 x 1020` 物理裁切派生图；原始 m4a 可加载；A/B/C 可切换；初次载入显示“队友固定审核稿 / 固定稿依据已核对”，编辑后才变为“修改后待核对依据”。
 - 边界：三版是队友固定审核稿，不请求实时 OpenAI；阅读页是本地交互演示，不产生真实外网分享链接，也不代表微信双真机、真人测试或生产部署完成。
 
-### 阶段汇报 PDF（独立展示媒介）
+### 阶段汇报 PDF（交付包内及独立展示媒介）
 
-- 文件：`D:\tmp\warm-letter-ai-family\submission\暖笺_AI产品说明书_阶段版_2026-08-28.pdf`
-- SHA-256：`91B253C983B3AE8F48133407BBA181A34AD38A83ED433769D0485DD2C567FDB9`
+- 文件：`D:\tmp\warm-letter-ai-family\submission\暖笺_AI产品说明书_阶段版_2026-08-28-r2.pdf`
+- SHA-256：`DAD5B6E5FE97680180FDA1F9B1FA2B7AFCDD9DCCA131DF93D1825462A3AF87D4`
+- 版式复验：8 页 A4 已逐页渲染检查，无裁切、重叠、中文乱码或表格溢出。
 - 用途：给队友、项目经理和内部评审快速理解产品定位、真实素材接入、AI 价值、工程承接、隐私边界、当前门禁和接手路线；封面使用队友照片的物理裁切图。
 - 口径：这是 `G0 / 内部受控 / 阶段版`，不宣称真实 OpenAI 四素材、微信双真机、真人测试或生产放行已完成。
 
-### 单文件阶段汇报包
+### 历史单文件阶段汇报包
 
 - 文件：`D:\tmp\warm-letter-ai-family\暖笺_阶段汇报交付包_2026-08-28.zip`
 - SHA-256：`CF1E99E917E34AC9A1648DE57FF3D230802BA8B0A4A0DDAD329B921AEE395F1A`
-- 内容：根目录 PDF；`interactive/` 下是包含队友真实照片裁切图、原始 m4a、A/B/C、证据和确认/阅读/回复闭环的完整受控页面。
-- 打开顺序：解压后先看根目录 PDF，再双击 `interactive/index.html`；所有页面引用均为包内相对路径，可换电脑使用。
+- 状态：仅作为历史构建保留；其 manifest、ZIP 内容校验和 PDF 绑定弱于 r2，不再推荐发送或用于移交验收。
 
 ### 本轮实材复验（2026-08-28）
 
@@ -205,7 +219,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-controlled-case-demo.p
 
 - [ ] 接手人核对分支 HEAD、Node/pnpm 版本并运行全部本地门禁。
 - [ ] 接手人完整操作 CASE-001 受控展示包，确认真实裁切图、原始 m4a、A/B/C、编辑后来源核对、确认阅读和回复均可用。
-- [ ] 团队指定受控素材负责人，确认授权范围、原成果存储位置和 `1CE227E3B90734674DD128C0CBBBE650BB89DDD79BC1A00E2837DB2CF4610954`。
+- [ ] 接手人先用同级 `.zip.sha256` 核对 r2 交付 ZIP `431F14C6892A750FCDC6D629D525FCDBC04802A7B6490A3FD9D8AFFF3F465F82`，再核对 `PACKAGE_MANIFEST.json` 的 payload 哈希和代码提交。
+- [ ] 团队指定受控素材负责人，确认授权范围、原成果存储位置和受控源包 SHA-256 `1CE227E3B90734674DD128C0CBBBE650BB89DDD79BC1A00E2837DB2CF4610954`。
 - [ ] 接手人选择第 7 节的一项 P0 工作，并先定义可复核证据再编码。
 - [ ] 每次阶段更新记录完成事实、证据链接、剩余风险和下一步前三项。
 
