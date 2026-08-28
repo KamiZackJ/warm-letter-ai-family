@@ -25,4 +25,4 @@
 
 ## 交接建议
 
-展示时先讲 PDF，再打开 `interactive/index.html`；接手开发时先核对 `PACKAGE_MANIFEST.json` 与 `interactive/manifest.json`，随后阅读 `handoff/README.md`。所有运行入口均使用包内相对路径，换电脑或盘符后无需修改。开发脚本仍执行当前安全策略：临时输入和输出必须放在接手人明确选择的受控临时目录。本包没有原始照片、开发输入、原始转写、系统提示词或测试工作簿，这些材料继续留在团队受控存储中。
+展示时先讲 PDF，再打开 `interactive/index.html`；接手开发时先核对 `PACKAGE_MANIFEST.json` 与 `interactive/manifest.json`，随后阅读 `handoff/README.md`。展示入口均使用包内相对路径，换电脑或盘符后无需修改；`adapter/scripts/` 是开发验证工具，仍执行当前受控临时目录策略，不是双击展示入口。本包没有原始照片、开发输入、原始转写、系统提示词或测试工作簿，这些材料继续留在团队受控存储中。

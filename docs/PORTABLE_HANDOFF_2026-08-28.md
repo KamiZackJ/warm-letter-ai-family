@@ -50,7 +50,7 @@
 - 推荐 A 长图：`1080 x 2631`，SHA-256 `24b72c0626e12435e50bdcf911dac55914b092bcff147cfb61cf3d17b582f0ed`。
 - T01-T07：固定 CASE-001 的 7 条内容安全与隐私验收全部为 `PASS`。
 - 当前自动化基线：contracts `17`、Web `75`、小程序 `125`、API `138`，共 `355/355`。
-- 根目录 `PACKAGE_MANIFEST.json` 记录本包全部文件的相对路径、大小与 SHA-256；`interactive/manifest.json` 记录受控材料、裁切和证据链。
+- 根目录 `PACKAGE_MANIFEST.json` 记录除自身外全部 payload 文件的相对路径、大小与 SHA-256；同级 `暖笺_阶段汇报交付包_2026-08-28-r2.zip.sha256` 记录 ZIP 整体哈希，避免 manifest 自引用造成不可验证的循环；`interactive/manifest.json` 记录受控材料、裁切和证据链。
 
 ## 5. 当前问题与风险
 
@@ -74,7 +74,7 @@
 
 ## 7. 接手首日清单
 
-- [ ] 核对 `PACKAGE_MANIFEST.json`，确认所有文件哈希和相对路径一致。
+- [ ] 核对 ZIP 同级的 `.zip.sha256`，再核对 `PACKAGE_MANIFEST.json` 中所有 payload 文件的哈希和相对路径一致。
 - [ ] 完整操作 `interactive/index.html`，确认照片、原音、A/B/C、来源、确认、阅读和回复均可用。
 - [ ] 阅读 `interactive/PROJECT_INTEGRATION.md`，确认队友成果、本项目成果和传播边界。
 - [ ] 阅读 `adapter/README.md`，理解通用长图适配器已经完成什么、还缺什么。

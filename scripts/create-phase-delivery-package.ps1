@@ -30,6 +30,7 @@ $expectedAudioSha256 = 'f9ec48c022bc98d9cc5ac3ff061c65108fe4827ccd8aac9ef1aca15f
 $expectedLongImageSha256 = '24b72c0626e12435e50bdcf911dac55914b092bcff147cfb61cf3d17b582f0ed'
 $expectedLongImageManifestSha256 = '281101bdd8aca3b90d865594ffa5b1e88ded9245fa94383df5ef9aa14f5baf8c'
 $pdfOutputName = '暖笺_AI产品说明书_阶段版_2026-08-28-r2.pdf'
+$expectedProductBriefSha256 = 'dad5b6e5fe97680180fda1f9b1fa2b7afcdd9dcca131df93d1825462a3af87d4'
 
 $interactiveEntries = @(
   'PROJECT_INTEGRATION.md',
@@ -118,7 +119,8 @@ function Assert-ArchiveMatchesDirectory {
   param(
     [Parameter(Mandatory = $true)][string]$ArchivePath,
     [Parameter(Mandatory = $true)][string]$Directory,
-    [Parameter(Mandatory = $true)][string[]]$ExpectedEntries
+    [Parameter(Mandatory = $true)][string[]]$ExpectedEntries,
+    [Parameter(Mandatory = $true)][string]$Label
   )
 
   Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -128,23 +130,87 @@ function Assert-ArchiveMatchesDirectory {
     $entries = @($archive.Entries | Where-Object { -not [string]::IsNullOrEmpty($_.Name) })
     foreach ($entry in $entries) {
       if ($entry.FullName.Contains('\') -or $entry.FullName.StartsWith('/') -or $entry.FullName.Split('/') -contains '..') {
-        throw "Controlled archive contains a non-portable entry: $($entry.FullName)"
+        throw "$Label contains a non-portable entry: $($entry.FullName)"
       }
     }
     $entryNames = @($entries | ForEach-Object { $_.FullName })
-    Assert-ExactEntrySet -Actual $entryNames -Expected $ExpectedEntries -Label 'Controlled archive'
+    Assert-ExactEntrySet -Actual $entryNames -Expected $ExpectedEntries -Label $Label
     foreach ($entry in $entries) {
       $source = $entry.Open()
       $sha = [System.Security.Cryptography.SHA256]::Create()
       try {
         $entryHash = ([System.BitConverter]::ToString($sha.ComputeHash($source))).Replace('-', '').ToLowerInvariant()
         if ($entryHash -cne [string]$directoryMap[$entry.FullName].sha256) {
-          throw "Controlled archive entry differs from the approved directory: $($entry.FullName)"
+          throw "$Label entry differs from the approved directory: $($entry.FullName)"
         }
       } finally {
         $sha.Dispose()
         $source.Dispose()
       }
+    }
+  } finally {
+    $archive.Dispose()
+  }
+}
+
+function Assert-SafePackageName {
+  param([Parameter(Mandatory = $true)][string]$Value)
+
+  if (
+    [string]::IsNullOrWhiteSpace($Value) -or
+    $Value.Trim() -cne $Value -or
+    $Value -in @('.', '..') -or
+    $Value -cne [System.IO.Path]::GetFileName($Value) -or
+    $Value.EndsWith('.') -or
+    $Value.EndsWith(' ') -or
+    $Value.IndexOfAny([System.IO.Path]::GetInvalidFileNameChars()) -ge 0
+  ) {
+    throw 'PackageName must be a single safe directory name without path separators or traversal segments.'
+  }
+}
+
+function Get-SafeOutputChildPath {
+  param(
+    [Parameter(Mandatory = $true)][string]$Parent,
+    [Parameter(Mandatory = $true)][string]$ChildName,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  $parentFull = [System.IO.Path]::GetFullPath($Parent).TrimEnd('\')
+  $candidate = [System.IO.Path]::GetFullPath((Join-Path $parentFull $ChildName))
+  $prefix = $parentFull + '\'
+  if (-not $candidate.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "$Label must remain inside OutputDirectory."
+  }
+  return $candidate
+}
+
+function New-PortableArchive {
+  param(
+    [Parameter(Mandatory = $true)][string]$Directory,
+    [Parameter(Mandatory = $true)][string]$ArchivePath
+  )
+
+  if (Test-Path -LiteralPath $ArchivePath) {
+    throw "Refusing to overwrite archive stage: $ArchivePath"
+  }
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $rootFull = [System.IO.Path]::GetFullPath($Directory).TrimEnd('\')
+  $prefixLength = $rootFull.Length + 1
+  $archive = [System.IO.Compression.ZipFile]::Open($ArchivePath, [System.IO.Compression.ZipArchiveMode]::Create)
+  try {
+    foreach ($file in Get-ChildItem -LiteralPath $rootFull -Recurse -File -Force | Sort-Object FullName) {
+      $entryName = $file.FullName.Substring($prefixLength).Replace('\', '/')
+      if ($entryName.Contains('\') -or $entryName.StartsWith('/') -or $entryName.Split('/') -contains '..' -or $entryName -match '^[A-Za-z]:') {
+        throw "Refusing to create a non-portable ZIP entry: $entryName"
+      }
+      [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+        $archive,
+        $file.FullName,
+        $entryName,
+        [System.IO.Compression.CompressionLevel]::Optimal
+      ) | Out-Null
     }
   } finally {
     $archive.Dispose()
@@ -197,10 +263,13 @@ if ([System.IO.Path]::GetFileName($ProductBriefPath) -cne $pdfOutputName) {
 }
 $pdfMagic = [System.IO.File]::ReadAllBytes($productBriefFull)[0..4]
 if ([System.Text.Encoding]::ASCII.GetString($pdfMagic) -cne '%PDF-') { throw 'ProductBriefPath is not a PDF file.' }
+if ((Get-LowerSha256 -LiteralPath $productBriefFull) -cne $expectedProductBriefSha256) {
+  throw 'ProductBriefPath SHA-256 does not match the reviewed r2 PDF.'
+}
 
 $controlledMap = Get-RelativeFileMap -Root $controlledRootFull
 Assert-ExactEntrySet -Actual @($controlledMap.Keys) -Expected $interactiveEntries -Label 'Controlled package directory'
-Assert-ArchiveMatchesDirectory -ArchivePath $controlledArchiveFull -Directory $controlledRootFull -ExpectedEntries $interactiveEntries
+Assert-ArchiveMatchesDirectory -ArchivePath $controlledArchiveFull -Directory $controlledRootFull -ExpectedEntries $interactiveEntries -Label 'Controlled archive'
 
 $controlledManifest = Get-Content -LiteralPath (Join-Path $controlledRootFull 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 if (
@@ -237,17 +306,21 @@ $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 $sourceBranch = (& git -C $repositoryRoot branch --show-current).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sourceCommit)) { throw 'Unable to resolve repository commit.' }
 
-$finalDirectory = Join-Path $outputDirectoryFull $PackageName
-$finalArchive = Join-Path $outputDirectoryFull "$PackageName.zip"
-if ((Test-Path -LiteralPath $finalDirectory) -or (Test-Path -LiteralPath $finalArchive)) {
+Assert-SafePackageName -Value $PackageName
+$finalDirectory = Get-SafeOutputChildPath -Parent $outputDirectoryFull -ChildName $PackageName -Label 'Phase delivery directory'
+$finalArchive = Get-SafeOutputChildPath -Parent $outputDirectoryFull -ChildName "$PackageName.zip" -Label 'Phase delivery archive'
+$finalArchiveSha256 = Get-SafeOutputChildPath -Parent $outputDirectoryFull -ChildName "$PackageName.zip.sha256" -Label 'Phase delivery checksum'
+if ((Test-Path -LiteralPath $finalDirectory) -or (Test-Path -LiteralPath $finalArchive) -or (Test-Path -LiteralPath $finalArchiveSha256)) {
   throw 'Refusing to overwrite an existing phase delivery. Choose a new PackageName.'
 }
 
 $operationId = [Guid]::NewGuid().ToString('N')
 $stage = Join-Path $outputDirectoryFull ".phase-delivery-stage-$operationId"
 $archiveStage = Join-Path $outputDirectoryFull ".phase-delivery-$operationId.zip"
+$archiveSha256Stage = Join-Path $outputDirectoryFull ".phase-delivery-$operationId.zip.sha256"
 $stageExists = $false
 $archiveStageExists = $false
+$archiveSha256StageExists = $false
 
 try {
   New-Item -ItemType Directory -Path $stage | Out-Null
@@ -277,7 +350,7 @@ try {
     }
   }
 
-  $packageEntries = Get-RelativeFileMap -Root $stage
+  $packagePayloadEntries = Get-RelativeFileMap -Root $stage
   $manifest = [ordered]@{
     schemaVersion = 1
     packageKind = 'warm-letter-phase-delivery'
@@ -299,7 +372,12 @@ try {
       bytes = (Get-Item -LiteralPath $productBriefFull).Length
       sha256 = Get-LowerSha256 -LiteralPath $productBriefFull
     }
-    entries = $packageEntries
+    entries = $packagePayloadEntries
+    integrity = [ordered]@{
+      entryScope = 'payload-files'
+      excludedFromEntries = @('PACKAGE_MANIFEST.json')
+      archiveSha256Sidecar = ([System.IO.Path]::GetFileName($finalArchiveSha256))
+    }
     controls = [ordered]@{
       pathsAreRelative = $true
       controlledInteractiveCopiedByteForByte = $true
@@ -318,36 +396,41 @@ try {
     $utf8WithoutBom
   )
 
+  $packageMap = Get-RelativeFileMap -Root $stage
+  if ($null -eq $packageMap['PACKAGE_MANIFEST.json']) {
+    throw 'PACKAGE_MANIFEST.json was not written to the phase delivery.'
+  }
+  $actualPayloadEntries = @($packageMap.Keys | Where-Object { $_ -cne 'PACKAGE_MANIFEST.json' })
+  Assert-ExactEntrySet -Actual $actualPayloadEntries -Expected @($packagePayloadEntries.Keys) -Label 'Phase manifest payload'
+
   Assert-SafePortableText -Root $stage
 
-  Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $stage -Force | ForEach-Object { $_.FullName }) -DestinationPath $archiveStage -CompressionLevel Optimal
+  New-PortableArchive -Directory $stage -ArchivePath $archiveStage
   $archiveStageExists = $true
+  Assert-ArchiveMatchesDirectory -ArchivePath $archiveStage -Directory $stage -ExpectedEntries @($packageMap.Keys) -Label 'Generated phase archive'
 
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $archive = [System.IO.Compression.ZipFile]::OpenRead($archiveStage)
-  try {
-    $rawNames = @($archive.Entries | Where-Object { -not [string]::IsNullOrEmpty($_.Name) } | ForEach-Object { $_.FullName })
-    foreach ($name in $rawNames) {
-      if ($name.Contains('\') -or $name.StartsWith('/') -or $name.Split('/') -contains '..' -or $name -match '^[A-Za-z]:') {
-        throw "Generated phase archive contains a non-portable entry: $name"
-      }
-    }
-    $expectedArchiveEntries = @((Get-RelativeFileMap -Root $stage).Keys)
-    Assert-ExactEntrySet -Actual $rawNames -Expected $expectedArchiveEntries -Label 'Generated phase archive'
-  } finally {
-    $archive.Dispose()
-  }
+  $archiveSha256 = Get-LowerSha256 -LiteralPath $archiveStage
+  [System.IO.File]::WriteAllText(
+    $archiveSha256Stage,
+    "$archiveSha256 *$([System.IO.Path]::GetFileName($finalArchive))`n",
+    $utf8WithoutBom
+  )
+  $archiveSha256StageExists = $true
 
   Move-Item -LiteralPath $stage -Destination $finalDirectory
   $stageExists = $false
   Move-Item -LiteralPath $archiveStage -Destination $finalArchive
   $archiveStageExists = $false
+  Move-Item -LiteralPath $archiveSha256Stage -Destination $finalArchiveSha256
+  $archiveSha256StageExists = $false
 } finally {
   if ($stageExists -and (Test-Path -LiteralPath $stage)) { Remove-Item -LiteralPath $stage -Recurse -Force }
   if ($archiveStageExists -and (Test-Path -LiteralPath $archiveStage)) { Remove-Item -LiteralPath $archiveStage -Force }
+  if ($archiveSha256StageExists -and (Test-Path -LiteralPath $archiveSha256Stage)) { Remove-Item -LiteralPath $archiveSha256Stage -Force }
 }
 
 Write-Host "Created phase delivery: $finalDirectory"
 Write-Host "Created archive: $finalArchive"
 Write-Host "Archive SHA-256: $(Get-LowerSha256 -LiteralPath $finalArchive)"
-Write-Host 'Controlled teammate media, current interactive, product brief, handoff, adapter, relative-path, and sensitive-text checks: PASS'
+Write-Host "Archive checksum sidecar: $finalArchiveSha256"
+Write-Host 'Controlled teammate media, current interactive, product brief, payload-manifest, ZIP content hash, relative-path, and sensitive-text checks: PASS'
