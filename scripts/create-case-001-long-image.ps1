@@ -4,7 +4,24 @@ param(
   [string]$InputRoot = 'D:\tmp\warm-letter-ai-family\controlled-case-001',
 
   [ValidateNotNullOrEmpty()]
-  [string]$OutputName = 'warm-letter-case-001-recommended-a.png'
+  [string]$OutputName = 'warm-letter-case-001-recommended-a.png',
+
+  # Keep the original CASE-001 output byte-compatible by default. The generic
+  # confirmedDraft adapter opts into these display/manifest labels explicitly.
+  [ValidateNotNullOrEmpty()]
+  [string]$HeaderLabel = 'CASE-001 · 推荐 A',
+
+  [ValidateNotNullOrEmpty()]
+  [string]$Disclosure = '队友固定审核稿 / 非实时 OpenAI / 由写信人确认',
+
+  [ValidateNotNullOrEmpty()]
+  [string]$PhotoCaption = '生活照片 · 商店货架、商品与 9.9 元价签',
+
+  [ValidateNotNullOrEmpty()]
+  [string]$PackageKind = 'warm-letter-case-001-long-image',
+
+  [switch]$AllowAnyCaseId,
+  [switch]$AllowNonColonGreeting
 )
 
 Set-StrictMode -Version Latest
@@ -12,7 +29,7 @@ $ErrorActionPreference = 'Stop'
 
 $allowedInputRoot = [System.IO.Path]::GetFullPath('D:\tmp').TrimEnd('\') + '\'
 $utf8WithoutBom = [System.Text.UTF8Encoding]::new($false)
-$requiredDisclosure = '队友固定审核稿 / 非实时 OpenAI / 由写信人确认'
+$requiredDisclosure = $Disclosure
 $canvasWidth = 1080
 $maximumCanvasHeight = 12000
 $paperColor = '#FBFAF7'
@@ -324,8 +341,8 @@ $title = if ($null -ne $titleProperty -and -not [string]::IsNullOrWhiteSpace([st
   '写给家里人的今天'
 }
 
-if ($schemaVersion -ne 1 -or $caseId -ne 'NUANJIAN-CASE-001') {
-  throw 'The input is not the supported CASE-001 schema version.'
+if ($schemaVersion -ne 1 -or ((-not $AllowAnyCaseId) -and $caseId -ne 'NUANJIAN-CASE-001')) {
+  throw 'The input is not the supported CASE-001 schema version, or generic mode was not enabled.'
 }
 if ([string]::IsNullOrWhiteSpace($recommendedDraftId)) {
   throw 'recommendedDraftId must not be empty.'
@@ -348,7 +365,7 @@ if ($bodyBlocks.Count -lt 3 -or $bodyBlocks | Where-Object { [string]::IsNullOrW
 $greeting = $bodyBlocks[0]
 $paragraphs = @($bodyBlocks[1..($bodyBlocks.Count - 2)])
 $signature = $bodyBlocks[$bodyBlocks.Count - 1]
-if ($greeting -notmatch '[:：]$') {
+if (-not $AllowNonColonGreeting -and $greeting -notmatch '[:：]$') {
   throw 'The first reviewed body block must be a greeting ending in a colon.'
 }
 if ($signature.Length -gt 40) {
@@ -492,7 +509,7 @@ try {
       $winePen = [System.Drawing.Pen]::new([System.Drawing.ColorTranslator]::FromHtml($wineColor), 5)
 
       $graphics.DrawString('暖笺', $brandFont, $sageBrush, [System.Drawing.RectangleF]::new($contentX, $brandY, 300, 45), $nearFormat)
-      $graphics.DrawString('CASE-001 · 推荐 A', $footerFont, $mutedBrush, [System.Drawing.RectangleF]::new($contentX, $brandY + 6, $contentWidth, 40), $farFormat)
+      $graphics.DrawString($HeaderLabel, $footerFont, $mutedBrush, [System.Drawing.RectangleF]::new($contentX, $brandY + 6, $contentWidth, 40), $farFormat)
       $graphics.DrawLine($linePen, $contentX, $topRuleY, $contentX + $contentWidth, $topRuleY)
 
       [void](Draw-Lines -Graphics $graphics -Lines $titleLines -Font $titleFont -Brush $inkBrush -X $contentX -Y $titleY -Width $contentWidth -LineHeight $titleLineHeight -Format $centerFormat)
@@ -502,7 +519,7 @@ try {
       $photoRectangle = [System.Drawing.Rectangle]::new($photoX, $photoY, $photoWidth, $photoHeight)
       $graphics.DrawImage($photo, $photoRectangle)
       $graphics.DrawRectangle($linePen, $photoRectangle)
-      $graphics.DrawString('生活照片 · 商店货架、商品与 9.9 元价签', $captionFont, $mutedBrush, [System.Drawing.RectangleF]::new($photoX, $captionY, $photoWidth, 38), $centerFormat)
+      $graphics.DrawString($PhotoCaption, $captionFont, $mutedBrush, [System.Drawing.RectangleF]::new($photoX, $captionY, $photoWidth, 38), $centerFormat)
 
       $graphics.DrawLine($linePen, $contentX, $bodyRuleY, $contentX + $contentWidth, $bodyRuleY)
       [void](Draw-Lines -Graphics $graphics -Lines $greetingLines -Font $bodyFont -Brush $inkBrush -X $bodyX -Y $greetingY -Width $bodyWidth -LineHeight $bodyLineHeight -Format $nearFormat)
@@ -556,7 +573,7 @@ try {
 
   $manifest = [ordered]@{
     schemaVersion = 1
-    packageKind = 'warm-letter-case-001-long-image'
+    packageKind = $PackageKind
     caseId = $caseId
     recommendedDraftId = $recommendedDraftId
     draftName = $draftName

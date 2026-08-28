@@ -1,12 +1,14 @@
-# 暖笺阶段汇报交付包
+# 暖笺阶段汇报与移交包（r2）
 
-这是给队友、项目经理和内部评审使用的阶段成果包，不是 GitHub 源码替代品，也不是比赛最终提交包。
+这是给队友、项目经理、内部评审和下一位接手人使用的阶段成果包，不是 GitHub 源码替代品，也不是比赛最终提交包。`r2` 使用当前受控 CASE-001 页面，保留旧阶段包但不再推荐使用。
 
 ## 先看什么
 
-1. 打开 `暖笺_AI产品说明书_阶段版_2026-08-28.pdf`：快速了解产品问题、真实素材接入、AI 价值、工程闭环、隐私边界和下一阶段计划。
+1. 打开 `暖笺_AI产品说明书_阶段版_2026-08-28-r2.pdf`：快速了解产品问题、真实素材接入、AI 价值、工程闭环、隐私边界和下一阶段计划。
 2. 打开 `interactive/index.html`：亲手走完“真实素材 -> A/B/C 三版审核稿 -> 来源核对 -> 确认 -> 阅读 -> 回复”。
-3. 需要追溯证据时，再看 `interactive/evidence/`、`interactive/manifest.json` 和 `interactive/PROJECT_INTEGRATION.md`。
+3. 打开 `handoff/README.md`：查看当前进度、未完成问题、下一阶段顺序和接手首日清单。
+4. 打开 `adapter/README.md`：查看本阶段新增的 `confirmedDraft` 长图适配器、验证脚本和共享契约快照。
+5. 需要追溯证据时，再看 `interactive/evidence/`、`interactive/manifest.json`、`interactive/PROJECT_INTEGRATION.md` 和根目录 `PACKAGE_MANIFEST.json`。
 
 ## 这里展示的是什么
 
@@ -14,6 +16,8 @@
 - `interactive/media/case-001-audio.m4a` 是队友提供的原始示例语音，可直接播放。
 - `interactive/demo-case.json` 和 `interactive/demo-case.js` 装载队友审核过的 A/B/C 三版家书、事实映射与 T01-T07 安全结论。
 - 编辑后来源会进入“待核对”，确认快照后才进入阅读端；这部分是本项目的产品工程承接。
+- `adapter/` 是本项目新增的工程产物，不来自队友材料整理：它从共享契约的 `confirmedDraft` 生成 1080 px 长图和审计 manifest，并包含 direct/API 嵌套、长文和拒绝非法输入的验证脚本。
+- `handoff/README.md` 汇总项目等级、验证结果、剩余门禁和接手顺序，避免只看到素材包而看不到产品与工程推进。
 
 ## 必须说清楚的边界
 
@@ -21,4 +25,4 @@
 
 ## 交接建议
 
-展示时先讲 PDF，再打开 `interactive/index.html`；接手开发时核对 `interactive/manifest.json` 的哈希和相对路径，随后阅读仓库中的 `docs/CURRENT_HANDOFF_STATUS_2026-08-28.md`。本包没有原始输入、原始转写、系统提示词或测试工作簿，这些材料继续留在团队受控存储中。
+展示时先讲 PDF，再打开 `interactive/index.html`；接手开发时先核对 `PACKAGE_MANIFEST.json` 与 `interactive/manifest.json`，随后阅读 `handoff/README.md`。所有运行入口均使用包内相对路径，换电脑或盘符后无需修改。开发脚本仍执行当前安全策略：临时输入和输出必须放在接手人明确选择的受控临时目录。本包没有原始照片、开发输入、原始转写、系统提示词或测试工作簿，这些材料继续留在团队受控存储中。

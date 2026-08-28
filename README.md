@@ -11,6 +11,7 @@
 - 原生微信小程序：素材选择、生成、编辑确认、阅读和回复流程。
 - Fastify API：素材上传与校验、家书状态机、来源追溯、分享重签/撤销和回复。
 - React H5：受控 CASE-001 模式可加载队友真实图片与原始音频；默认开发模式使用合成脱敏素材，并提供系统朗读、来源展开、回复和失效状态。
+- 动态长图：`scripts/create-confirmed-draft-long-image.ps1` 可从 API/共享契约的 `confirmedDraft` 生成 1080px 成品和审计 manifest；当前仍是离线渲染工具，尚未接入生产任务或短片流水线。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
 - 自动化基线：Node `22.23.2` 下当前工作树 contracts `17`、Web `75`、小程序 `125`、API `138`，共 `355` 项；本地类型检查、构建和 production bundle 校验均通过。远端链接保留为历史 CI 证据，当前交接口径以 [`docs/CURRENT_HANDOFF_STATUS_2026-08-28.md`](./docs/CURRENT_HANDOFF_STATUS_2026-08-28.md) 为准。
 
@@ -60,6 +61,8 @@ pnpm dev:web:synthetic
 pnpm dev:web:case-001
 ```
 
+> 团队汇报只使用 `pnpm dev:web:case-001`、根目录 `pnpm dev:web` 已发现受控包后的页面，或 CASE-001 受控 ZIP 的根目录 `index.html`。不要把 `pnpm dev:web:synthetic` 或 `pnpm --filter @warm-letter/web dev` 的合成开发素材截图当作队友成果。
+
 也可以直接转发 `D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28.zip`。解压后双击根目录 `index.html`，即可看到队友真实照片的隐私裁切图、原始 m4a、A/B/C 固定审核稿、来源证据和确认/阅读/回复流程；ZIP SHA-256 为 `1ce227e3b90734674dd128c0cbbbe650bb89ddd79bc1a00e2837db2cf4610954`。
 
 - API 健康检查：`http://127.0.0.1:8787/health`
@@ -81,7 +84,10 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 ## 进度与边界
 
 - [2026-08-28 当前交接状态（接手人先看这里）](./docs/CURRENT_HANDOFF_STATUS_2026-08-28.md)
+- [可移机阶段移交说明（进度、计划、问题和接手清单）](./docs/PORTABLE_HANDOFF_2026-08-28.md)
 - [受控 CASE-001 融合演示（团队内部主展示入口）](./docs/CONTROLLED_CASE_DEMO.md)
+- [confirmedDraft 长图导出与验证](./docs/CONFIRMED_DRAFT_LONG_IMAGE.md)
+- [阶段汇报与移交包构建脚本](./scripts/create-phase-delivery-package.ps1)
 - [队友材料融合映射与接手说明](./docs/TEAMMATE_MATERIAL_INTEGRATION_2026-08-28.md)
 - [可搬家压缩包目录说明（全部使用相对路径）](./docs/presentation/PORTABLE_BUNDLE_LAYOUT.md)
 - [团队成果展示入口（优先受控 CASE-001，含脱敏开发入口）](./暖笺_互动产品演示.html)

@@ -407,7 +407,7 @@ def build_pdf(package_root: Path, output_path: Path) -> None:
     story.extend(section_header(styles, "02", "一封家书的完整闭环", "演示和未来产品都围绕同一条链路：主动选择、结构化整理、来源核对、本人确认、家人阅读与回复。"))
     flow = [
         [flow_step(styles, "01", "主动选择素材", "照片、语音、文字由寄信人逐项勾选；未选择的内容不进入本次整理。"), flow_step(styles, "02", "生成可编辑草稿", "AI 以结构化段落输出事实、语气和 sourceRefs，避免一段话无法核对。"), flow_step(styles, "03", "编辑与来源核对", "改写或新增内容会清空旧引用，必须重新选择来源或标记为本人补充。")],
-        [flow_step(styles, "04", "确认快照", "标题、正文、署名和媒体关联冻结为 confirmedDraft；后续草稿变化不影响收信端。"), flow_step(styles, "05", "阅读与回复", "家人可切换字号、查看段落来源、播放原始语音并提交安全校验后的回复。"), flow_step(styles, "06", "可撤销分享", "真实服务使用短期读信/媒体凭据，支持过期、撤销、重签、限流和幂等。")],
+        [flow_step(styles, "04", "确认快照", "标题、正文、署名和媒体关联冻结为确认稿快照；后续草稿变化不影响收信端。"), flow_step(styles, "05", "阅读与回复", "家人可切换字号、查看段落来源、播放原始语音并提交安全校验后的回复。"), flow_step(styles, "06", "可撤销分享", "真实服务使用短期读信/媒体凭据，支持过期、撤销、重签、限流和幂等。")],
     ]
     flow_table = Table(flow, colWidths=[57 * mm, 57 * mm, 57 * mm], rowHeights=[42 * mm, 42 * mm])
     flow_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), WHITE), ("BOX", (0, 0), (-1, -1), 0.6, LINE), ("INNERGRID", (0, 0), (-1, -1), 0.45, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 9), ("RIGHTPADDING", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
@@ -448,7 +448,7 @@ def build_pdf(package_root: Path, output_path: Path) -> None:
         [p("能力", styles["table_head"]), p("为什么重要", styles["table_head"]), p("当前推进", styles["table_head"])],
         [p("可信 AI", styles["table_bold"]), p("赛规要求 AI 是核心价值，产品也需要稳定理解真实素材", styles["table"]), p("适配器和失败门禁已在代码中；真实四素材 E2E 待取证", styles["table"])],
         [p("隐私与分享", styles["table_bold"]), p("家庭内容不能因分享链接或日志泄漏", styles["table"]), p("短期读信/媒体凭据、撤销、限流和脱敏已有本地证据", styles["table"])],
-        [p("输出一致性", styles["table_bold"]), p("长图、短片、H5 必须来自同一确认版本", styles["table"]), p("CASE-001 推荐长图已生成；动态 confirmedDraft 渲染器待做", styles["table"])],
+        [p("输出一致性", styles["table_bold"]), p("长图、短片、H5 必须来自同一确认版本", styles["table"]), p("CASE-001 推荐长图已生成；confirmedDraft 离线渲染器已验证，线上任务和短片待接入", styles["table"])],
         [p("持续使用", styles["table_bold"]), p("日常、节日、照护等高频场景决定孵化潜力", styles["table"]), p("真人测试工具已准备；3+3 用户测试待开始", styles["table"])],
     ]
     product_table = Table(productization, colWidths=[38 * mm, 68 * mm, 67 * mm], repeatRows=1)
@@ -464,7 +464,7 @@ def build_pdf(package_root: Path, output_path: Path) -> None:
         ("真实 OpenAI 四素材", "待取证", "适配器存在，但尚无真实供应商 E2E 请求、响应和人工事实核对录像。"),
         ("微信双账号/双设备", "待完成", "上传、分享、播放、回复和失效链接真机证据尚未形成。"),
         ("真人用户测试", "待开始", "工具和工作簿已准备；3 名年轻用户和 3 名长辈评分尚未产生。"),
-        ("动态长图/短片", "待完成", "当前只有 CASE-001 固定推荐 A 长图；动态 confirmedDraft 渲染器仍需实现。"),
+        ("动态长图/短片", "部分完成", "confirmedDraft 离线渲染器已通过直接/API 嵌套输入、长文和非法字段验证；线上任务、短片、打印预览和真机仍待完成。"),
     ]
     story.extend([status_table(styles, status_rows), Spacer(1, 8 * mm), p("受控成果包结构", styles["kicker"]), p("根目录 index.html 是唯一主入口；demo-case.js 和 demo-case.json 只引用相邻的 ./media/...；evidence/ 保存输出样例、安全规则、隐私审查、T01-T07 和 material manifest；exports/ 保存推荐 A 长图及核验清单。", styles["body"]), p("移交边界", styles["kicker"]), p("原始照片、开发输入、原始转写、系统提示词、DOCX/XLSX 和真人测试工具不进入主演示 ZIP，保留在团队受控源目录。清单中的“完整使用与融合教程.docx”目前未在源目录找到，不能用“实际成果册.docx”冒充。", styles["quote"]), PageBreak()])
 
@@ -483,7 +483,7 @@ def build_pdf(package_root: Path, output_path: Path) -> None:
         [p("P0-1", styles["table_bold"]), p("用已授权脱敏四素材接入真实 OpenAI，保留请求/响应/失败/重试和人工核对记录", styles["table"]), p("真实供应商 E2E + sourceRefs + 事实核验录像", styles["table"])],
         [p("P0-2", styles["table_bold"]), p("完成微信两账号/两设备上传、分享、播放、回复和失效链接负向流程", styles["table"]), p("真机录像、请求时间线、错误 token 结果", styles["table"])],
         [p("P1-1", styles["table_bold"]), p("完成 3 名年轻用户 + 3 名长辈测试，按问题记录返修并复测", styles["table"]), p("评分、观察记录、问题关闭和 3 分钟完成率", styles["table"])],
-        [p("P1-2", styles["table_bold"]), p("从同一 confirmedDraft 自动渲染 1080 px 长图，再扩展短片", styles["table"]), p("正文/署名一致、无溢出、失败重试和版权台账", styles["table"])],
+        [p("P1-2", styles["table_bold"]), p("将已验证的 confirmedDraft 长图适配器接入 API 任务，再扩展短片", styles["table"]), p("线上正文/署名一致、打印预览、幂等重试和版权台账", styles["table"])],
     ]
     roadmap_table = Table(roadmap, colWidths=[22 * mm, 88 * mm, 63 * mm], repeatRows=1)
     roadmap_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), INK), ("GRID", (0, 0), (-1, -1), 0.45, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 7), ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7)]))
@@ -500,7 +500,7 @@ def build_pdf(package_root: Path, output_path: Path) -> None:
     ]
     handoff_table = Table(handoff, colWidths=[32 * mm, 70 * mm, 71 * mm], repeatRows=1)
     handoff_table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), INK), ("GRID", (0, 0), (-1, -1), 0.45, LINE), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 7), ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7)]))
-    story.extend([handoff_table, Spacer(1, 8 * mm), p("交接时先做三件事", styles["kicker"]), p("1. 核对受控包 SHA-256 和三项来源哈希。<br/>2. 在 390×844 和桌面尺寸完整走一遍素材选择、A/B/C、编辑来源、确认、阅读和回复。<br/>3. 选择一个 P0 工作项，先定义退出证据，再开始编码；项目经理每天记录完成事实、风险变化和下一证据。", styles["body"]), HRFlowable(width="100%", thickness=0.8, color=VERMILION, spaceBefore=6 * mm, spaceAfter=6 * mm), p("一句话带走", styles["kicker"]), p("暖笺已经证明：队友的真实生活素材可以在隐私边界内进入一条可操作的家书产品闭环。下一步不是再做一张漂亮截图，而是把真实 AI、双设备和真人反馈证据补齐，让这条闭环能够被真实用户持续使用。", styles["quote"]), p("本文件为阶段版内部受控材料。最终参赛 PDF、视频、平台声明和报名字段仍需双人复核后冻结。", styles["small"])] )
+    story.extend([handoff_table, Spacer(1, 8 * mm), p("交接时先做三件事", styles["kicker"]), p("1. 核对受控包 SHA-256 和三项来源哈希。<br/>2. 在 390×844 和桌面尺寸完整走一遍素材选择、A/B/C、编辑来源、确认、阅读和回复。<br/>3. 选择一个 P0 工作项，先定义退出证据，再开始编码；项目经理每天记录完成事实、风险变化和下一证据。", styles["body"]), HRFlowable(width="100%", thickness=0.8, color=VERMILION, spaceBefore=6 * mm, spaceAfter=6 * mm), p("一句话带走", styles["kicker"]), p("暖笺已经证明：队友的真实生活素材可以在隐私边界内进入一条可操作的家书产品闭环。下一步要补齐真实 AI、双设备和真人反馈证据，让它能被真实用户持续使用。", styles["quote"]), Spacer(1, 3 * mm), p("本文件为阶段版内部受控材料。最终参赛 PDF、视频、平台声明和报名字段仍需双人复核后冻结。", styles["small"])] )
 
     document.build(story, onFirstPage=draw_page, onLaterPages=draw_page)
 

@@ -206,8 +206,8 @@ function createCase001DemoReader(caseData: ControlledCase001BuildData): ReaderDa
       {
         id: "case-001-photo",
         type: "photo",
-        name: "队友提供生活照片（隐私裁切图）",
-        alt: "队友生活照片的隐私裁切图，只保留货架、商品与 9.9 元价签",
+        name: "队友原文件：生活照片_商店货架.jpg（隐私裁切展示）",
+        alt: "生活照片_商店货架.jpg 的隐私裁切派生图，只保留货架、商品与 9.9 元价签，不保留右侧路人",
         contentType: "image/jpeg",
         mediaUrl: `/${caseData.photoFile}`,
         imageDisplay: "contain",
@@ -216,7 +216,7 @@ function createCase001DemoReader(caseData: ControlledCase001BuildData): ReaderDa
       {
         id: "case-001-audio",
         type: "audio",
-        name: "队友提供示例语音（原始 m4a）",
+        name: "队友原文件：语音_暖笺_1.m4a",
         contentType: "audio/mp4",
         mediaUrl: `/${caseData.audioFile}`,
         durationSeconds: caseData.audioDurationSeconds,
@@ -447,6 +447,24 @@ function EnvironmentBadge() {
       <strong>{runtimeConfig.environmentLabel}</strong>
       <span>{runtimeConfig.environmentDetail}</span>
     </div>
+  );
+}
+
+function ControlledMaterialDisclosure() {
+  return (
+    <aside className="controlled-material-disclosure" role="note">
+      <Check aria-hidden="true" size={20} strokeWidth={2.2} />
+      <div>
+        <strong>CASE-001 · 队友实材已接入</strong>
+        <p>
+          照片来自《生活照片_商店货架.jpg》的物理裁切（未保留右侧路人）；语音为
+          《语音_暖笺_1.m4a》原文件；正文为《三版温柔家书.txt》中的推荐 A 固定审核稿。
+        </p>
+        <p className="controlled-material-boundary">
+          本页不实时生成内容；原照片不进入仓库或转发包。
+        </p>
+      </div>
+    </aside>
   );
 }
 
@@ -820,13 +838,89 @@ function App() {
           <h1 id="letter-title">{reader.draft.title}</h1>
           <p className="lead">由生活素材整理，经本人确认后寄出</p>
           {isControlledCase001Demo ? (
-            <p className="case-provenance" role="note">
-              已接入队友提供材料：隐私裁切照片、原始示例语音与固定审核稿
-            </p>
+            <ControlledMaterialDisclosure />
           ) : null}
         </div>
 
-        <section className="voice-bar" aria-label="系统语音朗读">
+        {audioSources.length > 0 ? (
+          <section
+            className={`original-audio ${isControlledCase001Demo ? "controlled-original-audio" : "synthetic-original-audio"}`}
+            aria-labelledby="original-audio-title"
+          >
+            <div className="media-section-heading">
+              <AudioLines aria-hidden="true" size={21} strokeWidth={1.7} />
+              <div>
+                <h2 id="original-audio-title">
+                  {isControlledCase001Demo ? "队友原始语音" : "脱敏演示音频"}
+                </h2>
+                <p>
+                  {isControlledCase001Demo
+                    ? "语音_暖笺_1.m4a · 8.895 秒 · 可直接播放核对"
+                    : "合成开发素材，不代表队友真实语音"}
+                </p>
+              </div>
+            </div>
+            <div className="audio-list">
+              {audioSources.map((source) => {
+                const expired = isMediaExpired(source, mediaNow);
+                const failed = mediaErrors[source.id];
+                const attempt = mediaAttempts[source.id] || 0;
+                const refreshing = mediaRefreshing[source.id];
+                return (
+                  <div className="audio-source" key={source.id} data-testid="source-audio">
+                    <div className="audio-source-copy">
+                      <strong>{source.name}</strong>
+                      {source.durationSeconds !== undefined ? (
+                        <span>{formatDuration(source.durationSeconds)}</span>
+                      ) : null}
+                    </div>
+                    {expired ? (
+                      <div className="audio-error-row" role="status" aria-live="polite">
+                        <p className="media-inline-error">语音访问已到期。</p>
+                        <button
+                          type="button"
+                          disabled={refreshing}
+                          onClick={() => void retryMedia(source.id)}
+                        >
+                          <RefreshCw aria-hidden="true" size={15} />
+                          {refreshing ? "刷新中…" : "重新获取"}
+                        </button>
+                      </div>
+                    ) : failed ? (
+                      <div className="audio-error-row" role="status" aria-live="polite">
+                        <p className="media-inline-error">语音暂时无法播放。</p>
+                        <button
+                          type="button"
+                          disabled={refreshing}
+                          onClick={() => void retryMedia(source.id)}
+                        >
+                          <RefreshCw aria-hidden="true" size={15} />
+                          {refreshing ? "刷新中…" : "重新获取"}
+                        </button>
+                      </div>
+                    ) : (
+                      <audio
+                        key={attempt}
+                        controls
+                        controlsList="nodownload"
+                        preload="metadata"
+                        src={source.mediaUrl!}
+                        aria-label={`播放素材语音：${source.name}`}
+                        onCanPlay={() => markMediaLoaded(source.id)}
+                        onError={() => markMediaFailed(source.id)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        <section
+          className={`voice-bar ${isControlledCase001Demo ? "voice-bar-secondary" : ""}`}
+          aria-label={isControlledCase001Demo ? "辅助系统朗读" : "系统语音朗读"}
+        >
           <button
             className="icon-button play-button"
             data-testid="voice-toggle"
@@ -844,13 +938,25 @@ function App() {
           </button>
           <div className="voice-copy">
             <strong>
-              {speechState === "playing"
-                ? "正在系统朗读"
-                : speechState === "paused"
-                  ? "系统朗读已暂停"
-                  : "听这封家书"}
+              {isControlledCase001Demo
+                ? speechState === "playing"
+                  ? "正在辅助朗读"
+                  : speechState === "paused"
+                    ? "辅助朗读已暂停"
+                    : "辅助朗读家书正文"
+                : speechState === "playing"
+                  ? "正在系统朗读"
+                  : speechState === "paused"
+                    ? "系统朗读已暂停"
+                    : "听这封家书"}
             </strong>
-            <span>{speechSupported ? "设备系统语音 · 不克隆家人声音" : "当前浏览器不支持系统朗读"}</span>
+            <span>
+              {speechSupported
+                ? isControlledCase001Demo
+                  ? "设备系统语音，不是队友原始语音"
+                  : "设备系统语音 · 不克隆家人声音"
+                : "当前浏览器不支持系统朗读"}
+            </span>
           </div>
           <Volume2 aria-hidden="true" size={22} strokeWidth={1.6} />
         </section>
@@ -925,72 +1031,6 @@ function App() {
                 </figure>
               );
             })}
-          </section>
-        ) : null}
-
-        {audioSources.length > 0 ? (
-          <section className="original-audio" aria-labelledby="original-audio-title">
-            <div className="media-section-heading">
-              <AudioLines aria-hidden="true" size={21} strokeWidth={1.7} />
-              <div>
-                <h2 id="original-audio-title">原始语音</h2>
-                <p>寄信人随素材留下的声音</p>
-              </div>
-            </div>
-            <div className="audio-list">
-              {audioSources.map((source) => {
-                const expired = isMediaExpired(source, mediaNow);
-                const failed = mediaErrors[source.id];
-                const attempt = mediaAttempts[source.id] || 0;
-                const refreshing = mediaRefreshing[source.id];
-                return (
-                  <div className="audio-source" key={source.id} data-testid="source-audio">
-                    <div className="audio-source-copy">
-                      <strong>{source.name}</strong>
-                      {source.durationSeconds !== undefined ? (
-                        <span>{formatDuration(source.durationSeconds)}</span>
-                      ) : null}
-                    </div>
-                    {expired ? (
-                      <div className="audio-error-row" role="status" aria-live="polite">
-                        <p className="media-inline-error">语音访问已到期。</p>
-                        <button
-                          type="button"
-                          disabled={refreshing}
-                          onClick={() => void retryMedia(source.id)}
-                        >
-                          <RefreshCw aria-hidden="true" size={15} />
-                          {refreshing ? "刷新中…" : "重新获取"}
-                        </button>
-                      </div>
-                    ) : failed ? (
-                      <div className="audio-error-row" role="status" aria-live="polite">
-                        <p className="media-inline-error">语音暂时无法播放。</p>
-                        <button
-                          type="button"
-                          disabled={refreshing}
-                          onClick={() => void retryMedia(source.id)}
-                        >
-                          <RefreshCw aria-hidden="true" size={15} />
-                          {refreshing ? "刷新中…" : "重新获取"}
-                        </button>
-                      </div>
-                    ) : (
-                      <audio
-                        key={attempt}
-                        controls
-                        controlsList="nodownload"
-                        preload="metadata"
-                        src={source.mediaUrl!}
-                        aria-label={`播放原始语音：${source.name}`}
-                        onCanPlay={() => markMediaLoaded(source.id)}
-                        onError={() => markMediaFailed(source.id)}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
           </section>
         ) : null}
 

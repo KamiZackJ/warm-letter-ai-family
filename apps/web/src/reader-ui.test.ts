@@ -103,11 +103,25 @@ describe("reader interface design gates", () => {
     expect(mainSource).toContain("isControlledCase001Demo");
     expect(mainSource).toContain("__WARM_LETTER_CONTROLLED_CASE_001__");
     expect(mainSource).not.toContain("今天上午开了个会，结束时有点累。中午点的外卖");
-    expect(mainSource).toContain("已接入队友提供材料");
-    expect(mainSource).toContain("队友提供示例语音（原始 m4a）");
-    expect(mainSource).toContain("队友生活照片的隐私裁切图");
+    expect(mainSource).toContain("CASE-001 · 队友实材已接入");
+    expect(mainSource).toContain("生活照片_商店货架.jpg");
+    expect(mainSource).toContain("语音_暖笺_1.m4a");
+    expect(mainSource).toContain("三版温柔家书.txt");
+    expect(mainSource).toContain("本页不实时生成内容；原照片不进入仓库或转发包");
+    expect(mainSource).toContain("设备系统语音，不是队友原始语音");
+    expect(mainSource).toContain("不保留右侧路人");
     expect(mainSource).toContain("recommendedDraftParagraphs[index]");
     expect(mainSource).toContain("受控 CASE-001 推荐审核稿缺少段落依据");
+    expect(mainSource.indexOf('className={`original-audio')).toBeLessThan(
+      mainSource.indexOf('className={`voice-bar'),
+    );
+    expect(cssRule(stylesSource, "\\.controlled-material-disclosure")).toContain(
+      "border-left: 3px solid var(--warm-sage)",
+    );
+    expect(cssRule(stylesSource, "\\.controlled-original-audio")).toContain(
+      "border-left: 3px solid var(--warm-sage)",
+    );
+    expect(cssRule(stylesSource, "\\.voice-bar-secondary")).toContain("background: #f4f6f3");
   });
 
   it("renders the confirmed closing and signature as separate fields", () => {

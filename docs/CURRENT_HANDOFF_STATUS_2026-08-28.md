@@ -19,11 +19,12 @@
 | 队内主展示 | `暖笺_CASE-001_受控团队成果包_2026-08-28.zip`：队友真实照片的隐私裁切图、原始 m4a、A/B/C 固定审核稿、段落级证据、T01-T07 与 1080 px 长图均已进入同一可操作包 |
 | 远端验证 | [push CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095266241) 与 [PR CI](https://github.com/KamiZackJ/warm-letter-ai-family/actions/runs/33095270181) 均通过 |
 
-### 最新复验（2026-08-28 07:30:38 Asia/Shanghai）
+### 最新复验（2026-08-28 07:55:00 Asia/Shanghai）
 
 - 使用 D 盘 Node `v22.23.2` 和 pnpm `11.19.0` 重跑 `pnpm check`、`pnpm build` 与 `pnpm --filter @warm-letter/web verify:production-bundle`，结果全部通过（355/355）；本轮新增 CASE-001 A/B/C 段落级精确归因回归测试。
 - `4183` 受控成果包浏览器实测已加载队友照片裁切图和原始 m4a，并完成 A/B/C 切换、确认、阅读和回复；`4173` React H5 同样实际加载 `720×1020` 照片和 `8.895s` 原始 m4a。阶段首页在 390×844 下 `scrollWidth=390`。
 - 本轮构建生成的 `dist`、`tsbuildinfo` 已移至 `D:\tmp\warm-letter-ai-family\artifacts\post-build-20260828-0729`；Vite 缓存位于 D 盘 `vite-cache`，C 盘工作区未保留本轮构建临时产物。
+- 新增 `scripts/create-confirmed-draft-long-image.ps1` 与配套验证脚本：直接读取 `LetterDraft`/`letter.confirmedDraft`，复用暖笺长图版式生成 `1080px` PNG 和审计 manifest；Windows PowerShell 5.1 与 PowerShell 7 均通过 direct/nested/非法字段验证，测试临时文件均在 D 盘。
 
 ## 2. 给队友展示什么
 
@@ -73,7 +74,7 @@
 - 确认发布时把归一化署名冻结进 `confirmedDraft`，后续草稿变化不影响公开 Reader。
 - 小程序真实 API 已移除 `real_signatures` 本地缓存，编辑端和全新收信设备都读取服务端字段。
 - H5 将结尾和署名分开展示，并把两者都纳入系统朗读。
-- 长图、短片渲染器尚不存在，微信双真机也未验，因此 FIX-021 的跨全部输出/真机范围仍不能整体关闭。
+- 新增通用 `confirmedDraft` 长图渲染器与验证脚本；它已证明确认稿正文、结尾和署名可从共享契约读取并生成 1080px PNG，但尚未接入 API 任务、短片流水线或微信双真机，因此 FIX-021 的跨全部输出/真机范围仍不能整体关闭。详见 [`CONFIRMED_DRAFT_LONG_IMAGE.md`](./CONFIRMED_DRAFT_LONG_IMAGE.md)。
 
 ### CASE-001 受控真实素材融合
 
@@ -85,6 +86,7 @@
 - 受控包用相对路径加载 `media/`、`evidence/` 和 `exports/`；推荐 A 长图为 `1080 x 2631`，正文、裁切图、披露语和无敏感路径由独立 manifest 复核。
 - React H5 阅读端新增 `VITE_DEMO_CASE=case-001` 受控模式：从受控包只读加载真实裁切照片和原始 m4a，Vite 启动时校验 SHA-256、媒体目录只允许两项已核验文件；页面显示队友来源、固定审核稿和非实时 OpenAI 口径。
 - 新增 `scripts/start-controlled-case-reader.ps1` 与 `scripts/start-web-demo.ps1`：前者显式指定受控媒体目录，后者是根目录默认入口，会优先加载 D:\tmp 中已核验的队友 CASE-001，找不到时回退脱敏模式；真实媒体仍不会进入 Git。
+- 新增 `scripts/create-confirmed-draft-long-image.ps1`：从同一份服务端 `confirmedDraft` 读取标题、问候、段落、结尾和署名，输出可复核的长图；调用方必须传入已获准展示的图片派生图，图片字节会嵌入成品，manifest 明确记录授权责任，不把输入图片误报为未包含。
 
 ### 展示入口收口（本轮）
 
@@ -188,7 +190,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-controlled-case-demo.p
 - 真实 OpenAI 照片、截图、中文语音和文字四素材端到端调用及事实核验录像。
 - 微信正式 `code2Session`、HTTPS API、两账号/两设备分享、媒体播放、回复和错误 token 真机证据。
 - PostgreSQL、S3/OSS、独立队列、跨实例限流、正式内容审核、删除 SLA 和生产部署。
-- 受控 CASE-001 已有 1080 px 长图，但从任意 `confirmedDraft` 自动生成长图/短片、与线上草稿的署名一致性验证仍未实现。
+- 受控 CASE-001 已有 1080 px 长图；通用 `confirmedDraft` 长图适配器及 direct/API 嵌套输入验证已实现，但尚未接入线上渲染任务、短片流水线、打印预览和微信双真机。
 - 3 名年轻用户和 3 名长辈的真人测试、问题返修与通过结论。
 - 比赛录屏、PDF、AIGC 声明、平台账号和正式提交回执。
 
@@ -197,7 +199,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-controlled-case-demo.p
 1. 用受控、已授权的脱敏四素材完成真实 OpenAI 请求，保存结构化输出、`sourceRefs`、失败/重试和人工事实核对证据。
 2. 配置正式微信环境，在两台设备上完成上传、寄出、阅读媒体、回复、回查和失效链接负向流程。
 3. 决定持久化、对象存储、审核、共享限流和删除架构，再进入 G2 真人用户测试。
-4. 从 `confirmedDraft` 实现 1080 px 长图，确认正文/署名一致和无溢出后再复用到短片。
+4. 将已验证的 `confirmedDraft` 长图适配器接入 API 渲染任务，补打印预览/重试/幂等和线上正文/署名一致性证据，再复用到短片。
 
 ## 8. 移交完成清单
 
