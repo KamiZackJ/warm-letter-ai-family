@@ -707,7 +707,12 @@
 
       function renderComposer() {
         const current = !state.generated ? "materials" : needsReview() ? "review" : "draft";
-        const controlledLink = controlledMedia ? "" : '<a href="http://127.0.0.1:4183/" target="_blank" rel="noreferrer">打开受控 CASE-001 离线包</a>';
+        const publicPagesHost = window.location.hostname.endsWith(".github.io");
+        const controlledLink = controlledMedia
+          ? ""
+          : publicPagesHost
+            ? '<a href="https://github.com/KamiZackJ/warm-letter-ai-family" target="_blank" rel="noreferrer">查看项目仓库</a>'
+            : '<a href="http://127.0.0.1:4183/" target="_blank" rel="noreferrer">打开受控 CASE-001 离线包</a>';
         return `<div class="app-shell"><header class="topbar"><a class="brand" href="#demo-root" data-action="reset" aria-label="重置暖笺本地演示"><span class="brand-mark" aria-hidden="true">笺</span><span>暖笺</span></a><div class="top-actions"><span class="local-tag">${controlledMedia ? "受控真实素材" : "脱敏仓库版"}</span><button class="quiet-button" type="button" data-action="open-evidence">查看工程依据</button><button class="icon-button" type="button" data-action="reset" aria-label="从头开始本次演示" title="从头开始">↺</button></div></header><div class="demo-note"><b>${controlledMedia ? "队友成果已接入" : "受控媒体未装入"}</b><span>${escapeHtml(demoDisclosure)} 编辑、来源核对、确认快照、阅读和回复由本项目演示承接。</span>${controlledLink}</div>${renderJourney(current)}<section class="workspace" aria-label="暖笺创作工作台">${renderMaterials()}${state.generated ? renderDraftComposer() : renderEmptyComposer()}${renderInspector()}</section>${renderEvidence()}<footer class="footer"><span>暖笺融合产品演示 · 队友内容成果 × 本项目产品闭环</span><span>素材主动选择 → 三版比较 → 来源核对 → 确认 → 阅读与回复</span></footer></div>`;
       }
 
