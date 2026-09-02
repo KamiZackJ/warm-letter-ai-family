@@ -12,6 +12,16 @@
 
 体验顺序：选择素材，生成并比较 A/B/C 三版家书；编辑后核对段落来源并确认；进入收信端切换字号、展开来源并发送一条本地回复。公开页面只展示审核后的文字结构，不包含队友真实照片、语音或访问凭据，也不调用实时 OpenAI。
 
+## 完赛候选与移交
+
+- [完赛交付候选说明](./docs/contest/README.md)
+- [3 分钟评审演示讲稿](./docs/contest/JUDGE_DEMO_RUNBOOK.md)
+- [AIGC 与隐私声明](./docs/contest/AIGC_PRIVACY_STATEMENT.md)
+- [比赛提交检查表](./docs/contest/SUBMISSION_CHECKLIST.md)
+- [可移机完赛候选与阶段移交说明](./docs/PORTABLE_HANDOFF_2026-08-28.md)
+
+队内受控压缩包除了上述文档，还包含队友照片的物理裁切派生图、授权示例语音、A/B/C 固定审核稿、离线交互闭环、长图适配器和完整性 manifest。这些受控媒体不进入公开 Git 或 Pages。
+
 ## 当前能力
 
 - 原生微信小程序：素材选择、生成、编辑确认、阅读和回复流程。

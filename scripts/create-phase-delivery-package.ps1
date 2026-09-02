@@ -15,6 +15,9 @@ param(
   [ValidateNotNullOrEmpty()]
   [string]$PackageName = '暖笺_阶段汇报交付包_2026-08-28-r2',
 
+  [ValidateSet('warm-letter-phase-delivery', 'warm-letter-contest-delivery-candidate')]
+  [string]$PackageKind = 'warm-letter-phase-delivery',
+
   [ValidatePattern('^[a-fA-F0-9]{64}$')]
   [string]$ExpectedControlledArchiveSha256 = '1ce227e3b90734674dd128c0cbbbe650bb89ddd79bc1a00e2837db2cf4610954'
 )
@@ -325,7 +328,7 @@ $archiveSha256StageExists = $false
 try {
   New-Item -ItemType Directory -Path $stage | Out-Null
   $stageExists = $true
-  foreach ($directory in @('interactive', 'handoff', 'adapter', 'adapter\contracts', 'adapter\scripts')) {
+  foreach ($directory in @('interactive', 'handoff', 'submission', 'adapter', 'adapter\contracts', 'adapter\scripts')) {
     New-Item -ItemType Directory -Path (Join-Path $stage $directory) -Force | Out-Null
   }
 
@@ -334,7 +337,12 @@ try {
   }
   Copy-Item -LiteralPath $productBriefFull -Destination (Join-Path $stage $pdfOutputName)
   Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\DELIVERY_PACKAGE_README_2026-08-28.md') -Destination (Join-Path $stage 'README.md')
+  Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\contest\START_HERE.html') -Destination (Join-Path $stage 'START_HERE.html')
   Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\PORTABLE_HANDOFF_2026-08-28.md') -Destination (Join-Path $stage 'handoff\README.md')
+  Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\contest\README.md') -Destination (Join-Path $stage 'submission\README.md')
+  Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\contest\JUDGE_DEMO_RUNBOOK.md') -Destination (Join-Path $stage 'submission\JUDGE_DEMO_RUNBOOK.md')
+  Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\contest\AIGC_PRIVACY_STATEMENT.md') -Destination (Join-Path $stage 'submission\AIGC_PRIVACY_STATEMENT.md')
+  Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\contest\SUBMISSION_CHECKLIST.md') -Destination (Join-Path $stage 'submission\SUBMISSION_CHECKLIST.md')
   Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\CONFIRMED_DRAFT_ADAPTER_PACKAGE_README.md') -Destination (Join-Path $stage 'adapter\README.md')
   Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs\CONFIRMED_DRAFT_LONG_IMAGE.md') -Destination (Join-Path $stage 'adapter\CONFIRMED_DRAFT_LONG_IMAGE.md')
   Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packages\contracts\src\models.ts') -Destination (Join-Path $stage 'adapter\contracts\models.ts')
@@ -353,7 +361,7 @@ try {
   $packagePayloadEntries = Get-RelativeFileMap -Root $stage
   $manifest = [ordered]@{
     schemaVersion = 1
-    packageKind = 'warm-letter-phase-delivery'
+    packageKind = $PackageKind
     packageName = $PackageName
     repository = [ordered]@{
       branch = $sourceBranch
@@ -388,6 +396,7 @@ try {
       historicalSyntheticScreenshotsIncluded = $false
       teammateMediaRestrictedToInteractive = $true
       handoffAndAdapterIncluded = $true
+      contestSubmissionGuidesIncluded = $true
     }
   }
   [System.IO.File]::WriteAllText(

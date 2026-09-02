@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>暖笺 | 完赛交付候选</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f7f8f6;
+        --surface: #ffffff;
+        --ink: #17201c;
+        --muted: #5f6963;
+        --line: #d9dedb;
+        --seal: #b83c32;
+        --jade: #2f6957;
+        --blue: #315a78;
+        --focus: #f0b429;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+        line-height: 1.65;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      a:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      .shell {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .topbar {
+        min-height: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-family: STKaiti, KaiTi, serif;
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .seal {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        background: var(--seal);
+        color: #fff;
+        border-radius: 4px;
+        font-family: STKaiti, KaiTi, serif;
+        font-size: 21px;
+      }
+
+      .status {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .hero {
+        min-height: min(680px, calc(100vh - 70px));
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+        align-items: center;
+        gap: clamp(36px, 7vw, 92px);
+        padding: 64px 0 76px;
+      }
+
+      .eyebrow {
+        margin: 0 0 18px;
+        color: var(--seal);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin-bottom: 22px;
+        font-family: STKaiti, KaiTi, serif;
+        font-size: 72px;
+        font-weight: 700;
+        line-height: 1.08;
+      }
+
+      .lead {
+        max-width: 720px;
+        margin-bottom: 30px;
+        color: #36413b;
+        font-size: 18px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .action {
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 17px;
+        border: 1px solid var(--ink);
+        border-radius: 6px;
+        background: var(--surface);
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .action.primary {
+        border-color: var(--seal);
+        background: var(--seal);
+        color: #fff;
+      }
+
+      .action:hover {
+        transform: translateY(-1px);
+      }
+
+      .proof-strip {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        margin-top: 38px;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .proof {
+        min-width: 0;
+        padding: 16px 18px 17px 0;
+      }
+
+      .proof + .proof {
+        padding-left: 18px;
+        border-left: 1px solid var(--line);
+      }
+
+      .proof strong,
+      .proof span {
+        display: block;
+      }
+
+      .proof strong {
+        font-size: 19px;
+      }
+
+      .proof span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .letter-preview {
+        position: relative;
+        min-width: 0;
+      }
+
+      .letter-preview::before {
+        content: "队友审核稿·成品长图";
+        position: absolute;
+        z-index: 1;
+        top: -12px;
+        left: -14px;
+        padding: 7px 10px;
+        border: 1px solid var(--ink);
+        background: var(--surface);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .letter-preview img {
+        width: 100%;
+        max-height: 520px;
+        display: block;
+        object-fit: contain;
+        object-position: top center;
+        border: 1px solid #c8cfcb;
+        background: #ecefed;
+        box-shadow: 18px 18px 0 #dce6e1;
+      }
+
+      .preview-fallback {
+        display: none;
+        min-height: 360px;
+        place-items: center;
+        padding: 28px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .band {
+        border-top: 1px solid var(--line);
+        background: var(--surface);
+      }
+
+      .band.alt {
+        background: #edf2ef;
+      }
+
+      .section {
+        padding: 68px 0 76px;
+      }
+
+      .section-heading {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 34px;
+        margin-bottom: 36px;
+      }
+
+      .section-heading h2 {
+        margin-bottom: 0;
+        font-family: STKaiti, KaiTi, serif;
+        font-size: 34px;
+        line-height: 1.2;
+      }
+
+      .section-heading p {
+        max-width: 720px;
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      .route {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-top: 2px solid var(--ink);
+      }
+
+      .route-item {
+        min-width: 0;
+        padding: 24px 22px 26px 0;
+      }
+
+      .route-item + .route-item {
+        padding-left: 22px;
+        border-left: 1px solid var(--line);
+      }
+
+      .route-index {
+        color: var(--seal);
+        font-family: Consolas, monospace;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .route-item h3 {
+        margin: 10px 0 8px;
+        font-size: 17px;
+      }
+
+      .route-item p {
+        margin-bottom: 15px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .route-item a {
+        color: var(--blue);
+        font-weight: 700;
+        text-underline-offset: 4px;
+      }
+
+      .handoff-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 42px;
+      }
+
+      .handoff-grid h3 {
+        margin-bottom: 16px;
+        font-size: 18px;
+      }
+
+      .handoff-grid ul {
+        margin: 0;
+        padding-left: 20px;
+      }
+
+      .handoff-grid li + li {
+        margin-top: 9px;
+      }
+
+      .boundary {
+        padding-left: 22px;
+        border-left: 4px solid var(--jade);
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 28px 0 34px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 820px) {
+        .shell {
+          width: min(100% - 28px, 680px);
+        }
+
+        .topbar {
+          align-items: flex-start;
+          padding: 15px 0;
+        }
+
+        .status {
+          max-width: 150px;
+          text-align: right;
+        }
+
+        .hero {
+          min-height: auto;
+          grid-template-columns: 1fr;
+          padding: 48px 0 70px;
+        }
+
+        h1 {
+          font-size: 48px;
+        }
+
+        .letter-preview {
+          width: min(100%, 420px);
+          margin: 0 auto;
+        }
+
+        .route {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .route-item:nth-child(3) {
+          border-left: 0;
+        }
+
+        .route-item:nth-child(n + 3) {
+          border-top: 1px solid var(--line);
+        }
+
+        .section-heading {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        h1 {
+          font-size: 42px;
+        }
+
+        .lead {
+          font-size: 16px;
+        }
+
+        .actions,
+        .action {
+          width: 100%;
+        }
+
+        .proof-strip,
+        .route,
+        .handoff-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .proof + .proof,
+        .route-item + .route-item {
+          padding-left: 0;
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .route-item {
+          padding: 20px 0;
+        }
+
+        .footer {
+          flex-direction: column;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        .action:hover {
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="shell topbar">
+      <div class="brand"><span class="seal" aria-hidden="true">笺</span><span>暖笺</span></div>
+      <div class="status">G0 · 队内演示与完赛交付候选</div>
+    </header>
+
+    <main>
+      <section class="shell hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">WARM LETTER · DELIVERY CANDIDATE</p>
+          <h1 id="page-title">暖笺·AI家书</h1>
+          <p class="lead">
+            队友的真实生活素材已进入可操作的产品闭环：用户选择素材，比较 A/B/C 三版家书，逐段核对来源，确认后交给家人阅读与回复。
+          </p>
+          <div class="actions" aria-label="主要入口">
+            <a class="action primary" href="interactive/index.html">开始操作演示</a>
+            <a class="action" href="暖笺_AI产品说明书_阶段版_2026-08-28-r2.pdf">打开产品说明书</a>
+            <a class="action" href="submission/JUDGE_DEMO_RUNBOOK.md">查看 3 分钟讲稿</a>
+          </div>
+          <div class="proof-strip" aria-label="当前验证摘要">
+            <div class="proof"><strong>355 / 355</strong><span>自动化基线通过</span></div>
+            <div class="proof"><strong>T01-T07</strong><span>固定案例验收通过</span></div>
+            <div class="proof"><strong>相对路径</strong><span>换电脑后可直接打开</span></div>
+          </div>
+        </div>
+
+        <div class="letter-preview">
+          <img
+            id="letter-preview"
+            src="interactive/exports/warm-letter-case-001-recommended-a.png"
+            alt="CASE-001 推荐 A 版家书长图预览"
+          />
+          <div id="preview-fallback" class="preview-fallback">长图预览未加载，请直接打开交互演示。</div>
+        </div>
+      </section>
+
+      <section class="band" id="demo-route">
+        <div class="shell section">
+          <div class="section-heading">
+            <h2>三分钟展示路线</h2>
+            <p>现场从产品问题进入真实材料，把时间留给来源核对、确认快照和家人回复。</p>
+          </div>
+          <div class="route">
+            <article class="route-item">
+              <span class="route-index">00:00-00:20</span>
+              <h3>问题与产品</h3>
+              <p>一句话交代异地生活素材如何变成可确认家书。</p>
+              <a href="暖笺_AI产品说明书_阶段版_2026-08-28-r2.pdf">打开说明书</a>
+            </article>
+            <article class="route-item">
+              <span class="route-index">00:20-01:10</span>
+              <h3>队友真实材料</h3>
+              <p>展示隐私裁切照片、原始示例语音和 A/B/C 固定审核稿。</p>
+              <a href="interactive/index.html">进入演示</a>
+            </article>
+            <article class="route-item">
+              <span class="route-index">01:10-02:25</span>
+              <h3>核对、确认、回复</h3>
+              <p>修改任一段，重新选择依据，然后进入大字阅读端。</p>
+              <a href="submission/JUDGE_DEMO_RUNBOOK.md">对照讲稿</a>
+            </article>
+            <article class="route-item">
+              <span class="route-index">02:25-03:00</span>
+              <h3>证据与边界</h3>
+              <p>交代 355/355、T01-T07，并明确尚未完成的真实 OpenAI 与真机证据。</p>
+              <a href="submission/AIGC_PRIVACY_STATEMENT.md">查看声明</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="band alt">
+        <div class="shell section">
+          <div class="section-heading">
+            <h2>展示后直接移交</h2>
+            <p>同一个包同时保留产品展示、工程证据、安全边界和接手清单，无需另外拼装交接文件。</p>
+          </div>
+          <div class="handoff-grid">
+            <div>
+              <h3>接手人阅读顺序</h3>
+              <ul>
+                <li><a href="handoff/README.md">进度、计划、问题与首日清单</a></li>
+                <li><a href="adapter/README.md">confirmedDraft 长图工程适配器</a></li>
+                <li><a href="PACKAGE_MANIFEST.json">整包相对路径、大小与 SHA-256</a></li>
+                <li><a href="submission/SUBMISSION_CHECKLIST.md">比赛平台提交前检查表</a></li>
+              </ul>
+            </div>
+            <div class="boundary">
+              <h3>展示口径</h3>
+              <p>
+                可以说明已完成可操作的多端骨架、受控真实材料融合、来源核对、确认阅读回复闭环和公开脱敏体验。不宣称已完成实时 OpenAI 生成、微信双真机、6 人真人测试或生产上线。
+              </p>
+              <p><a href="https://kamizackj.github.io/warm-letter-ai-family/">打开公开脱敏备用体验</a></p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="shell footer">
+      <span>暖笺·AI家书 · 完赛交付候选</span>
+      <span>本页使用包内相对路径，可随解压目录一起移动。</span>
+    </footer>
+
+    <script>
+      const preview = document.getElementById("letter-preview");
+      const fallback = document.getElementById("preview-fallback");
+      preview.addEventListener("error", () => {
+        preview.hidden = true;
+        fallback.style.display = "grid";
+      });
+    </script>
+  </body>
+</html>

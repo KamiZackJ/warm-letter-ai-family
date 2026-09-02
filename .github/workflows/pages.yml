@@ -3,6 +3,7 @@ name: Deploy public demo
 on:
   push:
     branches:
+      - master
       - codex/warm-letter-mvp
     paths:
       - ".github/workflows/pages.yml"
