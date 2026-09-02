@@ -28,6 +28,7 @@ $candidateDirectories = if (-not [string]::IsNullOrWhiteSpace($MediaDirectory)) 
   @($MediaDirectory)
 } else {
   @(
+    'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-09-02-r3\media',
     'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28\media',
     'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28-r2\media',
     'D:\tmp\warm-letter-ai-family\team-materials-current\media'

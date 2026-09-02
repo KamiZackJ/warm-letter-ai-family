@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-  [string]$MediaDirectory = 'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28\media',
+  [string]$MediaDirectory = 'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-09-02-r3\media',
   [int]$Port = 4173
 )
 

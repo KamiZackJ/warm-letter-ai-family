@@ -81,7 +81,7 @@ pnpm dev:web:case-001
 
 队内阶段汇报和移交推荐直接转发 `D:\tmp\warm-letter-ai-family\暖笺_阶段汇报交付包_2026-08-28-r2.zip`。解压后先看根目录 PDF，再双击 `interactive/index.html`；`handoff/` 和 `adapter/` 分别提供接手清单与 confirmedDraft 长图工程适配器。ZIP SHA-256 为 `431f14c6892a750fcdc6d629d525fcdbc04802a7b6490a3fd9d8afff3f465f82`，同级 `.zip.sha256` 用于整包校验。照片裁切图和原始语音只存在于 D 盘受控交付物，不进入公开 Git 仓库。
 
-范围更窄的 `暖笺_CASE-001_受控团队成果包_2026-08-28.zip` 是上述交付包中 `interactive/` 的受控来源，而不是完整工作汇报；其 SHA-256 为 `1ce227e3b90734674dd128c0cbbbe650bb89ddd79bc1a00e2837db2cf4610954`。
+范围更窄的 `暖笺_CASE-001_受控团队成果包_2026-09-02-r3.zip` 是上述交付包中 `interactive/` 的受控来源，而不是完整工作汇报；其 SHA-256 为 `d58ea5c44479677b57207e07090942795952f99c0b17f8648a7bd972fd28d5ef`。
 
 - API 健康检查：`http://127.0.0.1:8787/health`
 - H5：`http://127.0.0.1:4173/`

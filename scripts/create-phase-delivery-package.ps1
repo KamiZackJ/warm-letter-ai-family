@@ -1,10 +1,10 @@
 ﻿[CmdletBinding()]
 param(
   [ValidateNotNullOrEmpty()]
-  [string]$ControlledPackageRoot = 'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28',
+  [string]$ControlledPackageRoot = 'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-09-02-r3',
 
   [ValidateNotNullOrEmpty()]
-  [string]$ControlledArchivePath = 'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-08-28.zip',
+  [string]$ControlledArchivePath = 'D:\tmp\warm-letter-ai-family\暖笺_CASE-001_受控团队成果包_2026-09-02-r3.zip',
 
   [ValidateNotNullOrEmpty()]
   [string]$ProductBriefPath = 'D:\tmp\warm-letter-ai-family\submission\暖笺_AI产品说明书_阶段版_2026-08-28-r2.pdf',
@@ -19,7 +19,7 @@ param(
   [string]$PackageKind = 'warm-letter-phase-delivery',
 
   [ValidatePattern('^[a-fA-F0-9]{64}$')]
-  [string]$ExpectedControlledArchiveSha256 = '1ce227e3b90734674dd128c0cbbbe650bb89ddd79bc1a00e2837db2cf4610954'
+  [string]$ExpectedControlledArchiveSha256 = 'd58ea5c44479677b57207e07090942795952f99c0b17f8648a7bd972fd28d5ef'
 )
 
 Set-StrictMode -Version Latest

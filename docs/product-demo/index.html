@@ -837,19 +837,35 @@
             }
           });
         });
+        const syncParagraphEditor = (editor) => {
+          const paragraph = state.paragraphs.find((item) => item.id === editor.dataset.paragraph);
+          if (!paragraph || paragraph.text === editor.value) return;
+          const selectionStart = editor.selectionStart ?? editor.value.length;
+          const selectionEnd = editor.selectionEnd ?? selectionStart;
+          const editorScrollTop = editor.scrollTop;
+          paragraph.text = editor.value;
+          paragraph.attribution = "needs-review";
+          state.dirty = true;
+          paragraph.sourceRefs = [];
+          paragraph.evidenceIds = [];
+          paragraph.reviewSourceRefs = [];
+          state.activeParagraph = paragraph.id;
+          render();
+          const nextEditor = document.querySelector(`#${paragraph.id}`);
+          if (!nextEditor) return;
+          nextEditor.focus({ preventScroll: true });
+          nextEditor.setSelectionRange(selectionStart, selectionEnd);
+          nextEditor.scrollTop = editorScrollTop;
+        };
         document.querySelectorAll(".paragraph-editor").forEach((editor) => {
+          let composing = false;
+          editor.addEventListener("compositionstart", () => { composing = true; });
+          editor.addEventListener("compositionend", () => {
+            composing = false;
+            syncParagraphEditor(editor);
+          });
           editor.addEventListener("input", () => {
-            const paragraph = state.paragraphs.find((item) => item.id === editor.dataset.paragraph);
-            if (!paragraph || paragraph.text === editor.value) return;
-            paragraph.text = editor.value;
-            paragraph.attribution = "needs-review";
-            state.dirty = true;
-            paragraph.sourceRefs = [];
-            paragraph.evidenceIds = [];
-            paragraph.reviewSourceRefs = [];
-            state.activeParagraph = paragraph.id;
-            render();
-            document.querySelector(`#${paragraph.id}`)?.focus();
+            if (!composing) syncParagraphEditor(editor);
           });
           editor.addEventListener("focus", () => { state.activeParagraph = editor.dataset.paragraph; });
         });
