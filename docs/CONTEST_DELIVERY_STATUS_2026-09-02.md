@@ -5,7 +5,7 @@
 - 公开仓库：<https://github.com/KamiZackJ/warm-letter-ai-family>
 - 公开脱敏体验：<https://kamizackj.github.io/warm-letter-ai-family/>
 - 默认分支：`master`
-- 交付源码提交：`d1e2b572e9e9b96b3f71229e682df201ef08053f`
+- 最终候选包绑定源码提交：`f925f041b6bcfd94b2b6712df4843588e37255db`
 
 ## 1. 当前做到什么程度
 
@@ -19,14 +19,14 @@
 
 ## 2. 唯一推荐发送产物
 
-- ZIP：`D:\tmp\warm-letter-ai-family\暖笺_完赛交付候选_2026-09-02-r2.zip`
-- ZIP SHA-256：`FF38CCF94962A16FCD362CB0B46A7A5D1FA5D3A9C968DCDF9D1D75C526C46A55`
-- 校验文件：同目录 `暖笺_完赛交付候选_2026-09-02-r2.zip.sha256`
+- ZIP：`D:\tmp\warm-letter-ai-family\暖笺_完赛交付候选_2026-09-02-r3.zip`
+- ZIP SHA-256：`5FFE48CD186F02BEAFA0AE0FF5D5D2746951556B905681F5FB1A5A5A609BB1AB`
+- 校验文件：同目录 `暖笺_完赛交付候选_2026-09-02-r3.zip.sha256`
 - manifest 类型：`warm-letter-contest-delivery-candidate`
-- manifest 绑定源码：`d1e2b572e9e9b96b3f71229e682df201ef08053f`
+- manifest 绑定源码：`f925f041b6bcfd94b2b6712df4843588e37255db`
 - 受控 CASE-001 源包 SHA-256：`D58EA5C44479677B57207E07090942795952F99C0B17F8648A7BD972FD28D5EF`
 
-不要再发送旧阶段包，也不要发送同日 `r1` 候选包；`r2` 已包含正文逐字输入的光标保留修复。
+不要再发送旧阶段包，也不要发送同日 `r1` 或 `r2` 候选包；`r3` 同时包含正文逐字输入的光标保留修复和离线启动页 favicon 404 消除。
 
 ## 3. 队友如何快速体验
 
@@ -59,6 +59,7 @@
 - 照片派生图、原始示例 m4a、长图和固定证据哈希通过；原始照片不在包内。
 - 包内无 C 盘路径、微信导出路径、原始转写、开发输入、私有提示词或凭据。
 - 390 x 844 真浏览器回归通过：无横向溢出，正文逐字输入顺序与光标正常，来源复核和发布锁定正常。
+- 最终 r3 `START_HERE.html` 回归通过：控制台 0 错误/0 警告，长图 `1080 x 2631` 完整加载，主要链接均可访问，favicon 404 已消除。
 - GitHub Actions：分支 CI、PR CI、`master` CI 和 `master` Pages 部署全部成功。
 - PR #1 已合并并关闭；公开仓库默认 `master` 已指向交付提交。
 

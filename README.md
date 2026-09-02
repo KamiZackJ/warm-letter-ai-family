@@ -19,6 +19,7 @@
 - [AIGC 与隐私声明](./docs/contest/AIGC_PRIVACY_STATEMENT.md)
 - [比赛提交检查表](./docs/contest/SUBMISSION_CHECKLIST.md)
 - [可移机完赛候选与阶段移交说明](./docs/PORTABLE_HANDOFF_2026-08-28.md)
+- [2026-09-02 完赛候选产物、验证与接手状态](./docs/CONTEST_DELIVERY_STATUS_2026-09-02.md)
 
 队内受控压缩包除了上述文档，还包含队友照片的物理裁切派生图、授权示例语音、A/B/C 固定审核稿、离线交互闭环、长图适配器和完整性 manifest。这些受控媒体不进入公开 Git 或 Pages。
 
@@ -79,7 +80,7 @@ pnpm dev:web:case-001
 
 > 团队汇报只使用 `pnpm dev:web:case-001`、根目录 `pnpm dev:web` 已发现受控包后的页面，或 CASE-001 受控 ZIP 的根目录 `index.html`。不要把 `pnpm dev:web:synthetic` 或 `pnpm --filter @warm-letter/web dev` 的合成开发素材截图当作队友成果。
 
-队内阶段汇报和移交推荐直接转发 `D:\tmp\warm-letter-ai-family\暖笺_阶段汇报交付包_2026-08-28-r2.zip`。解压后先看根目录 PDF，再双击 `interactive/index.html`；`handoff/` 和 `adapter/` 分别提供接手清单与 confirmedDraft 长图工程适配器。ZIP SHA-256 为 `431f14c6892a750fcdc6d629d525fcdbc04802a7b6490a3fd9d8afff3f465f82`，同级 `.zip.sha256` 用于整包校验。照片裁切图和原始语音只存在于 D 盘受控交付物，不进入公开 Git 仓库。
+队内完赛展示和移交唯一推荐转发 `D:\tmp\warm-letter-ai-family\暖笺_完赛交付候选_2026-09-02-r3.zip`。解压到独立目录后双击 `START_HERE.html`，再按页面入口查看 PDF、交互演示、3 分钟讲稿、AIGC/隐私声明和接手资料。ZIP SHA-256 为 `5ffe48cd186f02beafa0ae0ff5d5d2746951556b905681f5fb1a5a5a609bb1ab`，同级 `.zip.sha256` 用于整包校验。照片裁切图和原始语音只存在于 D 盘受控交付物，不进入公开 Git 仓库。
 
 范围更窄的 `暖笺_CASE-001_受控团队成果包_2026-09-02-r3.zip` 是上述交付包中 `interactive/` 的受控来源，而不是完整工作汇报；其 SHA-256 为 `d58ea5c44479677b57207e07090942795952f99c0b17f8648a7bd972fd28d5ef`。
 
