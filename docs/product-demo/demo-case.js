@@ -4,15 +4,11 @@ window.WARM_LETTER_DEMO_CASE = Object.freeze({
   mode: "redacted",
   provenanceLabel: "队友第二部分固定审核成果（脱敏仓库版）",
   disclosure:
-    "当前仓库版只包含审核后的文字与规则，不包含队友提供的照片和语音。受控团队包会在 D 盘装入物理裁切照片和原始 m4a。",
+    "当前仓库版只包含审核后的文字与规则，不包含队友提供的照片和语音。受控离线包会装入物理裁切照片和授权示例语音。",
   photoUrl: null,
   audioUrl: null,
   audioDurationSeconds: 8.895,
-  sourceHashes: {
-    photoOriginal: "885457751dbc4a9a0fe99fc0d7cfe1b5336c5b6e939beab0f4f1e07b138bf44d",
-    audioOriginal: "f9ec48c022bc98d9cc5ac3ff061c65108fe4827ccd8aac9ef1aca15ff88ea4dc",
-    draftsOriginal: "72092f4ea003c3aece40b529ef57b121c9300afd7f0315545e11efb37abf5df8",
-  },
+  sourceIntegrity: "原素材在受控台账中核验；公开版不披露可关联的原文件指纹。",
   recommendedDraftId: "A",
   drafts: [
     {

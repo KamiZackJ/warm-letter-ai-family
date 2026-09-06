@@ -66,14 +66,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\create-controlled-case-demo.p
 
 | 来源 | SHA-256 |
 | --- | --- |
-| `素材/生活照片_商店货架.jpg` | `885457751dbc4a9a0fe99fc0d7cfe1b5336c5b6e939beab0f4f1e07b138bf44d` |
-| `素材/语音_暖笺_1.m4a` | `f9ec48c022bc98d9cc5ac3ff061c65108fe4827ccd8aac9ef1aca15ff88ea4dc` |
+| `素材/生活照片_商店货架.jpg` | 原文件指纹保存在受控台账，不在公开文档披露 |
+| `素材/语音_暖笺_1.m4a` | 原文件指纹保存在受控台账，不在公开文档披露 |
 | `成品/三版温柔家书.txt` | `72092f4ea003c3aece40b529ef57b121c9300afd7f0315545e11efb37abf5df8` |
 
 此外还会检查：
 
 - 源图解码尺寸必须精确为 `1080 × 1919`；
-- 固定裁切矩形为 `x=0, y=420, width=720, height=1020`；
+- 使用经审核的固定物理裁切，仅保留货架、商品和价签；
 - 三版 JSON 正文必须逐字存在于哈希已确认的 TXT；
 - 推荐稿必须仍为 A 版；
 - 安全结论必须为 `PASS`，T01-T07 必须全部通过；
