@@ -5,6 +5,7 @@
 - 当前等级：G0 队内演示与参赛交付候选，不是生产版本
 - 公开仓库：<https://github.com/KamiZackJ/warm-letter-ai-family>
 - 公开脱敏体验：<https://kamizackj.github.io/warm-letter-ai-family/>
+- 公开演示视频：<https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4>
 
 ## 评审先看什么
 
@@ -14,6 +15,7 @@
 4. 按 `JUDGE_DEMO_RUNBOOK.md` 完成 3 分钟讲解。
 5. 核对 `AIGC_PRIVACY_STATEMENT.md` 与 `SUBMISSION_CHECKLIST.md`。
 6. 用根目录 `PACKAGE_MANIFEST.json` 和 ZIP 同级 `.zip.sha256` 验证文件完整性。
+7. 负责人发布前完整播放 134.5 秒公开演示视频，并按 `FAST_SUBMISSION_COPY.md` 填写快手与 iCAN。
 
 ## 当前可以证明
 

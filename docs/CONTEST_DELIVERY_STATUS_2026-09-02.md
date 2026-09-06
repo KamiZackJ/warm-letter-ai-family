@@ -1,5 +1,7 @@
 # 暖笺完赛交付候选与移交状态
 
+> 本文是 2026-09-02 候选快照。最新视频、公开提交包和接手状态见 [`FINAL_DELIVERY_STATUS_2026-09-06.md`](./FINAL_DELIVERY_STATUS_2026-09-06.md)。
+
 - 状态时间：2026-09-02 22:48 +08:00
 - 当前等级：`G0` 队内受控演示与完赛交付候选
 - 公开仓库：<https://github.com/KamiZackJ/warm-letter-ai-family>

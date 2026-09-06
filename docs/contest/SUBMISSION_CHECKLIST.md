@@ -12,6 +12,9 @@
 - [x] `PASS` 评审 3 分钟讲稿已纳入。
 - [x] `PASS` AIGC 与隐私声明已纳入。
 - [x] `PASS` 包内 payload manifest 与 ZIP 同级 SHA-256 校验已纳入。
+- [x] `PASS` 134.5 秒公开脱敏演示视频已生成，符合 30 秒至 3 分钟要求。
+- [x] `PASS` 视频为 1920 x 1080、H.264/AAC，已通过 Chromium 实际播放与首中尾帧检查。
+- [x] `PASS` 公开提交 ZIP 已生成并通过独立解压、manifest 哈希和受控媒体排除检查。
 
 ## 技术与内容
 

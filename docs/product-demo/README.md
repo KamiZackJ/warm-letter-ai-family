@@ -4,6 +4,8 @@
 
 公开脱敏版可直接访问：<https://kamizackj.github.io/warm-letter-ai-family/>。该页面由 GitHub Pages 自动部署，不包含队友真实照片或语音。
 
+公开演示视频：<https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4>。成片 134.5 秒，已内嵌中文字幕、操作指针、AIGC 工具来源和隐私边界。
+
 1. 查看并选择队友提供的照片、语音；
 2. 比较队友完成并核验的 A/B/C 三版家书；
 3. 选择一版，编辑并重新核对段落来源；
