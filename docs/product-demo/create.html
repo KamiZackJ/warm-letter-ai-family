@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="暖笺本地家书创作页：选择自己的照片，写下近况，生成可编辑的专属家书草稿。" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='16' fill='%2320574d'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-size='18' fill='white'%3E%E7%AC%BA%3C/text%3E%3C/svg%3E" />
+    <title>暖笺 | 写一封自己的家书</title>
+    <style>
+      :root { --ink:#152822; --muted:#5f6b66; --paper:#fffef9; --canvas:#edf1ec; --pine:#20574d; --pine-soft:#dbe9e3; --line:#c9d3cc; --coral:#b94b38; --coral-soft:#f9e0d9; --serif: "Noto Serif CJK SC", SimSun, serif; --sans: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin:0; color:var(--ink); background:var(--canvas); font-family:var(--sans); letter-spacing:0; }
+      button,input,textarea,select { font:inherit; }
+      button { cursor:pointer; }
+      button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible { outline:3px solid #e9bd49; outline-offset:3px; }
+      .shell { width:min(1100px, calc(100% - 32px)); margin:0 auto; padding:22px 0 56px; }
+      header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 0 18px; border-bottom:1px solid var(--line); }
+      .brand { display:flex; align-items:center; gap:10px; color:inherit; text-decoration:none; font-family:var(--serif); font-size:23px; font-weight:700; }
+      .mark { display:grid; width:31px; height:31px; place-items:center; color:#fff; background:var(--pine); border-radius:50%; }
+      .back { border:1px solid var(--line); border-radius:4px; padding:8px 11px; color:var(--ink); background:var(--paper); text-decoration:none; font-size:14px; }
+      main { display:grid; grid-template-columns:minmax(0, .9fr) minmax(0, 1.1fr); gap:22px; margin-top:24px; align-items:start; }
+      .intro { grid-column:1/-1; }
+      .eyebrow { margin:0 0 7px; color:var(--pine); font-size:12px; font-weight:800; }
+      h1 { margin:0; font:700 clamp(27px,4vw,42px)/1.18 var(--serif); }
+      .intro p { max-width:720px; margin:10px 0 0; color:var(--muted); line-height:1.75; }
+      .card { background:var(--paper); border:1px solid var(--line); padding:20px; }
+      h2 { margin:0; font:700 19px/1.35 var(--serif); }
+      .hint { margin:6px 0 17px; color:var(--muted); font-size:13px; line-height:1.6; }
+      label { display:block; margin:15px 0 6px; font-size:14px; font-weight:750; }
+      label span { color:var(--muted); font-weight:500; }
+      input,textarea,select { width:100%; border:1px solid var(--line); border-radius:4px; padding:10px 11px; color:var(--ink); background:#fff; }
+      textarea { min-height:132px; resize:vertical; line-height:1.6; }
+      .upload-zone { display:grid; min-height:190px; place-items:center; border:1.5px dashed #82a298; border-radius:5px; padding:16px; background:#f5f8f5; text-align:center; }
+      .upload-zone.has-image { display:block; padding:0; overflow:hidden; border-style:solid; }
+      .upload-zone strong { display:block; font-size:16px; }
+      .upload-zone p { margin:7px 0 12px; color:var(--muted); font-size:13px; }
+      .pick { display:inline-flex; align-items:center; min-height:38px; border:0; border-radius:4px; padding:0 14px; color:#fff; background:var(--pine); font-weight:750; }
+      #photo { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+      #preview { display:none; width:100%; max-height:260px; object-fit:contain; background:#dde4df; }
+      .image-meta { display:none; padding:9px 12px; color:var(--muted); font-size:12px; }
+      .primary { width:100%; min-height:47px; margin-top:20px; border:0; border-radius:4px; color:#fff; background:var(--pine); font-weight:800; }
+      .primary:hover { background:#17443b; }
+      .primary:disabled { cursor:not-allowed; opacity:.45; }
+      .privacy { margin:13px 0 0; color:var(--muted); font-size:12px; line-height:1.6; }
+      .empty { display:grid; min-height:510px; place-items:center; border:1px dashed var(--line); color:var(--muted); text-align:center; padding:28px; }
+      .empty b { display:block; color:var(--ink); font-family:var(--serif); font-size:20px; }
+      .letter { display:none; background:var(--paper); border:1px solid var(--line); }
+      .letter-head { display:flex; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line); }
+      .letter-head h2 { font-size:20px; }
+      .tag { display:inline-flex; align-items:center; height:25px; padding:0 8px; color:var(--pine); border:1px solid var(--pine); border-radius:999px; background:var(--pine-soft); font-size:11px; font-weight:750; white-space:nowrap; }
+      .letter-body { padding:24px 24px 18px; font-family:var(--serif); font-size:17px; line-height:1.95; }
+      .letter-body p { margin:0 0 17px; white-space:pre-wrap; }
+      .letter-body textarea { min-height:230px; border:0; padding:0; background:transparent; font:inherit; line-height:inherit; }
+      .sources { display:flex; flex-wrap:wrap; gap:7px; padding:0 24px 19px; }
+      .source { padding:5px 8px; border-radius:999px; color:#2d5a4e; background:var(--pine-soft); font-size:12px; }
+      .letter-actions { display:flex; gap:9px; padding:14px 20px; border-top:1px solid var(--line); }
+      .secondary { min-height:38px; border:1px solid var(--line); border-radius:4px; padding:0 12px; color:var(--ink); background:#fff; }
+      .notice { display:none; margin:0 0 14px; padding:11px 13px; border-left:4px solid var(--coral); color:#6b3227; background:var(--coral-soft); font-size:13px; line-height:1.6; }
+      @media (max-width: 760px) { .shell { width:min(100% - 22px, 680px); padding-top:14px; } header { padding-bottom:14px; } .brand { font-size:20px; } main { grid-template-columns:1fr; gap:16px; margin-top:17px; } .card { padding:16px; } .empty { min-height:220px; } .letter-body { padding:20px 17px 14px; font-size:18px; } .sources { padding:0 17px 16px; } .letter-actions { padding:12px 17px; } }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header><a class="brand" href="./index.html"><span class="mark">笺</span><span>暖笺</span></a><a class="back" href="./index.html">查看公开演示</a></header>
+      <main>
+        <section class="intro"><p class="eyebrow">自己的素材，自己的家书</p><h1>把今天，写给想念的人。</h1><p>选择一张照片，写下你想分享的近况，即可生成一封可以继续编辑的专属家书草稿。图片只在当前浏览器中预览，不会上传到服务器。</p></section>
+        <section class="card" aria-label="家书素材输入">
+          <h2>写一封自己的家书</h2><p class="hint">先用你自己的照片和近况开始。不要上传他人的隐私照片或未获授权的素材。</p>
+          <label for="photo">选择一张生活照片 <span>必填</span></label>
+          <div class="upload-zone" id="uploadZone"><img id="preview" alt="所选照片预览" /><div id="uploadPrompt"><strong>从相册选择一张照片</strong><p>JPG、PNG、WebP，照片仅本地预览</p><label class="pick" for="photo">选择照片</label></div><div class="image-meta" id="imageMeta"></div></div>
+          <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" />
+          <label for="recipient">写给谁</label><input id="recipient" maxlength="24" placeholder="例如：爸爸妈妈、奶奶、朋友小林" />
+          <label for="moments">今天想说的事 <span>至少写一句</span></label><textarea id="moments" maxlength="800" placeholder="例如：下班路上看见夕阳，想起小时候一起散步。最近工作有点忙，但我有好好吃饭。"></textarea>
+          <label for="tone">表达方式</label><select id="tone"><option value="温柔自然">温柔自然</option><option value="轻松日常">轻松日常</option><option value="简短克制">简短克制</option></select>
+          <button class="primary" id="generate" type="button" disabled>生成专属家书草稿</button>
+          <p class="privacy">当前版本根据你填写的内容在浏览器本地组织草稿，不调用在线 AI。连接真实 AI 后，会继续保留“用户确认后才寄出”的流程。</p>
+        </section>
+        <section aria-live="polite"><div class="notice" id="notice"></div><div class="empty" id="empty"><div><b>你的家书会出现在这里</b><p>选择照片并写下一点近况后生成。</p></div></div><article class="letter" id="letter"><div class="letter-head"><div><p class="eyebrow" id="draftLabel">专属草稿</p><h2 id="letterTitle">写给家里人的今天</h2></div><span class="tag">可编辑</span></div><div class="letter-body"><p id="greeting"></p><textarea id="draft" aria-label="家书正文"></textarea><p id="signature"></p></div><div class="sources" id="sources"></div><div class="letter-actions"><button class="secondary" id="copy" type="button">复制家书</button><button class="secondary" id="restart" type="button">重新写一封</button></div></article></section>
+      </main>
+    </div>
+    <script>
+      const photo = document.querySelector('#photo'); const recipient = document.querySelector('#recipient'); const moments = document.querySelector('#moments'); const tone = document.querySelector('#tone'); const generate = document.querySelector('#generate'); const preview = document.querySelector('#preview'); const uploadZone = document.querySelector('#uploadZone'); const uploadPrompt = document.querySelector('#uploadPrompt'); const imageMeta = document.querySelector('#imageMeta'); const empty = document.querySelector('#empty'); const letter = document.querySelector('#letter'); const draft = document.querySelector('#draft'); const notice = document.querySelector('#notice');
+      let selectedFile = null;
+      const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#039;' })[char]);
+      function canGenerate() { return Boolean(selectedFile && recipient.value.trim() && moments.value.trim()); }
+      function updateButton() { generate.disabled = !canGenerate(); }
+      function openNotice(message) { notice.textContent = message; notice.style.display = 'block'; }
+      function pickOpeners(name, style) { const options = style === '轻松日常' ? [`${name}，今天想跟你分享两件小事。`,`${name}，写这封信的时候，心里有一点想念。`] : style === '简短克制' ? [`${name}，今天有几句话想告诉你。`,`${name}，今天一切都好，也想起了你。`] : [`亲爱的${name}，`,`${name}，见字如面。`]; return options[(name.length + style.length) % options.length]; }
+      function makeDraft() { const name = recipient.value.trim(); const facts = moments.value.trim().replace(/\s+/g, ' '); const style = tone.value; const intro = style === '轻松日常' ? '这些看起来普通的片段，还是让我想第一时间和你说一说。' : style === '简短克制' ? '这些小事，想让你知道。' : '这些日常的小片段，让我很想把此刻的心情交给你。'; return `${facts}\n\n${intro}\n\n不用担心我，我会照顾好自己。也希望你今天顺顺利利，记得好好休息。`; }
+      photo.addEventListener('change', () => { const file = photo.files && photo.files[0]; if (!file) return; selectedFile = file; const reader = new FileReader(); reader.onload = () => { preview.src = reader.result; preview.style.display = 'block'; uploadPrompt.style.display = 'none'; imageMeta.style.display = 'block'; imageMeta.textContent = `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} KB · 仅本地预览`; uploadZone.classList.add('has-image'); }; reader.readAsDataURL(file); updateButton(); });
+      [recipient, moments, tone].forEach((element) => element.addEventListener('input', updateButton));
+      generate.addEventListener('click', () => { if (!canGenerate()) return; const name = recipient.value.trim(); document.querySelector('#draftLabel').textContent = `${tone.value} · 依据你的照片和近况`; document.querySelector('#letterTitle').textContent = `写给${name}的一封暖笺`; document.querySelector('#greeting').textContent = pickOpeners(name, tone.value); draft.value = makeDraft(); document.querySelector('#signature').textContent = '想念你的我'; document.querySelector('#sources').innerHTML = `<span class="source">照片 · ${escapeHtml(selectedFile.name)}</span><span class="source">文字近况 · 你亲自填写</span>`; empty.style.display = 'none'; letter.style.display = 'block'; notice.style.display = 'none'; letter.scrollIntoView({ behavior:'smooth', block:'start' }); });
+      document.querySelector('#copy').addEventListener('click', async () => { const text = `${document.querySelector('#greeting').textContent}\n${draft.value}\n想念你的我`; try { await navigator.clipboard.writeText(text); openNotice('家书已复制，可以发给家人或继续修改。'); } catch { openNotice('浏览器未授权复制。请手动选中正文复制。'); } });
+      document.querySelector('#restart').addEventListener('click', () => { recipient.value=''; moments.value=''; tone.value='温柔自然'; photo.value=''; selectedFile=null; preview.removeAttribute('src'); preview.style.display='none'; uploadPrompt.style.display='block'; imageMeta.style.display='none'; uploadZone.classList.remove('has-image'); letter.style.display='none'; empty.style.display='grid'; notice.style.display='none'; updateButton(); window.scrollTo({top:0,behavior:'smooth'}); });
+    </script>
+  </body>
+</html>
