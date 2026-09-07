@@ -93,10 +93,15 @@ describe("DeepSeekChatProvider", () => {
     expect(client.chat.completions.create).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "test-model",
-        temperature: 0.95,
+        temperature: 0.72,
         response_format: { type: "json_object" },
       }),
     );
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(client.chat.completions.create).mock.calls[1]?.[0]).toMatchObject({
+      temperature: 0,
+      response_format: { type: "json_object" },
+    });
   });
 
   it("changes the explicit writing direction between rewrite versions", async () => {
@@ -111,7 +116,7 @@ describe("DeepSeekChatProvider", () => {
     const secondRequest = vi.mocked(secondClient.chat.completions.create).mock.calls[0]?.[0];
     const firstUserMessage = firstRequest?.messages[1]?.content;
     const secondUserMessage = secondRequest?.messages[1]?.content;
-    expect(firstUserMessage).toContain("从一个具体瞬间切入");
+    expect(firstUserMessage).toContain("从素材中已经明确写出的具体瞬间切入");
     expect(secondUserMessage).toContain("像晚饭后的语音消息");
     expect(firstUserMessage).not.toBe(secondUserMessage);
   });
