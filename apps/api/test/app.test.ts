@@ -83,6 +83,7 @@ describe("Warm Letter API", () => {
         repository: "memory",
         objectStorage: "local-filesystem",
         replySafety: "deterministic",
+        speech: "disabled",
       },
     });
 

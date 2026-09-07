@@ -240,6 +240,7 @@ describe("API deployment disclosure", () => {
         repository: "memory",
         objectStorage: "local-filesystem",
         replySafety: "deterministic",
+        speech: "disabled",
       },
     });
     expect(response.body).not.toContain("health-test-api-key");

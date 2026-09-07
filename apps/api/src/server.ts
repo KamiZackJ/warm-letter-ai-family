@@ -2,6 +2,7 @@ import { buildApp } from "./app.js";
 import { createAIProviderFromEnv } from "./ai.js";
 import { FileSystemObjectStorage } from "./object-storage.js";
 import { loadApiRuntimeConfig } from "./runtime-config.js";
+import { createSpeechProviderFromEnv } from "./speech.js";
 
 const runtimeConfig = loadApiRuntimeConfig(process.env);
 const objectStorage = new FileSystemObjectStorage(runtimeConfig.uploadDirectory);
@@ -11,6 +12,7 @@ const app = buildApp({
   logger: true,
   objectStorage,
   aiProvider: createAIProviderFromEnv(process.env, { assetReader: objectStorage }),
+  speechProvider: createSpeechProviderFromEnv(process.env),
   corsOrigins: runtimeConfig.corsOrigins,
   publicBaseUrl: runtimeConfig.publicBaseUrl,
   uploadDirectory: runtimeConfig.uploadDirectory,

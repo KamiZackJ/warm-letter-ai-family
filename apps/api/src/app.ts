@@ -45,6 +45,13 @@ import {
   type RegisterMaterialInput,
 } from "./service.js";
 import { UploadCredentialService, uploadCredentialHeader } from "./upload-credential.js";
+import {
+  SPEECH_VOICES,
+  SpeechProviderError,
+  type SpeechProvider,
+  type SpeechTone,
+  type SpeechVoiceId,
+} from "./speech.js";
 
 function serializeGenerationJob(job: GenerationJob): ClientJob {
   return ClientJobSchema.parse({
@@ -85,6 +92,7 @@ export interface BuildAppOptions {
   authProviderMode?: AuthProviderMode;
   repository?: MemoryRepository;
   aiProvider?: AIProvider;
+  speechProvider?: SpeechProvider;
   logger?: boolean;
   corsOrigins?: string[];
   objectStorage?: ObjectStorage;
@@ -148,6 +156,7 @@ function mediaContentType(request: FastifyRequest): string | undefined {
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const aiProvider = options.aiProvider ?? new FakeAIProvider();
+  const speechProvider = options.speechProvider;
   const authProviderMode = options.authProviderMode ?? "development";
   const aiProviderMode: AIProviderMode | "custom" =
     aiProvider instanceof OpenAIResponsesProvider
@@ -282,6 +291,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       repository: "memory",
       objectStorage: "local-filesystem",
       replySafety: "deterministic",
+      speech: speechProvider?.name ?? "disabled",
     },
   }));
 
@@ -486,6 +496,49 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const { id } = request.params as { id: string };
     return { letter: service.getLetter(user.id, id) };
   });
+
+  app.get("/v1/speech/voices", async (request) => {
+    service.authenticate(tokenFrom(request));
+    return {
+      available: Boolean(speechProvider),
+      voices: SPEECH_VOICES,
+    };
+  });
+
+  app.post(
+    "/v1/letters/:id/speech",
+    { bodyLimit: 16 * 1024 },
+    async (request, reply) => {
+      const user = service.authenticate(tokenFrom(request));
+      const { id } = request.params as { id: string };
+      service.getLetter(user.id, id);
+      if (!speechProvider) {
+        throw new ApiError(503, "SPEECH_PROVIDER_UNAVAILABLE", "自然人声服务尚未配置");
+      }
+      const body = record(request.body);
+      const text = stringValue(body.text, "text")!.normalize("NFC").trim();
+      const voiceId = stringValue(body.voiceId, "voiceId") as SpeechVoiceId;
+      const tone = stringValue(body.tone, "tone") as SpeechTone;
+      if (!text || text.length > 4_000) {
+        throw new ApiError(400, "INVALID_SPEECH_TEXT", "朗读文字必须为 1 到 4000 个字符");
+      }
+      try {
+        const audio = await speechProvider.synthesize({ text, voiceId, tone });
+        return reply
+          .header("content-type", audio.contentType)
+          .header("content-length", audio.bytes.byteLength)
+          .header("cache-control", "private, no-store")
+          .header("x-content-type-options", "nosniff")
+          .header("x-ai-generated", "true")
+          .send(Buffer.from(audio.bytes));
+      } catch (error) {
+        if (error instanceof SpeechProviderError) {
+          throw new ApiError(error.statusCode, error.code, error.message);
+        }
+        throw error;
+      }
+    },
+  );
 
   app.patch("/v1/letters/:id", async (request) => {
     const user = service.authenticate(tokenFrom(request));
