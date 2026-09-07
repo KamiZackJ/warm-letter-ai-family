@@ -99,3 +99,14 @@ OPENAI_SCREENSHOT_DETAIL=original
 ```
 
 Set `OPENAI_MODEL` to a model ID enabled for the target OpenAI project; the repository does not hard-code an account-dependent model. The real provider uses Responses structured outputs, sends image bytes as data URLs, uses `original` detail for screenshot OCR, transcribes audio before generation, disables response storage, and records the model ID returned by OpenAI in the draft provider field. Timeout, retry, and image-detail settings are validated at startup. Unknown provider names are rejected, and both competition and production modes require an explicit `AI_PROVIDER=openai`; neither can silently fall back to fake output. Production startup is additionally blocked until formal authentication, persistent repository, object storage, and reply-safety adapters replace the current development implementations. Real supplier evidence still requires an authorized photo, screenshot, voice note, and text sample plus an actual API credential; mock-client tests do not satisfy that gate.
+
+For text-only personalization in demo or test mode, an OpenAI-compatible DeepSeek provider is also available:
+
+```env
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=replace-with-a-server-side-secret
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+Keep the key only in the API server environment. Never put it in the mini-program, static demo, source code, screenshots, or Git history. This provider deliberately rejects photo, screenshot, and audio materials because a text-only model cannot inspect those bytes. Use the OpenAI multimodal provider when uploaded media must be understood. DeepSeek generation rotates writing direction by draft version and uses a high-diversity prompt while retaining source references and rejecting invented facts. Competition mode remains pinned to `openai` because its evidence flow requires all four material types.

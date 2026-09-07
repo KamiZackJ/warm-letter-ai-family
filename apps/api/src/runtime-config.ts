@@ -4,7 +4,7 @@ import type { PublicRateLimitConfig } from "./public-rate-limit.js";
 
 export const DEPLOYMENT_MODES = ["demo", "test", "competition", "production"] as const;
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
-export type AIProviderMode = "fake" | "openai";
+export type AIProviderMode = "fake" | "openai" | "deepseek";
 export type AuthProviderMode = "development" | "wechat";
 
 export interface ApiRuntimeConfig {
@@ -63,8 +63,8 @@ function nodeEnvironmentFromEnv(
 
 function aiProviderModeFromEnv(env: NodeJS.ProcessEnv): AIProviderMode {
   const value = requiredEnv(env, "AI_PROVIDER").toLowerCase();
-  if (value !== "fake" && value !== "openai") {
-    throw new Error("AI_PROVIDER must be fake or openai");
+  if (value !== "fake" && value !== "openai" && value !== "deepseek") {
+    throw new Error("AI_PROVIDER must be fake, openai, or deepseek");
   }
   return value;
 }
@@ -277,6 +277,10 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
   if (aiProviderMode === "openai") {
     requiredEnv(env, "OPENAI_API_KEY");
     requiredEnv(env, "OPENAI_MODEL");
+  }
+  if (aiProviderMode === "deepseek") {
+    requiredEnv(env, "DEEPSEEK_API_KEY");
+    requiredEnv(env, "DEEPSEEK_MODEL");
   }
 
   const publicBaseUrl = publicBaseUrlFromEnv(env, deploymentMode);

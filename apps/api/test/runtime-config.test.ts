@@ -65,7 +65,7 @@ describe("API runtime configuration", () => {
     [{ ...demoEnvironment, NODE_ENV: undefined }, "NODE_ENV is required"],
     [{ ...demoEnvironment, NODE_ENV: "production" }, "NODE_ENV must be development"],
     [{ ...demoEnvironment, AI_PROVIDER: undefined }, "AI_PROVIDER is required"],
-    [{ ...demoEnvironment, AI_PROVIDER: "fallback" }, "AI_PROVIDER must be fake or openai"],
+    [{ ...demoEnvironment, AI_PROVIDER: "fallback" }, "AI_PROVIDER must be fake, openai, or deepseek"],
     [{ ...demoEnvironment, AUTH_PROVIDER: undefined }, "AUTH_PROVIDER is required"],
     [
       { ...demoEnvironment, AUTH_PROVIDER: "fallback" },
@@ -102,6 +102,25 @@ describe("API runtime configuration", () => {
       publicBaseUrl: "https://api.evidence.example.test",
       corsOrigins: ["https://reader.evidence.example.test"],
     });
+  });
+
+  it("accepts DeepSeek only when its server-side credentials are complete", () => {
+    const deepSeekEnvironment = {
+      ...demoEnvironment,
+      AI_PROVIDER: "deepseek",
+      DEEPSEEK_API_KEY: "test-api-key-not-secret",
+      DEEPSEEK_MODEL: "deepseek-chat",
+    };
+    expect(loadApiRuntimeConfig(deepSeekEnvironment)).toMatchObject({
+      deploymentMode: "demo",
+      aiProviderMode: "deepseek",
+    });
+    expect(() =>
+      loadApiRuntimeConfig({ ...deepSeekEnvironment, DEEPSEEK_API_KEY: undefined }),
+    ).toThrow("DEEPSEEK_API_KEY is required");
+    expect(() =>
+      loadApiRuntimeConfig({ ...deepSeekEnvironment, DEEPSEEK_MODEL: undefined }),
+    ).toThrow("DEEPSEEK_MODEL is required");
   });
 
   it.each([
