@@ -10,6 +10,8 @@
 
 [直接打开暖笺公开脱敏演示](https://kamizackj.github.io/warm-letter-ai-family/)，无需安装依赖或登录。
 
+[自己写一封暖笺](https://kamizackj.github.io/warm-letter-ai-family/create.html)，可选择本机照片、填写真实近况、切换五种文案风格并继续编辑。公开 Pages 默认使用浏览器本地模板，照片不会上传；AI 个性润色和自然语音需要另行部署并配置暖笺 HTTPS API。
+
 [观看 2 分 15 秒公开脱敏演示视频](https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4)，可先快速了解队友固定审核稿如何接入素材选择、来源复核、确认快照与家人回复闭环。
 
 体验顺序：选择素材，生成并比较 A/B/C 三版家书；编辑后核对段落来源并确认；进入收信端切换字号、展开来源并发送一条本地回复。公开页面只展示审核后的文字结构，不包含队友真实照片、语音或访问凭据，也不调用实时 OpenAI。
@@ -23,6 +25,7 @@
 - [可移机完赛候选与阶段移交说明](./docs/PORTABLE_HANDOFF_2026-08-28.md)
 - [2026-09-02 完赛候选产物、验证与接手状态](./docs/CONTEST_DELIVERY_STATUS_2026-09-02.md)
 - [2026-09-06 最终交付就绪度与接手说明](./docs/FINAL_DELIVERY_STATUS_2026-09-06.md)
+- [2026-09-07 最新进度同步与接手增量](./docs/LATEST_PROGRESS_2026-09-07.md)
 - [快手与 iCAN 可直接粘贴的提交文案](./docs/contest/FAST_SUBMISSION_COPY.md)
 
 队内受控压缩包除了上述文档，还包含队友照片的物理裁切派生图、授权示例语音、A/B/C 固定审核稿、离线交互闭环、长图适配器和完整性 manifest。这些受控媒体不进入公开 Git 或 Pages。
@@ -32,9 +35,11 @@
 - 原生微信小程序：素材选择、生成、编辑确认、阅读和回复流程。
 - Fastify API：素材上传与校验、家书状态机、来源追溯、分享重签/撤销和回复。
 - React H5：受控 CASE-001 模式可加载队友真实图片与原始音频；默认开发模式使用合成脱敏素材，并提供系统朗读、来源展开、回复和失效状态。
+- 公共个性创作页：照片只在浏览器本地预览，支持五种文案风格、修改意见、草稿编辑和复制；未连接后端时如实标注为本地草稿。
+- AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本和豆包 Seed-TTS 适配层；真实调用仍依赖服务端密钥、正式后端部署和相应验收，不代表 GitHub Pages 已启用这些供应商。
 - 动态长图：`scripts/create-confirmed-draft-long-image.ps1` 可从 API/共享契约的 `confirmedDraft` 生成 1080px 成品和审计 manifest；当前仍是离线渲染工具，尚未接入生产任务或短片流水线。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
-- 自动化基线：Node `22.23.2` 下当前工作树 contracts `17`、Web `75`、小程序 `125`、API `138`，共 `355` 项；本地类型检查、构建和 production bundle 校验均通过。远端链接保留为历史 CI 证据，当前交接口径以 [`docs/CURRENT_HANDOFF_STATUS_2026-08-28.md`](./docs/CURRENT_HANDOFF_STATUS_2026-08-28.md) 为准。
+- 自动化基线：当前工作树 contracts `17`、Web `75`、小程序 `125`、API `152`，共 `369` 项；本地类型检查与测试、远端 CI 均通过。项目规定 Node `22.23.2`；Node 24 本地检查虽通过，但会产生非支持版本警告。
 
 ## 仓库结构
 
@@ -129,6 +134,6 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 - [开发说明](./docs/DEVELOPMENT.md)
 - [参赛作品完整计划](./暖笺_AI家书_参赛作品完整计划.docx)
 
-当前 H5 与本地 API 已具备独立短期媒体凭据、完整公开访问负面矩阵、单实例限流/内容兜底和真实浏览器证据；但真实 OpenAI 请求、微信 `code2Session`、持久化存储、跨实例共享限流、正式内容审核、微信真机双设备闭环及正式部署尚未完成。不得把本地演示结果表述为生产放行。
+当前 H5 与本地 API 已具备独立短期媒体凭据、完整公开访问负面矩阵、单实例限流/内容兜底和真实浏览器证据；DeepSeek 文本与豆包语音适配层已经实现，但公网 Pages 未连接真实后端。真实供应商端到端证据、微信 `code2Session`、持久化存储、跨实例共享限流、正式内容审核、微信真机双设备闭环及正式部署尚未完成。不得把本地演示或适配层表述为生产放行。
 
 原始赛题文章：<https://mp.weixin.qq.com/s/GMdJc8OBWIDang5iQdj7rg>
