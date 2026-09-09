@@ -12,6 +12,8 @@
 
 [自己写一封暖笺](https://kamizackj.github.io/warm-letter-ai-family/create.html)，可选择本机照片、填写真实近况、切换五种文案风格并继续编辑。公开 Pages 默认使用浏览器本地模板，照片不会上传；AI 个性润色和自然语音需要另行部署并配置暖笺 HTTPS API。
 
+[主域名接入状态与后续 DNS 步骤](./docs/DOMAIN_HANDOFF_2026-09-09.md)：当前仍使用 GitHub Pages 默认地址，`warmjiashu.xyz` 仅作为待购买/待确认的候选域名，尚未写入仓库或 Pages 设置。
+
 [观看 2 分 15 秒公开脱敏演示视频](https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4)，可先快速了解队友固定审核稿如何接入素材选择、来源复核、确认快照与家人回复闭环。
 
 体验顺序：选择素材，生成并比较 A/B/C 三版家书；编辑后核对段落来源并确认；进入收信端切换字号、展开来源并发送一条本地回复。公开页面只展示审核后的文字结构，不包含队友真实照片、语音或访问凭据，也不调用实时 OpenAI。
@@ -26,6 +28,7 @@
 - [2026-09-02 完赛候选产物、验证与接手状态](./docs/CONTEST_DELIVERY_STATUS_2026-09-02.md)
 - [2026-09-06 最终交付就绪度与接手说明](./docs/FINAL_DELIVERY_STATUS_2026-09-06.md)
 - [2026-09-07 最新进度同步与接手增量](./docs/LATEST_PROGRESS_2026-09-07.md)
+- [2026-09-09 主域名接入状态与 DNS 交接](./docs/DOMAIN_HANDOFF_2026-09-09.md)
 - [快手与 iCAN 可直接粘贴的提交文案](./docs/contest/FAST_SUBMISSION_COPY.md)
 
 队内受控压缩包除了上述文档，还包含队友照片的物理裁切派生图、授权示例语音、A/B/C 固定审核稿、离线交互闭环、长图适配器和完整性 manifest。这些受控媒体不进入公开 Git 或 Pages。

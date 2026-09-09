@@ -7,6 +7,7 @@
 - 主演示：<https://kamizackj.github.io/warm-letter-ai-family/>
 - 个性创作页：<https://kamizackj.github.io/warm-letter-ai-family/create.html>
 - 公开演示视频：<https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4>
+- 主域名接入增量：见 [`DOMAIN_HANDOFF_2026-09-09.md`](./DOMAIN_HANDOFF_2026-09-09.md)
 
 本文只记录 2026-09-06 最终交付候选之后的增量。完整隐私边界、交付包哈希和平台提交步骤继续以 `FINAL_DELIVERY_STATUS_2026-09-06.md` 为基础。
 
