@@ -45,7 +45,7 @@
 - AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本和豆包 Seed-TTS 适配层；真实调用仍依赖服务端密钥、正式后端部署和相应验收，不代表 GitHub Pages 已启用这些供应商。
 - 动态长图：`scripts/create-confirmed-draft-long-image.ps1` 可从 API/共享契约的 `confirmedDraft` 生成 1080px 成品和审计 manifest；当前仍是离线渲染工具，尚未接入生产任务或短片流水线。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
-- 自动化基线：当前工作树 contracts `17`、Web `75`、小程序 `125`、API `152`，共 `369` 项；本地类型检查与测试、远端 CI 均通过。项目规定 Node `22.23.2`；Node 24 本地检查虽通过，但会产生非支持版本警告。
+- 自动化基线：当前工作树 contracts `17`、Web `75`、小程序 `125`、API `159`，共 `376` 项；本地类型检查与测试、远端 CI 均通过。项目规定 Node `22.23.2`；Node 24 本地检查虽通过，但会产生非支持版本警告。
 
 ## 仓库结构
 
