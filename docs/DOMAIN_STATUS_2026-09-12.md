@@ -32,6 +32,8 @@
 - 2026-09-12 00:31 通过 Google (`8.8.8.8`) 和 114 DNS 查询根域均已返回 GitHub Pages IP；阿里公共 DNS (`223.5.5.5`) 仍返回 `NXDOMAIN`，传播尚未覆盖所有递归节点。
 - 将 `warmjiashu.xyz` 临时解析到 `185.199.108.153` 后访问：GitHub Pages 返回项目首页 `HTTP 200`。
 - 当前直接访问 `http://warmjiashu.xyz/` 已返回 `HTTP 200`；`https://warmjiashu.xyz/` 和 `https://www.warmjiashu.xyz/` 的证书尚未匹配新域名。
+- 最新 Pages 健康检查显示 `dns_resolves=true`、`is_valid=true`、`is_https_eligible=true`、`caa_error=null`；仅 `responds_to_https=false`，`https_error=peer_failed_verification`。
+- 2026-09-12 00:34 重新提交相同 Pages 配置时，GitHub 返回 `The certificate does not exist yet`（HTTP 404），确认当前阻塞是证书异步签发而非配置错误。
 - GitHub Pages API：`cname=warmjiashu.xyz`，当前 `https_enforced=false`。
 - 原 `https://kamizackj.github.io/warm-letter-ai-family/` 已返回 `301` 到 `http://warmjiashu.xyz/`。
 
@@ -39,7 +41,7 @@
 
 `.xyz` 父区更新已经开始向公共递归 DNS 传播，但不同网络仍可能得到 `NXDOMAIN`。阿里云控制台刷新后仍提示 NS 不一致，但注册商和官方 RDAP 中的 NS 已经正确，因此当前不需要再次修改 NS，也不应重复添加或更换 A/CNAME 记录。阿里云提示当日注册、实名或 NS 更新可能存在同步延迟，建议继续等待缓存自然过期。
 
-传播完成前，部分网络可能仍无法打开新域名；已能解析的网络可先通过 HTTP 查看页面。GitHub 仍需为新域名签发 TLS 证书，证书就绪后才能开启强制 HTTPS；在此之前不要把 HTTPS 链接作为正式入口。
+传播完成前，部分网络可能仍无法打开新域名；已能解析的网络可先通过 HTTP 查看页面。GitHub 仍需为新域名签发 TLS 证书，证书就绪后才能开启强制 HTTPS；在此之前不要把 HTTPS 链接作为正式入口。GitHub 的证书申请是异步流程，通常等待数分钟到数小时，必要时按 24 小时窗口复查。
 
 若到 2026-09-13 00:00（Asia/Shanghai）后，直接查询 `x.nic.xyz` 仍返回 `NXDOMAIN`，应携带域名订单号和本页时间点联系阿里云域名支持，要求核查注册局父区委派；不要先删除现有解析记录。
 
