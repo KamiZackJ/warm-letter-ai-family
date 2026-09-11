@@ -1,5 +1,7 @@
 # 暖笺主域名接入状态与 DNS 交接
 
+> 本文件保留 2026-09-09 接入前快照。实际执行结果见 [`DOMAIN_STATUS_2026-09-12.md`](./DOMAIN_STATUS_2026-09-12.md)。
+
 - 状态时间：2026-09-09（Asia/Shanghai）
 - 公开仓库：<https://github.com/KamiZackJ/warm-letter-ai-family>
 - 当前线上地址：<https://kamizackj.github.io/warm-letter-ai-family/>
