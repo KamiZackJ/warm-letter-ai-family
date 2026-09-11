@@ -91,6 +91,7 @@ export interface WarmLetterServiceOptions {
   shareTokenTtlMs?: number;
   mediaTokenTtlMs?: number;
   mediaSigningKeys?: readonly Uint8Array[];
+  authSessionTtlMs?: number;
   replySafetyPolicy?: ReplySafetyPolicy;
   replySafetyTimeoutMs?: number;
   now?: () => Date;
@@ -108,6 +109,9 @@ export class WarmLetterService {
   private readonly replySafetyPolicy: ReplySafetyPolicy;
   private readonly replySafetyTimeoutMs: number;
   private readonly mediaSigningKeys: readonly Buffer[];
+  private readonly authSessionTtlMs: number;
+  private readonly authSessions = new Map<string, { userId: string; expiresAt: number }>();
+  private readonly maxAuthSessions = 10_000;
   private readonly now: () => Date;
 
   constructor(
@@ -117,6 +121,7 @@ export class WarmLetterService {
   ) {
     this.shareTokenTtlMs = options.shareTokenTtlMs ?? 30 * 24 * 60 * 60 * 1000;
     this.mediaTokenTtlMs = options.mediaTokenTtlMs ?? 5 * 60 * 1000;
+    this.authSessionTtlMs = options.authSessionTtlMs ?? 30 * 24 * 60 * 60 * 1000;
     this.replySafetyPolicy = options.replySafetyPolicy ?? new DeterministicReplySafetyPolicy();
     this.replySafetyTimeoutMs = options.replySafetyTimeoutMs ?? 3_000;
     this.mediaSigningKeys = (options.mediaSigningKeys?.length
@@ -126,6 +131,7 @@ export class WarmLetterService {
     this.now = options.now ?? (() => new Date());
     this.assertPositiveTtl(this.shareTokenTtlMs, "shareTokenTtlMs");
     this.assertPositiveTtl(this.mediaTokenTtlMs, "mediaTokenTtlMs");
+    this.assertPositiveTtl(this.authSessionTtlMs, "authSessionTtlMs");
     this.assertPositiveTtl(this.replySafetyTimeoutMs, "replySafetyTimeoutMs");
     if (this.mediaSigningKeys.some((key) => key.length < 32)) {
       throw new Error("mediaSigningKeys must contain at least 32 bytes per key");
@@ -135,27 +141,75 @@ export class WarmLetterService {
   login(code: string, displayName = "暖笺用户"): { user: User; token: string } {
     const normalizedCode = code.trim() || "local-demo";
     const openId = `dev-${createHash("sha256").update(normalizedCode).digest("hex").slice(0, 16)}`;
+    const user = this.findOrCreateUser(openId, displayName);
+    return { user, token: `dev.${user.id}` };
+  }
+
+  loginWithWechatOpenId(openId: string, displayName = "暖笺用户"): { user: User; token: string } {
+    const normalizedOpenId = openId.trim();
+    if (!normalizedOpenId || normalizedOpenId.length > 128) throw new Error("openId is invalid");
+    const user = this.findOrCreateUser(normalizedOpenId, displayName);
+    this.removeExpiredAuthSessions();
+    const token = `wx.${randomBytes(32).toString("base64url")}`;
+    this.authSessions.set(this.authSessionKey(token), {
+      userId: user.id,
+      expiresAt: this.now().getTime() + this.authSessionTtlMs,
+    });
+    while (this.authSessions.size > this.maxAuthSessions) {
+      const oldest = this.authSessions.keys().next().value;
+      if (!oldest) break;
+      this.authSessions.delete(oldest);
+    }
+    return { user, token };
+  }
+
+  authenticate(token: string | undefined): User {
+    if (!token) throw new ApiError(401, "UNAUTHORIZED", "请先完成微信登录");
+    if (token.startsWith("dev.")) {
+      const user = this.repository.getUser(token.slice(4));
+      if (!user) throw new ApiError(401, "UNAUTHORIZED", "登录状态无效");
+      return user;
+    }
+    if (!token.startsWith("wx.")) {
+      throw new ApiError(401, "UNAUTHORIZED", "请先完成微信登录");
+    }
+    const sessionKey = this.authSessionKey(token);
+    const session = this.authSessions.get(sessionKey);
+    if (!session || session.expiresAt <= this.now().getTime()) {
+      this.authSessions.delete(sessionKey);
+      throw new ApiError(401, "UNAUTHORIZED", "登录状态已过期，请重新登录");
+    }
+    const user = this.repository.getUser(session.userId);
+    if (!user) {
+      throw new ApiError(401, "UNAUTHORIZED", "登录状态无效");
+    }
+    return user;
+  }
+
+  private findOrCreateUser(openId: string, displayName: string): User {
     let user = this.repository.findUserByOpenId(openId);
     if (!user) {
       user = this.repository.saveUser({
         id: randomUUID(),
         openId,
         displayName,
-        createdAt: new Date().toISOString(),
+        createdAt: this.now().toISOString(),
       });
-    }
-    return { user, token: `dev.${user.id}` };
-  }
-
-  authenticate(token: string | undefined): User {
-    if (!token?.startsWith("dev.")) {
-      throw new ApiError(401, "UNAUTHORIZED", "请先完成微信登录");
-    }
-    const user = this.repository.getUser(token.slice(4));
-    if (!user) {
-      throw new ApiError(401, "UNAUTHORIZED", "登录状态无效");
+    } else if (displayName.trim() && user.displayName !== displayName.trim()) {
+      user.displayName = displayName.trim();
     }
     return user;
+  }
+
+  private removeExpiredAuthSessions(): void {
+    const now = this.now().getTime();
+    for (const [token, session] of this.authSessions) {
+      if (session.expiresAt <= now) this.authSessions.delete(token);
+    }
+  }
+
+  private authSessionKey(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
   }
 
   registerMaterial(

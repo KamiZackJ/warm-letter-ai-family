@@ -3,12 +3,19 @@ import { createAIProviderFromEnv } from "./ai.js";
 import { FileSystemObjectStorage } from "./object-storage.js";
 import { loadApiRuntimeConfig } from "./runtime-config.js";
 import { createSpeechProviderFromEnv } from "./speech.js";
+import { createWechatAuthProviderFromEnv } from "./wechat-auth.js";
 
 const runtimeConfig = loadApiRuntimeConfig(process.env);
 const objectStorage = new FileSystemObjectStorage(runtimeConfig.uploadDirectory);
 const app = buildApp({
   deploymentMode: runtimeConfig.deploymentMode,
   authProviderMode: runtimeConfig.authProviderMode,
+  wechatAuthProvider:
+    runtimeConfig.authProviderMode === "wechat"
+      ? createWechatAuthProviderFromEnv(process.env, {
+          timeoutMs: runtimeConfig.wechatAuthTimeoutMs,
+        })
+      : undefined,
   logger: true,
   objectStorage,
   aiProvider: createAIProviderFromEnv(process.env, { assetReader: objectStorage }),

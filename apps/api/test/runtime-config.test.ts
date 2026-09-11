@@ -11,6 +11,8 @@ const demoEnvironment: NodeJS.ProcessEnv = {
   NODE_ENV: "development",
   AI_PROVIDER: "fake",
   AUTH_PROVIDER: "development",
+  WECHAT_APP_ID: "wx-test-app",
+  WECHAT_APP_SECRET: "test-secret",
   PUBLIC_BASE_URL: "http://127.0.0.1:8787",
   CORS_ORIGINS: "http://127.0.0.1:4173,http://localhost:4173",
   UPLOAD_DIR: "./uploads",
@@ -47,10 +49,10 @@ describe("API runtime configuration", () => {
     });
     expect(
       loadApiRuntimeConfig({
-        ...demoEnvironment,
-        DEPLOYMENT_MODE: "test",
-        NODE_ENV: "test",
-        AUTH_PROVIDER: "wechat",
+      ...demoEnvironment,
+      DEPLOYMENT_MODE: "test",
+      NODE_ENV: "test",
+      AUTH_PROVIDER: "wechat",
       }),
     ).toMatchObject({
       deploymentMode: "test",
@@ -102,6 +104,19 @@ describe("API runtime configuration", () => {
       publicBaseUrl: "https://api.evidence.example.test",
       corsOrigins: ["https://reader.evidence.example.test"],
     });
+  });
+
+  it("requires server-only WeChat credentials when WeChat auth is selected", () => {
+    expect(() =>
+      loadApiRuntimeConfig({ ...demoEnvironment, AUTH_PROVIDER: "wechat", WECHAT_APP_ID: undefined }),
+    ).toThrow("WECHAT_APP_ID is required");
+    expect(() =>
+      loadApiRuntimeConfig({
+        ...demoEnvironment,
+        AUTH_PROVIDER: "wechat",
+        WECHAT_APP_SECRET: undefined,
+      }),
+    ).toThrow("WECHAT_APP_SECRET is required");
   });
 
   it("accepts DeepSeek only when its server-side credentials are complete", () => {
@@ -275,7 +290,7 @@ describe("API deployment disclosure", () => {
     expect(login.statusCode).toBe(503);
     expect(json<{ error: { code: string; message: string } }>(login).error).toEqual({
       code: "AUTH_PROVIDER_UNAVAILABLE",
-      message: "微信 code2Session 鉴权适配器尚未实现",
+      message: "微信 code2Session 鉴权适配器尚未配置",
     });
     expect(login.body).not.toContain("token");
   });

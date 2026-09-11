@@ -52,6 +52,7 @@ import {
   type SpeechTone,
   type SpeechVoiceId,
 } from "./speech.js";
+import { WechatAuthError, type WechatAuthProvider } from "./wechat-auth.js";
 
 function serializeGenerationJob(job: GenerationJob): ClientJob {
   return ClientJobSchema.parse({
@@ -90,6 +91,7 @@ function idempotencyKeyFrom(request: FastifyRequest): string | undefined {
 export interface BuildAppOptions {
   deploymentMode: DeploymentMode;
   authProviderMode?: AuthProviderMode;
+  wechatAuthProvider?: WechatAuthProvider;
   repository?: MemoryRepository;
   aiProvider?: AIProvider;
   speechProvider?: SpeechProvider;
@@ -166,8 +168,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         : "custom";
   assertApiDeploymentSupported(options.deploymentMode, aiProviderMode, authProviderMode);
   const authenticationReady =
-    authProviderMode === "development" &&
-    (options.deploymentMode === "demo" || options.deploymentMode === "test");
+    authProviderMode === "wechat"
+      ? Boolean(options.wechatAuthProvider)
+      : options.deploymentMode === "demo" || options.deploymentMode === "test";
 
   const app = Fastify({
     logger: options.logger
@@ -296,13 +299,28 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   }));
 
   app.post("/v1/auth/wx-login", async (request, reply) => {
+    if (authProviderMode === "wechat") {
+      if (!options.wechatAuthProvider) {
+        throw new ApiError(503, "AUTH_PROVIDER_UNAVAILABLE", "微信 code2Session 鉴权适配器尚未配置");
+      }
+      const body = record(request.body);
+      const code = stringValue(body.code, "code");
+      const displayName = stringValue(body.displayName, "displayName", false);
+      try {
+        const identity = await options.wechatAuthProvider.exchangeCode(code!);
+        return reply.send(service.loginWithWechatOpenId(identity.openId, displayName));
+      } catch (error) {
+        if (error instanceof WechatAuthError) {
+          throw new ApiError(error.statusCode, error.code, error.message);
+        }
+        throw error;
+      }
+    }
     if (!authenticationReady) {
       throw new ApiError(
         503,
         "AUTH_PROVIDER_UNAVAILABLE",
-        authProviderMode === "wechat"
-          ? "微信 code2Session 鉴权适配器尚未实现"
-          : `${options.deploymentMode} 环境禁止使用开发鉴权`,
+        `${options.deploymentMode} 环境禁止使用开发鉴权`,
       );
     }
     const body = record(request.body);

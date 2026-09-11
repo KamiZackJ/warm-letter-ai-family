@@ -112,12 +112,13 @@ pnpm dev:web:case-001
 `trial` 映射到 `competition`，`release` 映射到 `production`。真实 API 模式按
 `presign -> uploadBinary -> complete` 上传素材；`presign`/`complete` 使用 API Bearer，
 外部 PUT 只携带 presign 返回的上传 headers，不得转发 `Authorization` 或 Cookie。当前
-环境变量只覆盖已实现的本地与 OpenAI 适配，示例见 `.env.example`；微信生产鉴权、
-PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
+环境变量示例见 `.env.example`；微信 `code2Session` 适配器已实现，但仍需公网 HTTPS API、
+真实 Secret、PostgreSQL、S3/OSS 和独立任务队列才能进入正式联调。
 
 ## 进度与边界
 
 - [2026-08-28 当前交接状态（接手人先看这里）](./docs/CURRENT_HANDOFF_STATUS_2026-08-28.md)
+- [2026-09-12 微信登录与真实 AppID 接入交接](./docs/WECHAT_AUTH_HANDOFF_2026-09-12.md)
 - [可移机阶段移交说明（进度、计划、问题和接手清单）](./docs/PORTABLE_HANDOFF_2026-08-28.md)
 - [受控 CASE-001 融合演示（团队内部主展示入口）](./docs/CONTROLLED_CASE_DEMO.md)
 - [confirmedDraft 长图导出与验证](./docs/CONFIRMED_DRAFT_LONG_IMAGE.md)
@@ -140,6 +141,6 @@ PostgreSQL、S3/OSS 和独立任务队列仍需实现并接入。
 - [开发说明](./docs/DEVELOPMENT.md)
 - [参赛作品完整计划](./暖笺_AI家书_参赛作品完整计划.docx)
 
-当前 H5 与本地 API 已具备独立短期媒体凭据、完整公开访问负面矩阵、单实例限流/内容兜底和真实浏览器证据；DeepSeek 文本与豆包语音适配层已经实现，但公网 Pages 未连接真实后端。真实供应商端到端证据、微信 `code2Session`、持久化存储、跨实例共享限流、正式内容审核、微信真机双设备闭环及正式部署尚未完成。不得把本地演示或适配层表述为生产放行。
+当前 H5 与本地 API 已具备独立短期媒体凭据、完整公开访问负面矩阵、单实例限流/内容兜底和真实浏览器证据；DeepSeek 文本、豆包语音和微信 `code2Session` 适配层已经实现，但公网 Pages 未连接真实后端。真实供应商端到端证据、持久化存储、跨实例共享限流、正式内容审核、微信真机双设备闭环及正式部署尚未完成。不得把本地演示或适配层表述为生产放行。
 
 原始赛题文章：<https://mp.weixin.qq.com/s/GMdJc8OBWIDang5iQdj7rg>

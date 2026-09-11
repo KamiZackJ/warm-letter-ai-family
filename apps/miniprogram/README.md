@@ -6,7 +6,7 @@
 
 1. 打开微信开发者工具，选择“导入项目”。
 2. 项目目录选择本目录 `apps/miniprogram`。
-3. AppID 可使用测试号；`project.config.json` 默认配置为 `touristappid`。
+3. `project.config.json` 已配置项目 AppID `wx281b5275e4a1601f`；接手人若使用其他小程序，须在本地替换为自己的 AppID。
 4. 编译后从首页选择“写一封家书”，或选择“快速演示完整流程”。
 
 静态检查：

@@ -23,6 +23,7 @@ export interface ApiRuntimeConfig {
   mediaSigningKeys?: Buffer[];
   publicRateLimits: PublicRateLimitConfig;
   replySafetyTimeoutMs: number;
+  wechatAuthTimeoutMs?: number;
 }
 
 const expectedNodeEnvironments: Record<
@@ -283,6 +284,16 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
     requiredEnv(env, "DEEPSEEK_MODEL");
   }
 
+  if (authProviderMode === "wechat") {
+    // Validate presence here, but keep the secret out of the runtime config object.
+    requiredEnv(env, "WECHAT_APP_ID");
+    requiredEnv(env, "WECHAT_APP_SECRET");
+  }
+  const wechatAuthTimeoutMs =
+    authProviderMode === "wechat"
+      ? integerFromEnv(env, "WECHAT_AUTH_TIMEOUT_MS", 5_000, 500, 60_000)
+      : undefined;
+
   const publicBaseUrl = publicBaseUrlFromEnv(env, deploymentMode);
   const corsOrigins = corsOriginsFromEnv(env, deploymentMode);
   const uploadDirectory = resolve(requiredEnv(env, "UPLOAD_DIR"));
@@ -325,5 +336,6 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
       },
     },
     replySafetyTimeoutMs: integerFromEnv(env, "REPLY_SAFETY_TIMEOUT_MS", 3_000),
+    wechatAuthTimeoutMs,
   };
 }
