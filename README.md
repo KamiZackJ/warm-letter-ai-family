@@ -14,7 +14,7 @@
 
 [主域名接入前方案（历史快照）](./docs/DOMAIN_HANDOFF_2026-09-09.md)：保留购买确认前的 DNS 与小程序域名规划。
 
-[2026-09-12 主域名绑定执行状态](./docs/DOMAIN_STATUS_2026-09-12.md)：域名、GitHub Pages 和阿里云权威 DNS 已配置完成，正在等待 `.xyz` 父区传播与 GitHub HTTPS 证书签发。
+[2026-09-12 主域名绑定执行状态](./docs/DOMAIN_STATUS_2026-09-12.md)：DNS 已开始传播，HTTP 入口已可访问，正在等待 GitHub HTTPS 证书签发。
 
 [观看 2 分 15 秒公开脱敏演示视频](https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4)，可先快速了解队友固定审核稿如何接入素材选择、来源复核、确认快照与家人回复闭环。
 
