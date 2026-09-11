@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">暖笺小程序头像</title>
+  <desc id="desc">米白底色上的松绿色信封、珊瑚色心形封蜡与金色暖光</desc>
+  <rect width="1024" height="1024" fill="#F4F1EA"/>
+  <circle cx="790" cy="245" r="104" fill="#E9BD49"/>
+  <g fill="none" stroke="#E9BD49" stroke-linecap="round" stroke-width="18">
+    <path d="M790 92v-34"/>
+    <path d="M790 432v-34"/>
+    <path d="M637 245h-34"/>
+    <path d="M977 245h-34"/>
+    <path d="m682 137-24-24"/>
+    <path d="m922 377-24-24"/>
+    <path d="m898 137 24-24"/>
+    <path d="m658 377 24-24"/>
+  </g>
+  <g stroke="#245A4B" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="152" y="286" width="720" height="470" rx="52" fill="#FFFEF9" stroke-width="26"/>
+    <path d="M166 322 512 604 858 322" fill="#DCEBE3" stroke-width="26"/>
+    <path d="M166 720 414 498" fill="none" stroke-width="24"/>
+    <path d="M858 720 610 498" fill="none" stroke-width="24"/>
+  </g>
+  <path d="M448 664c0-43 64-68 64-68s64 25 64 68c0 49-64 93-64 93s-64-44-64-93Z" fill="#C85D4C" stroke="#245A4B" stroke-linejoin="round" stroke-width="18"/>
+  <path d="m486 663 18 18 36-40" fill="none" stroke="#FFF8EE" stroke-linecap="round" stroke-linejoin="round" stroke-width="15"/>
+</svg>
