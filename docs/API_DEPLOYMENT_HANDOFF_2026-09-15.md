@@ -1,6 +1,6 @@
 # 暖笺公网 API 部署与移交状态
 
-- 状态时间：2026-09-15 02:00（Asia/Shanghai）
+- 状态时间：2026-09-15 02:20（Asia/Shanghai）
 - 公网 API：<https://api.warmjiashu.xyz>
 - 健康检查：<https://api.warmjiashu.xyz/health>
 - 服务器：阿里云轻量应用服务器，中国香港，Ubuntu 24.04
@@ -59,10 +59,11 @@ curl --fail https://api.warmjiashu.xyz/health
 - `/opt/warm-letter-ai-family`：服务器仓库工作树
 - `/var/lib/warm-letter/uploads`：当前本地媒体目录
 
-当前部署变更仍在 `codex/warm-letter-mvp`，合入 `master` 前重部署必须显式指定该分支：
+部署变更已快进合入 `master`，服务器也已从 `master` 完成一次重复部署验证：
 
 ```bash
-WARM_LETTER_BRANCH=codex/warm-letter-mvp bash /tmp/bootstrap.sh
+install -m 0755 /opt/warm-letter-ai-family/deploy/ubuntu/bootstrap.sh /tmp/bootstrap.sh
+WARM_LETTER_BRANCH=master bash /tmp/bootstrap.sh
 ```
 
 ## 当前边界和问题
@@ -74,7 +75,7 @@ WARM_LETTER_BRANCH=codex/warm-letter-mvp bash /tmp/bootstrap.sh
 5. 无效 code 已证明请求链路可达微信，但尚未使用真实 `wx.login` code 完成成功登录。
 6. 微信公众平台的 request、uploadFile、downloadFile 合法域名仍需配置并验证。
 7. 香港服务器不能作为中国内地 ICP 备案接入服务器；微信后台是否接受当前域名必须实测。
-8. `warmjiashu.xyz` 与 `www.warmjiashu.xyz` 的 GitHub Pages 证书仍不匹配自定义域名；这与 API 证书相互独立。
+8. `warmjiashu.xyz` 与 `www.warmjiashu.xyz` 的 GitHub Pages 证书仍不匹配自定义域名；2026-09-15 已重提相同 CNAME 并成功重跑 Pages，开启强制 HTTPS 仍返回 `The certificate does not exist yet`。这与 API 证书相互独立。
 9. Pages 当前只发布静态成果展示，不会自动调用新 API。
 10. 服务器到期时间为 2026-10-13 23:59:59，自动续费关闭；到期前必须决定续费或迁移。
 11. AppSecret 曾进入协作聊天。用户当前决定暂不轮换，但进入真实测试或生产前必须轮换。
@@ -85,7 +86,7 @@ WARM_LETTER_BRANCH=codex/warm-letter-mvp bash /tmp/bootstrap.sh
 2. 用微信开发者工具导入 `apps/miniprogram`，确认 AppID 后编译 develop 版本。
 3. 完成一次真实登录、素材上传、生成、确认、分享、阅读和回复闭环，并保留脱敏验收记录。
 4. 修复 GitHub Pages 主域名证书，确认 `https://warmjiashu.xyz` 严格校验通过。
-5. 将 `codex/warm-letter-mvp` 审核合入 `master`，再把服务器部署分支切换为 `master`。
+5. 后续部署先在功能分支通过 CI，再快进合入 `master`；服务器只从已审核的 `master` 重部署。
 6. 若要声明真实 AI，先选定供应商、创建仅服务端可见的密钥，并完成事实约束、安全与费用验收。
 7. 生产化前接入 PostgreSQL、OSS/S3、共享限流、删除链路、备份恢复和正式内容审核。
 

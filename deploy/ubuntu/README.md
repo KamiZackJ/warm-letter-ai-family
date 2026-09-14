@@ -41,15 +41,12 @@ Never put this file in Git, GitHub Actions, Pages, the mini-program package or s
 
 ## Bootstrap
 
-After DNS points `api.warmjiashu.xyz` to the server and the secret environment file exists, use the
-feature branch until the deployment changes have been merged to `master`:
+After DNS points `api.warmjiashu.xyz` to the server and the secret environment file exists:
 
 ```bash
-sudo WARM_LETTER_BRANCH=codex/warm-letter-mvp bash /tmp/bootstrap.sh
+sudo install -m 0755 /opt/warm-letter-ai-family/deploy/ubuntu/bootstrap.sh /tmp/bootstrap.sh
+sudo WARM_LETTER_BRANCH=master bash /tmp/bootstrap.sh
 ```
-
-After merge, install the repository copy at `/opt/warm-letter-ai-family/deploy/ubuntu/bootstrap.sh`
-and switch `WARM_LETTER_BRANCH` to `master`.
 
 The script installs an exact Node version, pnpm, Caddy and a 2 GiB swap file on a 1 GiB host;
 pulls the public repository; installs/builds the workspace; installs systemd/Caddy configs; and
