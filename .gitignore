@@ -18,3 +18,4 @@ apps/web/test-results/
 .playwright-cli/
 scripts/__pycache__/
 uploads/
+deploy/ubuntu/api.env
