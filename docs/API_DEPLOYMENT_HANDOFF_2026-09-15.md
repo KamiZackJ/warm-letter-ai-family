@@ -32,10 +32,12 @@
 | 能力声明 | `ai=fake`、`authentication=wechat`、`authenticationReady=true` |
 | CORS 正向 | `Origin: https://warmjiashu.xyz` 获得允许头 |
 | CORS 负向 | 非白名单 Origin 不获得允许头 |
+| 微信凭据探针 | 直连 code2Session 使用无效测试 code 返回 `40029 invalid code`，而不是 AppID/Secret 错误 |
 | 错误脱敏 | 无效微信 code 返回通用 `WECHAT_LOGIN_REJECTED`，不暴露上游详情或凭据 |
 
-`authenticationReady=true` 只证明服务端配置完整。必须在微信开发者工具中使用一次真实
-`wx.login` code 并让 `/v1/auth/wx-login` 返回 `200`，才能认定 code2Session 端到端通过。
+凭据探针证明微信接受当前 AppID/AppSecret 组合，但没有创建用户会话。必须在微信开发者工具
+中使用一次真实 `wx.login` code 并让 `/v1/auth/wx-login` 返回 `200`，才能认定
+code2Session 端到端通过。
 
 ## 运行与复验
 
@@ -72,7 +74,7 @@ WARM_LETTER_BRANCH=master bash /tmp/bootstrap.sh
 2. 家书、会话和限流状态保存在单进程内存中，服务重启后丢失。
 3. 媒体保存在单机文件系统，不是 OSS/S3；没有备份、迁移或多实例能力。
 4. 回复安全为确定性规则，不是正式内容审核服务。
-5. 无效 code 已证明请求链路可达微信，但尚未使用真实 `wx.login` code 完成成功登录。
+5. 无效 code 探针已证明请求链路可达微信且当前 AppID/AppSecret 被接受，但尚未使用真实 `wx.login` code 完成成功登录。
 6. 微信公众平台的 request、uploadFile、downloadFile 合法域名仍需配置并验证。
 7. 香港服务器不能作为中国内地 ICP 备案接入服务器；微信后台是否接受当前域名必须实测。
 8. `warmjiashu.xyz` 与 `www.warmjiashu.xyz` 的 GitHub Pages 证书仍不匹配自定义域名；2026-09-15 已重提相同 CNAME 并成功重跑 Pages，开启强制 HTTPS 仍返回 `The certificate does not exist yet`。这与 API 证书相互独立。
