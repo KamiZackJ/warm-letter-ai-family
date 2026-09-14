@@ -16,6 +16,8 @@
 
 [2026-09-12 主域名绑定执行状态](./docs/DOMAIN_STATUS_2026-09-12.md)：DNS 已开始传播，HTTP 入口已可访问，正在等待 GitHub HTTPS 证书签发。
 
+[2026-09-15 公网 API 部署与移交状态](./docs/API_DEPLOYMENT_HANDOFF_2026-09-15.md)：香港服务器、`api` 子域名、可信 HTTPS 和演示 API 已上线；同时记录微信联调、主域证书和生产化剩余项。
+
 [观看 2 分 15 秒公开脱敏演示视频](https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4)，可先快速了解队友固定审核稿如何接入素材选择、来源复核、确认快照与家人回复闭环。
 
 体验顺序：选择素材，生成并比较 A/B/C 三版家书；编辑后核对段落来源并确认；进入收信端切换字号、展开来源并发送一条本地回复。公开页面只展示审核后的文字结构，不包含队友真实照片、语音或访问凭据，也不调用实时 OpenAI。
@@ -32,6 +34,7 @@
 - [2026-09-07 最新进度同步与接手增量](./docs/LATEST_PROGRESS_2026-09-07.md)
 - [2026-09-09 主域名接入状态与 DNS 交接](./docs/DOMAIN_HANDOFF_2026-09-09.md)
 - [2026-09-12 主域名绑定执行状态](./docs/DOMAIN_STATUS_2026-09-12.md)
+- [2026-09-15 公网 API 部署与移交状态](./docs/API_DEPLOYMENT_HANDOFF_2026-09-15.md)
 - [快手与 iCAN 可直接粘贴的提交文案](./docs/contest/FAST_SUBMISSION_COPY.md)
 
 队内受控压缩包除了上述文档，还包含队友照片的物理裁切派生图、授权示例语音、A/B/C 固定审核稿、离线交互闭环、长图适配器和完整性 manifest。这些受控媒体不进入公开 Git 或 Pages。
@@ -112,13 +115,15 @@ pnpm dev:web:case-001
 `trial` 映射到 `competition`，`release` 映射到 `production`。真实 API 模式按
 `presign -> uploadBinary -> complete` 上传素材；`presign`/`complete` 使用 API Bearer，
 外部 PUT 只携带 presign 返回的上传 headers，不得转发 `Authorization` 或 Cookie。当前
-环境变量示例见 `.env.example`；微信 `code2Session` 适配器已实现，但仍需公网 HTTPS API、
-真实 Secret、PostgreSQL、S3/OSS 和独立任务队列才能进入正式联调。
+环境变量示例见 `.env.example`；`https://api.warmjiashu.xyz` 已部署为带微信 `code2Session`
+适配器的 Fake AI 演示 API，小程序 `develop` 已指向它。真实 `wx.login`、微信合法域名、
+PostgreSQL、S3/OSS、真实 AI 和独立任务队列仍需完成后才能进入正式联调或生产。
 
 ## 进度与边界
 
 - [2026-08-28 当前交接状态（接手人先看这里）](./docs/CURRENT_HANDOFF_STATUS_2026-08-28.md)
 - [2026-09-12 微信登录与真实 AppID 接入交接](./docs/WECHAT_AUTH_HANDOFF_2026-09-12.md)
+- [2026-09-15 公网 API 部署与移交状态](./docs/API_DEPLOYMENT_HANDOFF_2026-09-15.md)
 - [可移机阶段移交说明（进度、计划、问题和接手清单）](./docs/PORTABLE_HANDOFF_2026-08-28.md)
 - [受控 CASE-001 融合演示（团队内部主展示入口）](./docs/CONTROLLED_CASE_DEMO.md)
 - [confirmedDraft 长图导出与验证](./docs/CONFIRMED_DRAFT_LONG_IMAGE.md)
@@ -141,6 +146,6 @@ pnpm dev:web:case-001
 - [开发说明](./docs/DEVELOPMENT.md)
 - [参赛作品完整计划](./暖笺_AI家书_参赛作品完整计划.docx)
 
-当前 H5 与本地 API 已具备独立短期媒体凭据、完整公开访问负面矩阵、单实例限流/内容兜底和真实浏览器证据；DeepSeek 文本、豆包语音和微信 `code2Session` 适配层已经实现，但公网 Pages 未连接真实后端。真实供应商端到端证据、持久化存储、跨实例共享限流、正式内容审核、微信真机双设备闭环及正式部署尚未完成。不得把本地演示或适配层表述为生产放行。
+当前 H5 与 API 已具备独立短期媒体凭据、完整公开访问负面矩阵、单实例限流/内容兜底和真实浏览器证据；公网 API 已上线为 `demo + WeChat 鉴权 + Fake AI`，但 Pages 展示站尚未连接该 API。真实供应商端到端证据、持久化存储、跨实例共享限流、正式内容审核、微信真机双设备闭环及生产部署尚未完成。不得把公网演示或适配层表述为生产放行。
 
 原始赛题文章：<https://mp.weixin.qq.com/s/GMdJc8OBWIDang5iQdj7rg>

@@ -125,7 +125,7 @@ const ENVIRONMENT_COPY: Record<
 > = {
   demo: {
     environmentLabel: "演示环境",
-    environmentDetail: "本地服务 / Fake AI",
+    environmentDetail: "公网演示服务 / Fake AI",
   },
   test: {
     environmentLabel: "开发/测试环境",

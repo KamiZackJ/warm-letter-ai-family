@@ -1,6 +1,6 @@
 # 暖笺微信小程序
 
-原生微信小程序 MVP，默认使用本地 mock 数据，可在没有 API 服务和云端凭据时演示完整流程。
+原生微信小程序 MVP。无微信运行时的自动化测试使用本地 mock；微信开发版连接暖笺公网演示 API。
 
 ## 运行
 
@@ -30,9 +30,14 @@ pnpm --filter @warm-letter/miniprogram typecheck
 
 [`src/config/env.ts`](src/config/env.ts) 显式配置 `deploymentMode`、`apiMode` 和 `apiBaseUrl`。
 微信版本映射为 `develop -> demo`、`trial -> competition`、`release -> production`；只有
-`test` 部署模式允许 `apiMode: "mock"`，其余模式必须连接真实 API。Demo 默认可连接本机
-`http://127.0.0.1:8787/v1`；competition 和 production 必须使用与服务端 `/health`
+`test` 部署模式允许 `apiMode: "mock"`，其余模式必须连接真实 API。Demo 当前连接
+`https://api.warmjiashu.xyz/v1`；competition 和 production 必须使用与服务端 `/health`
 握手一致的非回环 HTTPS 环境，且 production 当前仍由服务端门禁拒绝启动。
+
+公网服务当前是 `demo + WeChat code2Session + Fake AI`，仅供开发版联调，不是生产服务。
+真机调用前，须在微信公众平台把 `https://api.warmjiashu.xyz` 同时加入 request、uploadFile
+和 downloadFile 合法域名，并用一次真实 `wx.login` 验证 code2Session。trial/release 仍保持
+未配置状态，避免把演示服务误标为比赛取证或生产环境。
 
 当前真实 API 适配器按 `presign -> uploadBinary -> complete` 流程上传照片、截图和语音，
 并通过公开 reader 返回的媒体地址预览或播放。`presign` 与 `complete` 使用暖笺 API Bearer

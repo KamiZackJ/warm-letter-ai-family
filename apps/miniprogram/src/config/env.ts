@@ -4,6 +4,7 @@ import {
   type MiniProgramEnvironmentInput,
 } from "./runtime-environment";
 
+const DEMO_API_BASE_URL = "https://api.warmjiashu.xyz/v1";
 const COMPETITION_API_BASE_URL = "";
 const PRODUCTION_API_BASE_URL = "";
 
@@ -61,7 +62,7 @@ function buildEnvironmentInput(): MiniProgramEnvironmentInput {
   return {
     deploymentMode: "demo",
     apiMode: "real",
-    apiBaseUrl: "http://127.0.0.1:8787/v1",
+    apiBaseUrl: DEMO_API_BASE_URL,
     requestTimeoutMs: 12_000,
     accountEnvironment,
     appId,
