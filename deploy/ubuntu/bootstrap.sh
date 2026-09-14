@@ -69,20 +69,28 @@ if [[ "$(awk '/MemTotal/ {print $2}' /proc/meminfo)" -lt 1500000 ]] \
   grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 
+install -d -o "${APP_USER}" -g "${APP_USER}" "${APP_DIR}"
+chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
+
 if [[ ! -d "${APP_DIR}/.git" ]]; then
-  git clone --branch "${BRANCH}" --depth 1 "${REPO_URL}" "${APP_DIR}"
+  runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" \
+    git clone --branch "${BRANCH}" --depth 1 "${REPO_URL}" "${APP_DIR}"
 else
-  git -C "${APP_DIR}" fetch origin "${BRANCH}"
-  git -C "${APP_DIR}" checkout "${BRANCH}"
-  git -C "${APP_DIR}" pull --ff-only origin "${BRANCH}"
+  runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" \
+    git -C "${APP_DIR}" fetch --depth 1 origin \
+      "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+  runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" \
+    git -C "${APP_DIR}" checkout -B "${BRANCH}" "origin/${BRANCH}"
 fi
 
 install -d -o "${APP_USER}" -g "${APP_USER}" "${DATA_DIR}/uploads"
-chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
-runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" \
-  /usr/local/bin/pnpm --dir "${APP_DIR}" install --frozen-lockfile
-runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" NODE_OPTIONS=--max-old-space-size=768 \
-  /usr/local/bin/pnpm --dir "${APP_DIR}" build
+(
+  cd "${APP_DIR}"
+  runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" \
+    /usr/local/bin/pnpm --filter '@warm-letter/api...' install --frozen-lockfile
+  runuser -u "${APP_USER}" -- env HOME="${DATA_DIR}" NODE_OPTIONS=--max-old-space-size=512 \
+    /usr/local/bin/pnpm --filter @warm-letter/api build
+)
 
 install -d -m 0750 /etc/warm-letter
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -98,10 +106,19 @@ install -m 0644 "${APP_DIR}/deploy/ubuntu/warm-letter-api.service" \
 install -m 0644 "${APP_DIR}/deploy/ubuntu/Caddyfile" /etc/caddy/Caddyfile
 
 systemctl daemon-reload
-systemctl enable --now warm-letter-api.service
+systemctl enable warm-letter-api.service
+systemctl restart warm-letter-api.service
 caddy validate --config /etc/caddy/Caddyfile
 systemctl enable --now caddy
 systemctl reload caddy
 
 systemctl --no-pager --full status warm-letter-api.service
-curl --fail --silent --show-error http://127.0.0.1:8787/health
+for attempt in $(seq 1 30); do
+  if curl --fail --silent --show-error http://127.0.0.1:8787/health; then
+    exit 0
+  fi
+  sleep 1
+done
+
+journalctl -u warm-letter-api.service -n 100 --no-pager >&2
+exit 1
