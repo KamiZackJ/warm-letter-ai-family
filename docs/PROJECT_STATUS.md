@@ -7,12 +7,12 @@
 
 ## 2026-09-16 真实 AI 推进快照
 
-- 阿里云百炼北京地域 OpenAI-compatible 端点的精确双模型配置已通过供应商探针和代码级合成多模态闭环：`qwen3.8-flash` 负责文字、图片、JSON 家书生成与事实审校，`qwen3.5-omni-flash` 负责流式语音转写。编译后 Provider 的合成图片、WAV、文字完整闭环约 112 秒，三份素材 ID 均被最终 `sourceRefs` 覆盖；队友授权 M4A 另行完成仅转写探针且语义与人工基准一致。
+- 阿里云百炼北京地域 OpenAI-compatible 端点的精确双模型配置已通过供应商探针和代码级合成多模态闭环：`qwen3.8-flash` 负责文字、图片、JSON 家书生成与事实审校，`qwen3.5-omni-flash` 负责流式语音转写。公网服务器部署后的合成图片、WAV、文字完整闭环约 97.5 秒，三份素材 ID 均被最终 `sourceRefs` 覆盖；队友授权 M4A 另行完成仅转写探针且语义与人工基准一致。
 - 验证档案 `dashscope-qwen-2026-09-16` 会锁定端点、双模型、`streaming-chat-transcription`、`json-object`、`detail=omit` 和 `store=omit`；单次图片与语音合计限制 12 MiB，转写限制 12,000 个 Unicode 字符。
-- 健康检查只报告 `profile-match`，表示配置匹配已完成合成探针的档案，不把环境声明冒充当前运行时验证。现有证据只关闭“候选供应商多模态能力与代码适配”子门禁。队友授权四素材同封家书、轮换密钥后的服务器调用、小程序双设备完整闭环、供应商隐私/费用审核和回滚演练仍未完成，因此 B2、G2 和 MVP 均不放行。
-- 公网 `api.warmjiashu.xyz` 继续运行 `demo + WeChat 鉴权 + Fake AI`。探针密钥曾在协作会话中提供，必须撤销或轮换；实际密钥不得写入 Git、小程序、静态页面、文档、URL、截图或日志。
+- 健康检查只报告 `profile-match`，表示配置匹配已完成合成探针的档案；服务器实际探针另有脱敏结果。现有证据关闭“候选供应商多模态能力、代码适配和服务器合成探针”子门禁。用户任意图片/语音的小程序连续闭环、双设备、供应商隐私/费用审核和回滚演练仍未完成，因此 B2、G2 和 MVP 均不放行。
+- 公网 `api.warmjiashu.xyz` 已运行 `demo + WeChat 鉴权 + Qwen 双模型`，健康检查为 text/image `native`、audio `transcription`、verification `profile-match`。微信后台已核验 request、uploadFile、downloadFile 三类合法域名。当前密钥曾在协作会话中提供，扩大体验范围前必须撤销或轮换；密钥不得写入 Git、小程序、静态页面、文档、URL、截图或日志。
 - 2026-09-15 的 Gemini-labelled 第三方代理模型目录可访问，但三个文本模型均返回 `503 model_not_found`，仍判定不可用；未向该代理发送队友真实素材。
-- 当前最短推进顺序：轮换 Qwen 密钥并审核隐私/费用条款；用轮换密钥复跑受控探针；完成获授权四素材的公网小程序双设备 E2E 并归档脱敏证据。详细配置与回滚见 [`REAL_AI_PROVIDER_HANDOFF_2026-09-15.md`](./REAL_AI_PROVIDER_HANDOFF_2026-09-15.md)。
+- 当前最短推进顺序：完成任意用户图片、文字、录音的开发者工具闭环；上传体验版并真机复测；轮换 Qwen 密钥并审核隐私/费用条款；最后完成双设备 E2E 和脱敏证据归档。详细配置与回滚见 [`REAL_AI_PROVIDER_HANDOFF_2026-09-15.md`](./REAL_AI_PROVIDER_HANDOFF_2026-09-15.md)。
 
 ## 2026-08-28 当前交接快照
 

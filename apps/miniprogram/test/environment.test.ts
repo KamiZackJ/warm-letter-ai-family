@@ -75,6 +75,7 @@ describe("resolveMiniProgramEnvironment", () => {
   );
 
   it.each([
+    ["demo", "trial", "wx-demo-trial"],
     ["competition", "trial", "wx-competition"],
     ["production", "release", "wx-production"],
   ] as const)(
@@ -103,6 +104,7 @@ describe("resolveMiniProgramEnvironment", () => {
         "https://999.999.999.999/v1",
         "https://*.example.com/v1",
       ]) {
+        const environmentName = deploymentMode === "demo" ? "demo 体验版" : deploymentMode;
         expect(() =>
           resolveMiniProgramEnvironment({
             ...testProfile,
@@ -114,14 +116,15 @@ describe("resolveMiniProgramEnvironment", () => {
           }),
         ).toThrow(
           apiBaseUrl.startsWith("http:")
-            ? `${deploymentMode} 环境必须使用 HTTPS API`
-            : `${deploymentMode} 环境禁止使用本机、回环或通配 API 地址`,
+            ? `${environmentName} 环境必须使用 HTTPS API`
+            : `${environmentName} 环境禁止使用本机、回环或通配 API 地址`,
         );
       }
     },
   );
 
   it.each([
+    ["demo", "trial", "https://api.warmjiashu.xyz/v1"],
     ["competition", "trial", "https://evidence.example.com/v1"],
     ["production", "release", "https://api.example.com/v1"],
   ] as const)(
@@ -137,7 +140,9 @@ describe("resolveMiniProgramEnvironment", () => {
             accountEnvironment,
             appId,
           }),
-        ).toThrow(`${deploymentMode} 环境必须配置真实微信 AppID`);
+        ).toThrow(
+          `${deploymentMode === "demo" ? "demo 体验版" : deploymentMode} 环境必须配置真实微信 AppID`,
+        );
       }
     },
   );
@@ -153,6 +158,32 @@ describe("resolveMiniProgramEnvironment", () => {
         appId: "wx-production",
       }),
     ).toThrow("production 环境必须使用微信 release 版本");
+  });
+
+  it("allows the non-production demo API in develop and trial, but never release", () => {
+    for (const accountEnvironment of ["develop", "trial"] as const) {
+      expect(
+        resolveMiniProgramEnvironment({
+          ...testProfile,
+          deploymentMode: "demo",
+          apiMode: "real",
+          apiBaseUrl: "https://api.warmjiashu.xyz/v1",
+          accountEnvironment,
+          appId: "wx-demo",
+        }),
+      ).toMatchObject({ deploymentMode: "demo", accountEnvironment });
+    }
+
+    expect(() =>
+      resolveMiniProgramEnvironment({
+        ...testProfile,
+        deploymentMode: "demo",
+        apiMode: "real",
+        apiBaseUrl: "https://api.warmjiashu.xyz/v1",
+        accountEnvironment: "release",
+        appId: "wx-demo",
+      }),
+    ).toThrow("demo 环境只允许微信 develop 或 trial 版本");
   });
 
   it.each([

@@ -192,18 +192,29 @@ function parseApiUrl(value: string): ParsedApiUrl {
   };
 }
 
-function requireApiUrl(value: unknown, mode: DeploymentMode, apiMode: ApiMode): ParsedApiUrl {
+function requireApiUrl(
+  value: unknown,
+  mode: DeploymentMode,
+  apiMode: ApiMode,
+  accountEnvironment: AccountEnvironment,
+): ParsedApiUrl {
   if (typeof value !== "string" || !value.trim()) {
     throw new MiniProgramConfigurationError("apiBaseUrl 必须显式设置");
   }
 
   const url = parseApiUrl(value.trim());
-  if (apiMode === "real" && (mode === "competition" || mode === "production")) {
+  const requiresRemoteHttps =
+    apiMode === "real" &&
+    (mode === "competition" || mode === "production" || accountEnvironment === "trial");
+  if (requiresRemoteHttps) {
+    const environmentName = mode === "demo" ? "demo 体验版" : mode;
     if (url.protocol !== "https:") {
-      throw new MiniProgramConfigurationError(`${mode} 环境必须使用 HTTPS API`);
+      throw new MiniProgramConfigurationError(`${environmentName} 环境必须使用 HTTPS API`);
     }
     if (isLoopbackOrWildcardHostname(url.hostname)) {
-      throw new MiniProgramConfigurationError(`${mode} 环境禁止使用本机、回环或通配 API 地址`);
+      throw new MiniProgramConfigurationError(
+        `${environmentName} 环境禁止使用本机、回环或通配 API 地址`,
+      );
     }
   }
   return url;
@@ -215,7 +226,7 @@ const ENVIRONMENT_COPY: Record<
 > = {
   demo: {
     environmentLabel: "演示环境",
-    environmentDetail: "公网演示服务 / Fake AI",
+    environmentDetail: "公网 Qwen 演示服务 · 非生产",
   },
   test: {
     environmentLabel: "开发/测试环境",
@@ -249,8 +260,8 @@ export function resolveMiniProgramEnvironment(
   if (apiMode === "mock" && deploymentMode !== "test") {
     throw new MiniProgramConfigurationError("mock API 只允许用于 test 环境");
   }
-  if (deploymentMode === "demo" && accountEnvironment !== "develop") {
-    throw new MiniProgramConfigurationError("demo 环境只允许微信 develop 版本");
+  if (deploymentMode === "demo" && accountEnvironment === "release") {
+    throw new MiniProgramConfigurationError("demo 环境只允许微信 develop 或 trial 版本");
   }
   if (deploymentMode === "competition" && accountEnvironment !== "trial") {
     throw new MiniProgramConfigurationError("competition 环境必须使用微信 trial 版本");
@@ -264,13 +275,22 @@ export function resolveMiniProgramEnvironment(
 
   const appId = typeof input.appId === "string" ? input.appId.trim() : "";
   if (
-    (deploymentMode === "competition" || deploymentMode === "production") &&
+    (deploymentMode === "competition" ||
+      deploymentMode === "production" ||
+      (deploymentMode === "demo" && accountEnvironment === "trial")) &&
     (!appId || appId.toLowerCase() === "touristappid")
   ) {
-    throw new MiniProgramConfigurationError(`${deploymentMode} 环境必须配置真实微信 AppID`);
+    throw new MiniProgramConfigurationError(
+      `${deploymentMode === "demo" ? "demo 体验版" : deploymentMode} 环境必须配置真实微信 AppID`,
+    );
   }
 
-  const apiUrl = requireApiUrl(input.apiBaseUrl, deploymentMode, apiMode);
+  const apiUrl = requireApiUrl(
+    input.apiBaseUrl,
+    deploymentMode,
+    apiMode,
+    accountEnvironment,
+  );
 
   return {
     deploymentMode,

@@ -11,7 +11,7 @@ server. It intentionally contains no credentials.
 - Public API: `https://api.warmjiashu.xyz`
 - Process: Node.js `22.23.2` under systemd
 - TLS proxy: Caddy
-- Initial release mode: `demo` with real WeChat authentication and deterministic AI
+- Initial release mode: `demo` with real WeChat authentication and Qwen; explicitly non-production
 
 ## Live status (2026-09-16)
 
@@ -22,10 +22,11 @@ server. It intentionally contains no credentials.
 - Caddy serves a publicly trusted certificate and redirects HTTP to HTTPS.
 - `warm-letter-api.service` and `caddy.service` are enabled and running.
 - [`https://api.warmjiashu.xyz/health`](https://api.warmjiashu.xyz/health) returns HTTP 200.
-- The live AI provider remains `fake`.
-- The exact DashScope Beijing `qwen3.8-flash` + `qwen3.5-omni-flash` profile passed synthetic
-  text/image/audio probes, but it is not enabled until the probe key is rotated and the remaining
-  privacy, cost, authorized-material E2E and rollback gates are complete.
+- The live AI provider is the exact DashScope Beijing `qwen3.8-flash` + `qwen3.5-omni-flash`
+  profile. A server-side synthetic text/image/audio probe completed in about 97.5 seconds and
+  covered all three source IDs.
+- The active credential appeared in collaboration chat and must be rotated before broader
+  distribution. Privacy, cost, authorized-material E2E and production gates remain open.
 - The earlier Gemini-labelled third-party proxy remains rejected after all three text models
   returned `503 model_not_found`.
 - The live mode is deliberately non-production: WeChat authentication is configured, but a real
@@ -77,6 +78,6 @@ curl --fail https://api.warmjiashu.xyz/health
 ```
 
 Expected live health output must explicitly say `deploymentMode: "demo"`, `nonProduction: true`,
-and `capabilities.ai: "fake"`. Real AI requires a provider that passes text, structured-output,
-image, audio, privacy and cost gates. Production mode additionally requires persistence, object
-storage, content-safety, deletion and shared-rate-limit work.
+`capabilities.ai: "openai-compatible"`, text/image `native`, audio `transcription`, and verification
+`profile-match`. Production mode additionally requires a rotated credential, authorized-material
+E2E, privacy/cost approval, persistence, object storage, content safety, deletion and shared-rate-limit work.

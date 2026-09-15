@@ -5,7 +5,6 @@ import {
 } from "./runtime-environment";
 
 const DEMO_API_BASE_URL = "https://api.warmjiashu.xyz/v1";
-const COMPETITION_API_BASE_URL = "";
 const PRODUCTION_API_BASE_URL = "";
 
 type AccountInfo = {
@@ -51,9 +50,9 @@ function buildEnvironmentInput(): MiniProgramEnvironmentInput {
   }
   if (accountEnvironment === "trial") {
     return {
-      deploymentMode: "competition",
+      deploymentMode: "demo",
       apiMode: "real",
-      apiBaseUrl: COMPETITION_API_BASE_URL,
+      apiBaseUrl: DEMO_API_BASE_URL,
       requestTimeoutMs: 12_000,
       accountEnvironment,
       appId,

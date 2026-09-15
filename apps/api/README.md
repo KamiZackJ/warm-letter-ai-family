@@ -147,11 +147,11 @@ endpoint, keep `OPENAI_COMPATIBLE_VERIFICATION_PROFILE=unverified`, image/audio 
 perform new synthetic probes. `/health` reports configured input modes and whether they are backed
 by a named profile matching a prior synthetic probe, but never returns the key, endpoint, or model.
 
-The public API still uses `AI_PROVIDER=fake`. The successful Qwen synthetic probe does not replace
-an authorized four-material business E2E, supplier privacy/cost approval, or deployment evidence.
-The probe credential appeared in collaboration chat and must be revoked or rotated before any
-server use. Do not send teammate photos or audio until those gates pass. The earlier 2026-09-15
-Gemini-labelled proxy failure and the current Qwen switch checklist are recorded in
+The public non-production API now uses the exact Qwen profile above. A server-side synthetic
+text/image/audio probe completed successfully after deployment, but it does not replace an
+authorized four-material mini-program E2E, supplier privacy/cost approval, or production evidence.
+The active credential appeared in collaboration chat and must be revoked or rotated before broader
+distribution. The earlier 2026-09-15 Gemini-labelled proxy failure and the Qwen switch checklist are recorded in
 [`../../docs/REAL_AI_PROVIDER_HANDOFF_2026-09-15.md`](../../docs/REAL_AI_PROVIDER_HANDOFF_2026-09-15.md).
 
 For text-only personalization in demo or test mode, an OpenAI-compatible DeepSeek provider is also available:

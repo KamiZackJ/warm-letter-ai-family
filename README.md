@@ -4,7 +4,7 @@
 
 暖笺是一款以微信小程序为创作端、H5 为收信端的 AI 家书工具。用户主动选择照片、截图、语音和文字素材，AI 生成带段落来源的可编辑草稿；只有用户确认后的版本才能发布，家人可通过短期分享链接阅读、播放原始语音并回复。
 
-本仓库已经包含可离线运行的开发/比赛演示骨架（M1），而不只是设计资料；尚未通过 G2 用户测试、MVP、公测或生产放行。默认配置使用内存仓库、文件系统对象存储和确定性 Fake AI 演示业务链路；微信 `code2Session` 适配器已部署，但真实 AI、微信双设备验收、PostgreSQL、S3/OSS 和独立任务队列仍属于待完成项。
+本仓库已经包含可离线运行的开发/比赛演示骨架（M1），而不只是设计资料；尚未通过 G2 用户测试、MVP、公测或生产放行。仓库默认环境仍使用确定性 Fake AI，公网演示 API 已切换为 Qwen 双模型；内存仓库、文件系统对象存储、微信双设备验收、PostgreSQL、S3/OSS 和独立任务队列仍属于待完成项。
 
 ## 在线体验
 
@@ -48,10 +48,10 @@
 - Fastify API：素材上传与校验、家书状态机、来源追溯、分享重签/撤销和回复。
 - React H5：受控 CASE-001 模式可加载队友真实图片与原始音频；默认开发模式使用合成脱敏素材，并提供系统朗读、来源展开、回复和失效状态。
 - 公共个性创作页：照片只在浏览器本地预览，支持五种文案风格、修改意见、草稿编辑和复制；未连接后端时如实标注为本地草稿。
-- AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本、独立命名的 OpenAI-compatible 多模态边界和豆包 Seed-TTS 适配层；阿里云百炼北京地域的 `qwen3.8-flash` 家书模型与 `qwen3.5-omni-flash` 流式转写组合已通过合成探针。公网仍使用 Fake AI，真实调用还需要轮换后的服务端密钥、授权四素材 E2E 和上线验收，不代表 GitHub Pages 已启用这些供应商。
+- AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本、独立命名的 OpenAI-compatible 多模态边界和豆包 Seed-TTS 适配层；公网演示 API 已启用阿里云百炼北京地域的 `qwen3.8-flash` 家书模型与 `qwen3.5-omni-flash` 流式转写，并通过服务器合成文字、图片和音频闭环。该结果仍不替代密钥轮换、授权四素材小程序 E2E、隐私费用审核或生产放行，也不代表 GitHub Pages 已接入实时模型。
 - 动态长图：`scripts/create-confirmed-draft-long-image.ps1` 可从 API/共享契约的 `confirmedDraft` 生成 1080px 成品和审计 manifest；当前仍是离线渲染工具，尚未接入生产任务或短片流水线。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
-- 自动化基线：2026-09-16 当前工作树 contracts `17`、Web `75`、小程序 `135`、API `185`，共 `412` 项；已在 Node `22.23.2` 下通过全仓类型检查、测试和构建。该工作树推送后的远端 CI 状态仍以 GitHub 为准。
+- 自动化基线：2026-09-16 当前工作树 contracts `17`、Web `75`、小程序 `138`、API `185`，共 `415` 项；已在 Node `22.23.2` 下通过全仓类型检查、测试和构建。该工作树推送后的远端 CI 状态仍以 GitHub 为准。
 
 ## 仓库结构
 
@@ -114,13 +114,11 @@ pnpm dev:web:case-001
 `media/` 目录读取已核验的裁切照片和原始 m4a，启动时校验 SHA-256，不会把媒体复制进仓库。
 
 小程序通过 `apps/miniprogram/src/config/env.ts` 显式解析 `deploymentMode`、`apiMode` 和
-`apiBaseUrl`：无微信运行时的自动化测试使用 `test + mock`，微信 `develop` 映射到 `demo`，
-`trial` 映射到 `competition`，`release` 映射到 `production`。真实 API 模式按
+`apiBaseUrl`：无微信运行时的自动化测试使用 `test + mock`；微信 `develop` 和 `trial` 均映射到当前非生产 `demo` API，便于开发联调和体验版验收；`release` 仍映射到尚未配置的 `production`，因此不会回退演示服务。真实 API 模式按
 `presign -> uploadBinary -> complete` 上传素材；`presign`/`complete` 使用 API Bearer，
 外部 PUT 只携带 presign 返回的上传 headers，不得转发 `Authorization` 或 Cookie。当前
 环境变量示例见 `.env.example`；`https://api.warmjiashu.xyz` 已部署为带微信 `code2Session`
-适配器的 Fake AI 演示 API，小程序 `develop` 已指向它。真实 `wx.login`、微信合法域名、
-PostgreSQL、S3/OSS、真实 AI 和独立任务队列仍需完成后才能进入正式联调或生产。
+适配器和 Qwen 双模型的非生产演示 API，小程序 `develop` 与 `trial` 均指向它。三个微信合法域名已经后台核验；真机素材闭环、PostgreSQL、S3/OSS、独立任务队列和正式内容审核仍需完成后才能进入生产。
 
 ## 进度与边界
 
@@ -150,6 +148,6 @@ PostgreSQL、S3/OSS、真实 AI 和独立任务队列仍需完成后才能进入
 - [开发说明](./docs/DEVELOPMENT.md)
 - [参赛作品完整计划](./暖笺_AI家书_参赛作品完整计划.docx)
 
-当前 H5 与 API 已具备独立短期媒体凭据、完整公开访问负面矩阵、单实例限流/内容兜底和真实浏览器证据；公网 API 已上线为 `demo + WeChat 鉴权 + Fake AI`，但 Pages 展示站尚未连接该 API。Qwen 双模型精确配置已通过无隐私合成素材探针，历史 Gemini-labelled 代理则因三次 `503 model_not_found` 被拒绝；两者都没有改变公网 provider，也没有向失败代理发送队友真实素材。轮换密钥后的授权四素材端到端、持久化存储、跨实例共享限流、正式内容审核、微信真机双设备闭环及生产部署尚未完成。不得把合成探针或公网演示表述为生产放行。
+当前 H5 与 API 已具备独立短期媒体凭据、完整公开访问负向矩阵、单实例限流/内容兜底和真实浏览器证据；公网 API 已上线为 `demo + WeChat 鉴权 + Qwen 双模型`，服务器合成文字、图片、音频闭环耗时约 97.5 秒且三份素材均进入最终来源引用，但 Pages 展示站尚未连接该 API。历史 Gemini-labelled 代理因三次 `503 model_not_found` 被拒绝。轮换已暴露密钥后的授权四素材端到端、持久化存储、跨实例共享限流、正式内容审核、微信双真机闭环及生产部署尚未完成；不得把公网演示表述为生产放行。
 
 原始赛题文章：<https://mp.weixin.qq.com/s/GMdJc8OBWIDang5iQdj7rg>

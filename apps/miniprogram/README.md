@@ -29,15 +29,14 @@ pnpm --filter @warm-letter/miniprogram typecheck
 ## API 模式
 
 [`src/config/env.ts`](src/config/env.ts) 显式配置 `deploymentMode`、`apiMode` 和 `apiBaseUrl`。
-微信版本映射为 `develop -> demo`、`trial -> competition`、`release -> production`；只有
-`test` 部署模式允许 `apiMode: "mock"`，其余模式必须连接真实 API。Demo 当前连接
-`https://api.warmjiashu.xyz/v1`；competition 和 production 必须使用与服务端 `/health`
-握手一致的非回环 HTTPS 环境，且 production 当前仍由服务端门禁拒绝启动。
+微信 `develop` 与 `trial` 均映射到当前非生产 `demo` API，分别用于开发联调和体验版验收；
+`release` 映射到尚未配置的 `production`，因此正式版会失败关闭而不会回退演示服务。只有
+`test` 部署模式允许 `apiMode: "mock"`。体验版强制使用真实 AppID、非回环 HTTPS API，
+并与服务端 `/health` 的 `demo` 模式握手一致。
 
-公网服务当前是 `demo + WeChat code2Session + Fake AI`，仅供开发版联调，不是生产服务。
-真机调用前，须在微信公众平台把 `https://api.warmjiashu.xyz` 同时加入 request、uploadFile
-和 downloadFile 合法域名，并用一次真实 `wx.login` 验证 code2Session。trial/release 仍保持
-未配置状态，避免把演示服务误标为比赛取证或生产环境。
+公网服务当前是 `demo + WeChat code2Session + Qwen 双模型`，仅供开发版和体验版联调，
+不是生产服务。微信公众平台已经把 `https://api.warmjiashu.xyz` 配置为 request、uploadFile
+和 downloadFile 合法域名；仍需用真机完成素材、生成、确认、阅读和回复连续验收。
 
 当前真实 API 适配器按 `presign -> uploadBinary -> complete` 流程上传照片、截图和语音，
 并通过公开 reader 返回的媒体地址预览或播放。`presign` 与 `complete` 使用暖笺 API Bearer
