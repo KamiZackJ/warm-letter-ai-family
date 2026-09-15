@@ -412,39 +412,94 @@
 }
 
 .voice-item {
+  display: block;
+  width: 100%;
+  padding: 14rpx 0;
   border-top: 2rpx solid #d5d1c8;
 }
 
 .voice-row {
   display: grid;
-  grid-template-columns: 86rpx minmax(0, 1fr);
+  grid-template-columns: 84rpx minmax(0, 1fr);
   align-items: center;
   gap: 20rpx;
   width: 100%;
-  min-height: 104rpx;
-  padding: 12rpx 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  min-height: 120rpx;
+  padding: 16rpx 20rpx;
+  border: 2rpx solid #9bbcaf;
+  border-radius: 8rpx;
+  background: #edf5f1;
+  color: #263c34;
   text-align: left;
 }
 
+.voice-row.is-playing,
+.voice-row-pressed {
+  border-color: #5f8e7f;
+  background: #dcebe4;
+}
+
+.voice-row[disabled] {
+  border-color: #c6d2cd;
+  background: #eef1ef;
+  color: #717975;
+}
+
 .voice-control {
-  color: #245a4b;
-  font-size: 25rpx;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+  background: #2f6757;
+  box-shadow: 0 4rpx 10rpx rgba(36, 90, 75, 0.18);
+}
+
+.voice-row[disabled] .voice-control {
+  background: #778b84;
+  box-shadow: none;
+}
+
+.voice-play-glyph {
+  width: 0;
+  height: 0;
+  margin-left: 6rpx;
+  border-top: 14rpx solid transparent;
+  border-bottom: 14rpx solid transparent;
+  border-left: 22rpx solid #fff;
+}
+
+.voice-pause-glyph {
+  display: flex;
+  gap: 8rpx;
+}
+
+.voice-pause-bar {
+  width: 8rpx;
+  height: 30rpx;
+  border-radius: 2rpx;
+  background: #fff;
 }
 
 .voice-info {
   min-width: 0;
 }
 
+.voice-action,
 .voice-name,
 .voice-duration {
   display: block;
 }
 
+.voice-action {
+  color: #245a4b;
+  font-size: 26rpx;
+  font-weight: 750;
+}
+
 .voice-name {
+  margin-top: 4rpx;
   font-size: 28rpx;
   font-weight: 650;
 }
@@ -643,6 +698,7 @@
 }
 
 .font-large .band-title,
+.font-large .voice-action,
 .font-large .voice-name,
 .font-large .evidence-note,
 .font-large .evidence-row,
@@ -651,6 +707,7 @@
 }
 
 .font-extra .band-title,
+.font-extra .voice-action,
 .font-extra .voice-name,
 .font-extra .evidence-note,
 .font-extra .evidence-row,

@@ -79,11 +79,18 @@
     <view wx:if="{{voiceMaterials.length > 0}}" class="media-band">
       <text class="band-title">听听声音</text>
       <view wx:for="{{voiceMaterials}}" wx:key="id" class="voice-item">
-        <button class="voice-row" aria-label="{{playingId === item.id ? '暂停语音：' : '播放语音：'}}{{item.name}}" aria-pressed="{{playingId === item.id}}" disabled="{{retryingVoiceId || refreshingMedia}}" data-id="{{item.id}}" bindtap="playVoice">
-          <text class="voice-control">{{playingId === item.id ? '暂停' : '播放'}}</text>
+        <button class="voice-row {{playingId === item.id ? 'is-playing' : ''}}" hover-class="voice-row-pressed" aria-label="{{playingId === item.id ? '暂停语音：' : '播放语音：'}}{{item.name}}" aria-pressed="{{playingId === item.id}}" disabled="{{retryingVoiceId || refreshingMedia}}" data-id="{{item.id}}" bindtap="playVoice">
+          <view class="voice-control" aria-hidden="true">
+            <view wx:if="{{playingId === item.id}}" class="voice-pause-glyph">
+              <view class="voice-pause-bar"></view>
+              <view class="voice-pause-bar"></view>
+            </view>
+            <view wx:else class="voice-play-glyph"></view>
+          </view>
           <view class="voice-info">
+            <text class="voice-action">{{playingId === item.id ? '暂停朗读' : '播放朗读'}}</text>
             <text class="voice-name">{{item.name}}</text>
-            <text class="voice-duration">{{item.durationSeconds || 0}} 秒</text>
+            <text class="voice-duration">{{item.durationLabel}}</text>
           </view>
         </button>
         <view wx:if="{{audioErrorId === item.id}}" class="media-action-error" aria-role="alert" aria-live="assertive">

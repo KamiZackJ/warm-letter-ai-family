@@ -1,3 +1,25 @@
+warmjiashu.xyz {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+		-Server
+	}
+
+	@html path / *.html
+	header @html Cache-Control "no-cache"
+
+	root * /opt/warm-letter-ai-family/docs/product-demo
+	file_server
+}
+
+www.warmjiashu.xyz {
+	redir https://warmjiashu.xyz{uri} permanent
+}
+
 api.warmjiashu.xyz {
 	encode zstd gzip
 

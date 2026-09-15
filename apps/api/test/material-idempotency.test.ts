@@ -142,9 +142,10 @@ describe("material idempotency", () => {
     const token = await login(app, "material-media-owner");
     const key = "photo_1786867200000_retry01";
     const payload = {
-      type: "photo",
-      filename: "family.jpg",
-      contentType: "image/jpeg",
+      type: "audio",
+      filename: "voice.m4a",
+      contentType: "audio/mp4",
+      durationSeconds: 12,
     };
 
     const first = await app.inject({
@@ -178,12 +179,12 @@ describe("material idempotency", () => {
     });
     expect(replayedPresign.headers).not.toEqual(firstPresign.headers);
 
-    const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02, 0x03, 0x04]);
+    const audioBytes = Buffer.from([0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x34, 0x61, 0x20]);
     const upload = await app.inject({
       method: "PUT",
       url: new URL(firstPresign.uploadUrl).pathname,
       headers: firstPresign.headers,
-      payload: jpegBytes,
+      payload: audioBytes,
     });
     expect(upload.statusCode).toBe(204);
 
@@ -191,7 +192,7 @@ describe("material idempotency", () => {
       method: "PUT",
       url: new URL(replayedPresign.uploadUrl).pathname,
       headers: replayedPresign.headers,
-      payload: jpegBytes,
+      payload: audioBytes,
     });
     expect(replayAfterLostUploadResponse.statusCode).toBe(409);
     expect(
@@ -205,7 +206,10 @@ describe("material idempotency", () => {
       payload: { materialId: firstPresign.materialId },
     });
     expect(complete.statusCode).toBe(200);
-    expect(json<{ material: { status: string } }>(complete).material.status).toBe("READY");
+    expect(json<{ material: { status: string; durationSeconds?: number } }>(complete).material).toMatchObject({
+      status: "READY",
+      durationSeconds: 12,
+    });
 
     const completeReplay = await app.inject({
       method: "POST",
@@ -240,7 +244,7 @@ describe("material idempotency", () => {
       method: "POST",
       url: "/v1/materials/presign",
       headers: idempotentAuth(token, key),
-      payload: { ...payload, filename: "different.jpg" },
+      payload: { ...payload, filename: "different.m4a" },
     });
     expect(conflict.statusCode).toBe(409);
     expect(json<{ error: { code: string } }>(conflict).error.code).toBe(

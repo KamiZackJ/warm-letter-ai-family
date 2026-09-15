@@ -60,6 +60,7 @@ export interface RegisterMaterialInput {
   contentType?: string;
   objectKey?: string;
   textContent?: string;
+  durationSeconds?: number;
   uploading?: boolean;
 }
 
@@ -229,6 +230,15 @@ export class WarmLetterService {
     if (!input.uploading && input.type !== "text" && !input.objectKey?.trim()) {
       throw new ApiError(400, "INVALID_MATERIAL", "媒体素材必须包含 objectKey");
     }
+    if (
+      input.durationSeconds !== undefined &&
+      (input.type !== "audio" ||
+        !Number.isSafeInteger(input.durationSeconds) ||
+        input.durationSeconds < 1 ||
+        input.durationSeconds > 24 * 60 * 60)
+    ) {
+      throw new ApiError(400, "INVALID_MATERIAL", "语音时长必须是 1 到 86400 之间的整数秒");
+    }
 
     const normalizedName = input.name.trim();
     const normalizedTextContent = input.textContent?.trim();
@@ -237,6 +247,7 @@ export class WarmLetterService {
       name: normalizedName,
       contentType: input.contentType,
       textContent: normalizedTextContent,
+      durationSeconds: input.durationSeconds,
       uploading: input.uploading === true,
     });
     const result = this.repository.saveMaterialIdempotently(
@@ -248,6 +259,7 @@ export class WarmLetterService {
         contentType: input.contentType,
         objectKey: input.objectKey,
         textContent: normalizedTextContent,
+        durationSeconds: input.durationSeconds,
         status: input.uploading ? "UPLOADING" : "READY",
         createdAt: new Date().toISOString(),
       },
@@ -387,6 +399,14 @@ export class WarmLetterService {
     return job;
   }
 
+  findGenerationReplay(
+    userId: string,
+    letterId: string,
+    idempotencyKey: string,
+  ): GenerationJob | undefined {
+    return this.repository.findGenerationJobByIdempotencyKey(userId, letterId, idempotencyKey);
+  }
+
   getJob(userId: string, jobId: string): GenerationJob {
     const job = assertFound(this.repository.getJob(jobId), "JOB_NOT_FOUND", "生成任务不存在");
     if (job.userId !== userId) {
@@ -483,7 +503,7 @@ export class WarmLetterService {
     draft: LetterDraft;
     publishedAt: string;
     sources: Array<
-      Pick<Material, "id" | "type" | "name" | "contentType"> & {
+      Pick<Material, "id" | "type" | "name" | "contentType" | "durationSeconds"> & {
         mediaToken?: string;
         mediaExpiresAt?: string;
       }
@@ -521,6 +541,7 @@ export class WarmLetterService {
           type: material.type,
           name: material.name,
           contentType: material.contentType,
+          durationSeconds: material.durationSeconds,
           mediaToken: mediaAccess.token,
           mediaExpiresAt: mediaAccess.expiresAt,
         };
@@ -817,6 +838,9 @@ export class WarmLetterService {
 
   private validateReadyMaterials(userId: string, ids: string[]): string[] {
     const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length > 30) {
+      throw new ApiError(400, "INVALID_MATERIAL_IDS", "一封家书最多选择 30 份素材");
+    }
     for (const id of uniqueIds) this.requireReadyMaterial(userId, id);
     return uniqueIds;
   }

@@ -24,6 +24,7 @@ type ServerMaterial = {
   type: "photo" | "screenshot" | "audio" | "text";
   name: string;
   textContent?: string;
+  durationSeconds?: number;
   status: "UPLOADING" | "READY" | "DELETED";
   createdAt: string;
 };
@@ -138,6 +139,7 @@ function mapMaterial(material: ServerMaterial): Material {
     name: material.name,
     localPath: paths[material.id],
     text: material.textContent,
+    durationSeconds: material.durationSeconds,
     createdAt: material.createdAt,
   };
 }
@@ -361,6 +363,7 @@ export const realApi = {
             type: material.type === "voice" ? "audio" : material.type,
             filename: upload.filename,
             contentType: upload.contentType,
+            durationSeconds: material.type === "voice" ? material.durationSeconds : undefined,
           },
         }),
       );
@@ -370,7 +373,7 @@ export const realApi = {
           ...paths,
           [presigned.material.id]: upload.localPath,
         });
-        return { ...mapMaterial(presigned.material), durationSeconds: material.durationSeconds };
+        return mapMaterial(presigned.material);
       }
       if (!presigned.uploadUrl || !presigned.headers) {
         throw new Error("上传服务没有返回可用的上传凭据");
@@ -397,7 +400,7 @@ export const realApi = {
         ...paths,
         [completed.material.id]: upload.localPath,
       });
-      return { ...mapMaterial(completed.material), durationSeconds: material.durationSeconds };
+      return mapMaterial(completed.material);
     }
 
     const response = await authorized(() =>
@@ -523,6 +526,7 @@ export const realApi = {
           request<{ job: { id: string } }>(`/letters/${id}/generate`, {
             method: "POST",
             headers: { "idempotency-key": requestKey! },
+            data: {},
           }),
         );
         saveGenerationJob(id, response.job.id);
@@ -603,7 +607,7 @@ export const realApi = {
         shareToken: string;
         shareExpiresAt: string;
         readerUrl: string;
-      }>(`/letters/${id}/confirm`, { method: "POST" }),
+      }>(`/letters/${id}/confirm`, { method: "POST", data: {} }),
     );
     saveShareToken(id, response.shareToken);
     return { ...mapLetter(response.letter), shareToken: response.shareToken };

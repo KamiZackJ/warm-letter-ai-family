@@ -19,9 +19,50 @@ describe("resolveMiniProgramEnvironment", () => {
     expect(resolveMiniProgramEnvironment(testProfile)).toMatchObject({
       deploymentMode: "test",
       apiMode: "mock",
+      apiBaseUrl: "http://127.0.0.1:8787/v1",
+      healthUrl: "http://127.0.0.1:8787/health",
       storageNamespace: "warm_letter:test",
       demoEnabled: false,
     });
+  });
+
+  it("does not require the browser URL constructor used outside WeChat", () => {
+    const savedUrl = globalThis.URL;
+    try {
+      Object.defineProperty(globalThis, "URL", {
+        configurable: true,
+        value: undefined,
+        writable: true,
+      });
+      expect(
+        resolveMiniProgramEnvironment({
+          ...testProfile,
+          deploymentMode: "demo",
+          apiMode: "real",
+          apiBaseUrl: "https://api.warmjiashu.xyz/v1?ignored=1#ignored",
+        }),
+      ).toMatchObject({
+        apiBaseUrl: "https://api.warmjiashu.xyz/v1",
+        healthUrl: "https://api.warmjiashu.xyz/health",
+      });
+    } finally {
+      Object.defineProperty(globalThis, "URL", {
+        configurable: true,
+        value: savedUrl,
+        writable: true,
+      });
+    }
+  });
+
+  it.each([
+    "ftp://api.example.com/v1",
+    "https://user:secret@api.example.com/v1",
+    "https://api.example.com:70000/v1",
+    "https://api..example.com/v1",
+  ])("rejects an invalid or unsafe absolute API URL: %s", (apiBaseUrl) => {
+    expect(() =>
+      resolveMiniProgramEnvironment({ ...testProfile, apiBaseUrl }),
+    ).toThrow(/apiBaseUrl/);
   });
 
   it.each(["demo", "competition", "production"])(
@@ -55,6 +96,11 @@ describe("resolveMiniProgramEnvironment", () => {
         "https://[::ffff:127.0.0.1]/v1",
         "https://[::ffff:0.0.0.0]/v1",
         "https://[::]/v1",
+        "https://[0:0:0:0:0:0:0:1]/v1",
+        "https://[0:0:0:0:0:0:0:0]/v1",
+        "https://[0:0:0:0:0:ffff:7f00:1]/v1",
+        "https://[::ffff:7f00:1]/v1",
+        "https://999.999.999.999/v1",
         "https://*.example.com/v1",
       ]) {
         expect(() =>

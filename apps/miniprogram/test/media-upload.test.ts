@@ -158,6 +158,70 @@ describe("real media upload", () => {
     });
   });
 
+  it("persists a recorded voice duration through presign and server mapping", async () => {
+    const voiceUploadUrl = "https://uploads.example.com/material-voice";
+    requestMock.mockImplementation((options: WxRequestOptions) => {
+      const url = new URL(options.url);
+      if (options.method === "GET" && url.pathname === "/health") {
+        options.success({ statusCode: 200, data: { deploymentMode: "test" } });
+      } else if (options.method === "POST" && url.pathname === "/v1/materials/presign") {
+        options.success({
+          statusCode: 201,
+          data: {
+            materialId: "material-voice",
+            uploadUrl: voiceUploadUrl,
+            headers: {
+              "content-type": "audio/mpeg",
+              "x-warm-letter-upload-token": "signed-upload-token",
+            },
+          },
+        });
+      } else if (options.method === "PUT" && options.url === voiceUploadUrl) {
+        options.success({ statusCode: 204, data: undefined });
+      } else if (options.method === "POST" && url.pathname === "/v1/materials/complete") {
+        options.success({
+          statusCode: 200,
+          data: {
+            material: {
+              id: "material-voice",
+              type: "audio",
+              name: "语音近况.mp3",
+              durationSeconds: 12,
+              status: "READY",
+              createdAt: "2026-09-15T12:00:00.000Z",
+            },
+          },
+        });
+      } else {
+        options.fail({ errMsg: `Unexpected request: ${options.method} ${options.url}` });
+      }
+    });
+
+    await expect(
+      realApi.saveMaterial({
+        id: "local-voice",
+        type: "voice",
+        name: "语音近况",
+        localPath: "wxfile://voice.mp3",
+        durationSeconds: 12,
+        createdAt: "2026-09-15T12:00:00.000Z",
+      }),
+    ).resolves.toMatchObject({
+      id: "material-voice",
+      type: "voice",
+      durationSeconds: 12,
+    });
+
+    const presignRequest = requestMock.mock.calls
+      .map(([options]) => options as WxRequestOptions)
+      .find((options) => options.url.endsWith("/materials/presign"));
+    expect(presignRequest?.data).toMatchObject({
+      type: "audio",
+      filename: "语音近况.mp3",
+      durationSeconds: 12,
+    });
+  });
+
   it("rejects authentication and cookie headers before reading or uploading a file", async () => {
     const unsafeHeaderSets: Array<Record<string, string>> = [
       { authorization: "Bearer leaked-token", "content-type": "image/png" },

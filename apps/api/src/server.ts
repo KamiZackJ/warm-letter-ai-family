@@ -28,6 +28,7 @@ const app = buildApp({
   mediaTokenTtlMs: runtimeConfig.mediaTokenTtlMs,
   mediaSigningKeys: runtimeConfig.mediaSigningKeys,
   publicRateLimits: runtimeConfig.publicRateLimits,
+  generationRateLimits: runtimeConfig.generationRateLimits,
   replySafetyTimeoutMs: runtimeConfig.replySafetyTimeoutMs,
 });
 

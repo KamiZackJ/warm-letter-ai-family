@@ -29,6 +29,7 @@ export interface Material {
   contentType?: string;
   objectKey?: string;
   textContent?: string;
+  durationSeconds?: number;
   status: MaterialStatus;
   createdAt: string;
   deletedAt?: string;

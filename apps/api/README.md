@@ -22,24 +22,23 @@ The runtime does not infer a deployment mode. Provide the required values shown 
 
 | Mode | Required `NODE_ENV` | AI policy | Current adapters | Release meaning |
 | --- | --- | --- | --- | --- |
-| `demo` | `development` | Explicit `fake` or `openai` | Development auth, memory repository, local files | Non-production demonstration |
-| `test` | `test` | Explicit `fake` or `openai` | Development auth, memory repository, local files | Automated tests only |
-| `competition` | `production` | `openai` with credentials is mandatory | Development auth, memory repository, local files | Non-production competition evidence |
-| `production` | `production` | `openai` is mandatory | Rejected while development adapters remain | Not currently available |
+| `demo` | `development` | Explicit `fake`, `openai`, `deepseek`, or `openai-compatible` | Development auth, memory repository, local files | Non-production demonstration |
+| `test` | `test` | Explicit `fake`, `openai`, `deepseek`, or `openai-compatible` | Development auth, memory repository, local files | Automated tests only |
+| `competition` | `production` | `openai`, or the exact verified Qwen `openai-compatible` profile | Development auth, memory repository, local files | Non-production competition evidence |
+| `production` | `production` | No release configuration is currently accepted | Rejected while development adapters remain | Not currently available |
 
 `PUBLIC_BASE_URL` must be a credential-free HTTP(S) origin. `CORS_ORIGINS`, `UPLOAD_DIR`, and
 `AI_PROVIDER` and `AUTH_PROVIDER` are also required. `AUTH_PROVIDER=development` is usable only in
-`demo` and `test`; competition may start for configuration/evidence inspection, but its wx-login
-route fails closed until a real Wechat adapter replaces the current development login. Selecting
-`AUTH_PROVIDER=wechat` does not emulate `code2Session`: health reports it as unavailable and login
-returns `AUTH_PROVIDER_UNAVAILABLE`. Competition
-mode additionally requires `OPENAI_API_KEY`, `OPENAI_MODEL`, and stable `MEDIA_SIGNING_KEYS`.
-Missing, misspelled, or conflicting values stop startup before storage, AI clients, or the listener
-are created.
+`demo` and `test`. `AUTH_PROVIDER=wechat` uses the server-side `code2Session` adapter and requires
+`WECHAT_APP_ID` plus `WECHAT_APP_SECRET`; health reports whether that adapter was actually composed.
+Competition mode additionally requires stable `MEDIA_SIGNING_KEYS` and either the OpenAI
+credentials or the exact `dashscope-qwen-2026-09-16` OpenAI-compatible profile. Missing,
+misspelled, or conflicting values stop startup before storage, AI clients, or the listener are
+created.
 
 `GET /health` reports `deploymentMode`, `nonProduction`, and non-sensitive capability labels,
 including the configured authentication provider and whether that provider is ready. In
-competition mode it deliberately discloses that authentication is unavailable, the repository is
+competition mode it deliberately discloses whether authentication is ready, that the repository is
 in memory, object storage is local, and reply safety is deterministic. It never returns credentials
 or the configured model.
 
@@ -83,6 +82,15 @@ upload URL. Reader and public reply endpoints use the share token returned by th
 public media endpoints use a separate short-lived `mediaToken` bound to one share, letter, and
 material.
 
+`POST /v1/letters/:id/generate` has a single-instance in-memory cost guard with independent IP and
+authenticated-user buckets. Defaults are 10 new generation jobs per IP per minute and 3 per user per
+minute, configured through `GENERATION_RATE_LIMIT_WINDOW_SECONDS`,
+`GENERATION_RATE_LIMIT_MAX_BUCKETS`, `GENERATION_RATE_LIMIT_PER_IP`, and
+`GENERATION_RATE_LIMIT_PER_USER`. A rejected request returns `429 RATE_LIMITED` with `Retry-After`.
+Replaying an existing job with the same valid `Idempotency-Key` returns that job without consuming a
+bucket and remains available even after the caller reaches the limit. This protection is local to one
+API process; a multi-instance deployment still requires a shared limiter and trusted-proxy review.
+
 The `AIProvider` interface is the production integration boundary. `AI_PROVIDER` must always be
 selected explicitly. The `fake` path is limited to demo and test modes and does not require or read
 an OpenAI key. Real provider mode is configured with:
@@ -98,7 +106,53 @@ OPENAI_PHOTO_DETAIL=auto
 OPENAI_SCREENSHOT_DETAIL=original
 ```
 
-Set `OPENAI_MODEL` to a model ID enabled for the target OpenAI project; the repository does not hard-code an account-dependent model. The real provider uses Responses structured outputs, sends image bytes as data URLs, uses `original` detail for screenshot OCR, transcribes audio before generation, disables response storage, and records the model ID returned by OpenAI in the draft provider field. Timeout, retry, and image-detail settings are validated at startup. Unknown provider names are rejected, and both competition and production modes require an explicit `AI_PROVIDER=openai`; neither can silently fall back to fake output. Production startup is additionally blocked until formal authentication, persistent repository, object storage, and reply-safety adapters replace the current development implementations. Real supplier evidence still requires an authorized photo, screenshot, voice note, and text sample plus an actual API credential; mock-client tests do not satisfy that gate.
+Set `OPENAI_MODEL` to a model ID enabled for the target OpenAI project; the repository does not hard-code an account-dependent model. The real provider uses Responses structured outputs, sends image bytes as data URLs, uses `original` detail for screenshot OCR, transcribes audio before generation, disables response storage, and records the model ID returned by OpenAI in the draft provider field. Timeout, retry, and image-detail settings are validated at startup. Unknown provider names are rejected, and competition and production modes cannot silently fall back to fake output. Production startup is additionally blocked until formal authentication, persistent repository, object storage, and reply-safety adapters replace the current development implementations. Real supplier evidence still requires an authorized photo, screenshot, voice note, and text sample plus an actual API credential; mock-client tests do not satisfy that gate.
+
+An endpoint that implements OpenAI-style Chat Completions must use the separately named
+`openai-compatible` provider. It is never reported as OpenAI, DeepSeek, Gemini, or Qwen based only
+on a configured URL or model string.
+
+The following exact DashScope Beijing profile passed synthetic text, structured-JSON, image, and
+M4A transcription probes on 2026-09-16. It is the only OpenAI-compatible profile accepted by
+competition mode:
+
+```env
+AI_PROVIDER=openai-compatible
+OPENAI_COMPATIBLE_API_KEY=replace-with-a-new-server-side-secret
+OPENAI_COMPATIBLE_MODEL=qwen3.8-flash
+OPENAI_COMPATIBLE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+OPENAI_COMPATIBLE_IMAGE_MODE=native
+OPENAI_COMPATIBLE_AUDIO_MODE=streaming-chat-transcription
+OPENAI_COMPATIBLE_TRANSCRIPTION_MODEL=qwen3.5-omni-flash
+OPENAI_COMPATIBLE_JSON_MODE=json-object
+OPENAI_COMPATIBLE_IMAGE_DETAIL=omit
+OPENAI_COMPATIBLE_STORE_MODE=omit
+OPENAI_COMPATIBLE_VERIFICATION_PROFILE=dashscope-qwen-2026-09-16
+OPENAI_COMPATIBLE_MAX_TOTAL_MEDIA_BYTES=12582912
+OPENAI_COMPATIBLE_MAX_TRANSCRIPT_CHARACTERS=12000
+OPENAI_COMPATIBLE_TIMEOUT_MS=60000
+OPENAI_COMPATIBLE_MAX_RETRIES=2
+```
+
+`qwen3.8-flash` performs the two non-streaming Chat Completions calls used for drafting and factual
+review. Photos and screenshots are sent as `image_url` parts. `qwen3.5-omni-flash` is used only as
+a streaming Chat Completions transcription step; MP3, WAV, M4A, and AAC are accepted, and the
+transcript is then passed to the writing model as text. `json-object` requests structured JSON.
+`IMAGE_DETAIL=omit` and `STORE_MODE=omit` remove unsupported `detail` and `store` request fields;
+`omit` is a wire-compatibility setting and is not evidence that the supplier retains no data.
+
+The provider rejects selected image and audio bytes above `12 MiB` in aggregate before inference,
+and aborts streaming transcription above `12,000` Unicode characters. For any other compatible
+endpoint, keep `OPENAI_COMPATIBLE_VERIFICATION_PROFILE=unverified`, image/audio disabled, and
+perform new synthetic probes. `/health` reports configured input modes and whether they are backed
+by a named profile matching a prior synthetic probe, but never returns the key, endpoint, or model.
+
+The public API still uses `AI_PROVIDER=fake`. The successful Qwen synthetic probe does not replace
+an authorized four-material business E2E, supplier privacy/cost approval, or deployment evidence.
+The probe credential appeared in collaboration chat and must be revoked or rotated before any
+server use. Do not send teammate photos or audio until those gates pass. The earlier 2026-09-15
+Gemini-labelled proxy failure and the current Qwen switch checklist are recorded in
+[`../../docs/REAL_AI_PROVIDER_HANDOFF_2026-09-15.md`](../../docs/REAL_AI_PROVIDER_HANDOFF_2026-09-15.md).
 
 For text-only personalization in demo or test mode, an OpenAI-compatible DeepSeek provider is also available:
 
@@ -109,4 +163,4 @@ DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 ```
 
-Keep the key only in the API server environment. Never put it in the mini-program, static demo, source code, screenshots, or Git history. This provider deliberately rejects photo, screenshot, and audio materials because a text-only model cannot inspect those bytes. Use the OpenAI multimodal provider when uploaded media must be understood. DeepSeek generation rotates writing direction by draft version and uses a high-diversity prompt while retaining source references and rejecting invented facts. Competition mode remains pinned to `openai` because its evidence flow requires all four material types.
+Keep the key only in the API server environment. Never put it in the mini-program, static demo, source code, screenshots, or Git history. This provider deliberately rejects photo, screenshot, and audio materials because a text-only model cannot inspect those bytes. Use a verified multimodal provider when uploaded media must be understood. DeepSeek generation rotates writing direction by draft version and uses a high-diversity prompt while retaining source references and rejecting invented facts. Competition mode rejects DeepSeek because its evidence flow requires all four material types.

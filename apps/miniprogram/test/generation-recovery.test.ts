@@ -101,6 +101,13 @@ describe("real generation recovery", () => {
       id: letterId,
       status: "EDITING",
     });
+    const generationCalls = requestMock.mock.calls.filter(
+      ([path]) => path === `/letters/${letterId}/generate`,
+    );
+    expect(generationCalls).toHaveLength(2);
+    for (const [, options] of generationCalls) {
+      expect(options).toMatchObject({ method: "POST", data: {} });
+    }
     expect(generationHeaders).toHaveLength(2);
     expect(generationHeaders[0]?.["idempotency-key"]).toBe(persistedRequestKey);
     expect(generationHeaders[1]?.["idempotency-key"]).toBe(persistedRequestKey);

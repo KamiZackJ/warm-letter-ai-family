@@ -11,9 +11,13 @@ import {
   type ClientJob,
 } from "@warm-letter/contracts";
 import { resolve } from "node:path";
-import { FakeAIProvider, OpenAIResponsesProvider, type AIProvider } from "./ai.js";
+import { FakeAIProvider, type AIProvider } from "./ai.js";
 import type { GenerationJob, Material } from "./domain.js";
 import { ApiError } from "./errors.js";
+import {
+  GenerationRateLimiter,
+  type GenerationRateLimitConfig,
+} from "./generation-rate-limit.js";
 import {
   resolveMediaUploadPolicy,
   supportedMediaContentTypes,
@@ -106,6 +110,7 @@ export interface BuildAppOptions {
   mediaSigningKeys?: readonly Uint8Array[];
   uploadTokenTtlMs?: number;
   publicRateLimits?: PublicRateLimitConfig;
+  generationRateLimits?: GenerationRateLimitConfig;
   replySafetyPolicy?: ReplySafetyPolicy;
   replySafetyTimeoutMs?: number;
   loggerStream?: { write(message: string): void };
@@ -125,6 +130,20 @@ function stringValue(value: unknown, field: string, required = true): string | u
   if (value === undefined && !required) return undefined;
   if (typeof value !== "string") {
     throw new ApiError(400, "INVALID_BODY", `${field} 必须是字符串`);
+  }
+  return value;
+}
+
+function audioDurationSeconds(value: unknown, materialType: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (
+    materialType !== "audio" ||
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value > 24 * 60 * 60
+  ) {
+    throw new ApiError(400, "INVALID_BODY", "durationSeconds 只允许填写 1 到 86400 的语音整数秒");
   }
   return value;
 }
@@ -160,12 +179,24 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const aiProvider = options.aiProvider ?? new FakeAIProvider();
   const speechProvider = options.speechProvider;
   const authProviderMode = options.authProviderMode ?? "development";
-  const aiProviderMode: AIProviderMode | "custom" =
-    aiProvider instanceof OpenAIResponsesProvider
-      ? "openai"
-      : aiProvider instanceof FakeAIProvider
-        ? "fake"
-        : "custom";
+  const aiProviderMode: AIProviderMode | "custom" = aiProvider.providerMode ?? "custom";
+  const aiInputCapabilities = aiProvider.inputCapabilities ?? {
+    text: "unknown",
+    image: "unknown",
+    audio: "unknown",
+  };
+  const aiInputVerification = aiProvider.inputCapabilityVerification ?? "unknown";
+  if (
+    options.deploymentMode === "competition" &&
+    aiProviderMode === "openai-compatible" &&
+    (aiInputVerification !== "profile-match" ||
+      aiInputCapabilities.image !== "native" ||
+      (aiInputCapabilities.audio !== "native" && aiInputCapabilities.audio !== "transcription"))
+  ) {
+    throw new Error(
+      "competition mode requires a probed OpenAI-compatible profile with image and audio capabilities",
+    );
+  }
   assertApiDeploymentSupported(options.deploymentMode, aiProviderMode, authProviderMode);
   const authenticationReady =
     authProviderMode === "wechat"
@@ -224,6 +255,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     options.publicRateLimits,
     () => (options.now?.() ?? new Date()).getTime(),
   );
+  const generationRateLimiter = new GenerationRateLimiter(
+    options.generationRateLimits,
+    () => (options.now?.() ?? new Date()).getTime(),
+  );
 
   function enforcePublicRateLimit(
     kind: PublicRouteKind,
@@ -235,6 +270,18 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     if (!result.allowed) {
       reply.header("retry-after", String(result.retryAfterSeconds));
       throw new ApiError(429, "RATE_LIMITED", "请求过于频繁，请稍后再试");
+    }
+  }
+
+  function enforceGenerationRateLimit(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    userId: string,
+  ): void {
+    const result = generationRateLimiter.check(request.ip, userId);
+    if (!result.allowed) {
+      reply.header("retry-after", String(result.retryAfterSeconds));
+      throw new ApiError(429, "RATE_LIMITED", "生成请求过于频繁，请稍后再试");
     }
   }
 
@@ -289,6 +336,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     nonProduction: true,
     capabilities: {
       ai: aiProviderMode,
+      aiInputs: {
+        configured: aiInputCapabilities,
+        verification: aiInputVerification,
+      },
       authentication: authProviderMode,
       authenticationReady,
       repository: "memory",
@@ -369,6 +420,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         name,
         contentType: policy.contentType,
         objectKey,
+        durationSeconds: audioDurationSeconds(body.durationSeconds, body.type),
         uploading: true,
       },
       idempotencyKeyFrom(request),
@@ -568,7 +620,17 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.post("/v1/letters/:id/generate", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
-    const job = service.enqueueGeneration(user.id, id, idempotencyKeyFrom(request));
+    const idempotencyKey = idempotencyKeyFrom(request);
+    if (idempotencyKey) {
+      const replayedJob = service.findGenerationReplay(user.id, id, idempotencyKey);
+      if (replayedJob) {
+        return reply
+          .status(202)
+          .send(GenerateLetterResponseSchema.parse({ job: serializeGenerationJob(replayedJob) }));
+      }
+    }
+    enforceGenerationRateLimit(request, reply, user.id);
+    const job = service.enqueueGeneration(user.id, id, idempotencyKey);
     return reply
       .status(202)
       .send(GenerateLetterResponseSchema.parse({ job: serializeGenerationJob(job) }));

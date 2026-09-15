@@ -206,6 +206,14 @@ beforeEach(() => {
 });
 
 describe("reader page recovery", () => {
+  it("keeps the page configuration compatible with the WeChat page schema", () => {
+    const config = JSON.parse(
+      fileSystem.readFileSync(`${miniprogramDirectory}/src/pages/reader/index.json`, "utf8"),
+    );
+
+    expect(config).toEqual({ navigationBarTitleText: "家书" });
+  });
+
   it("keeps the font and load-error controls while exposing inline recovery actions", () => {
     const template = fileSystem.readFileSync(
       `${miniprogramDirectory}/src/pages/reader/index.wxml`,
@@ -236,6 +244,25 @@ describe("reader page recovery", () => {
     expect(template).toContain("{{replyCount}} / {{replyLimit}}");
     expect(template).toContain('aria-role="alert"');
     expect(template).toContain('aria-live="assertive"');
+  });
+
+  it("keeps the read-aloud action recognizable without relying on text or color alone", () => {
+    const template = fileSystem.readFileSync(
+      `${miniprogramDirectory}/src/pages/reader/index.wxml`,
+      "utf8",
+    );
+    const stylesheet = fileSystem.readFileSync(
+      `${miniprogramDirectory}/src/pages/reader/index.wxss`,
+      "utf8",
+    );
+
+    expect(template).toContain('class="voice-play-glyph"');
+    expect(template).toContain('class="voice-pause-glyph"');
+    expect(template).toContain("'暂停朗读' : '播放朗读'");
+    expect(template).toContain('aria-pressed="{{playingId === item.id}}"');
+    expect(stylesheet).toMatch(/\.voice-item\s*\{[^}]*width: 100%/);
+    expect(stylesheet).toContain("min-height: 120rpx");
+    expect(stylesheet).toContain("background: #2f6757");
   });
 
   it("maps each paragraph to its exact sources and exposes manual or unavailable provenance", async () => {

@@ -42,8 +42,6 @@ const mocks = vi.hoisted(() => ({
   navigateTo: vi.fn(),
   recorderStart: vi.fn(),
   recorderStop: vi.fn(),
-  recorderOffStop: vi.fn(),
-  recorderOffError: vi.fn(),
   recorderOnStop: vi.fn(),
   recorderOnError: vi.fn(),
 }));
@@ -175,8 +173,6 @@ beforeAll(async () => {
       getRecorderManager: () => ({
         start: mocks.recorderStart,
         stop: mocks.recorderStop,
-        offStop: mocks.recorderOffStop,
-        offError: mocks.recorderOffError,
         onStop: mocks.recorderOnStop,
         onError: mocks.recorderOnError,
       }),
@@ -248,6 +244,13 @@ beforeEach(() => {
 });
 
 describe("materials page recovery", () => {
+  it("loads when RecorderManager does not expose offStop or offError", () => {
+    const context = createContext();
+
+    expect(() => context.onLoad({ demo: "1", session: "session-current" })).not.toThrow();
+    expect(context.disposed).toBe(false);
+  });
+
   it("keeps source actions usable at 320px and material text multiline", () => {
     const styles = fileSystem.readFileSync(materialsStylesPath, "utf8");
     const sourceGridRule = cssRule(styles, "\\.source-grid");

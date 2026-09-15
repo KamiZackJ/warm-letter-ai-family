@@ -58,8 +58,18 @@ export const CreateMaterialUploadRequestSchema = z
     type: z.enum(["photo", "screenshot", "audio"]),
     filename: z.string().trim().min(1).max(120),
     contentType: z.string().trim().min(1).max(100).optional(),
+    durationSeconds: z.number().int().positive().max(24 * 60 * 60).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.durationSeconds !== undefined && value.type !== "audio") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["durationSeconds"],
+        message: "durationSeconds is only valid for audio materials",
+      });
+    }
+  });
 
 const PendingMaterialUploadResponseSchema = z
   .object({

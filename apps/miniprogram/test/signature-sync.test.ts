@@ -90,6 +90,40 @@ describe("real API signature synchronization", () => {
     expect([...storage.keys()].some((key) => key.includes("real_signatures"))).toBe(false);
   });
 
+  it("sends an explicit JSON object when confirming a letter", async () => {
+    const letter = {
+      id: "letter-1",
+      recipient: "妈妈",
+      materialIds: ["material-1"],
+      settings: { tone: "warm", length: "short" },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    requestMock.mockImplementation(async (path: string) => {
+      if (path === "/letters/letter-1") {
+        return { letter: { ...letter, state: "EDITING", draft: serverDraft("阿宁") } };
+      }
+      if (path === "/letters/letter-1/confirm") {
+        return {
+          letter: { ...letter, state: "PUBLISHED", confirmedDraft: serverDraft("阿宁") },
+          shareToken: "confirmed-share-token",
+          shareExpiresAt: "2026-09-28T00:00:00.000Z",
+          readerUrl: "/v1/letters/letter-1/reader?token=confirmed-share-token",
+        };
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    await expect(realApi.confirmLetter("letter-1", draft)).resolves.toMatchObject({
+      status: "PUBLISHED",
+      shareToken: "confirmed-share-token",
+    });
+    expect(requestMock).toHaveBeenCalledWith("/letters/letter-1/confirm", {
+      method: "POST",
+      data: {},
+    });
+  });
+
   it("reads the confirmed signature on a device with no sender-side draft storage", async () => {
     storage.clear();
     requestMock.mockResolvedValue({

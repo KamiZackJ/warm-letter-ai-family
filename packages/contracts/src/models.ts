@@ -15,6 +15,7 @@ export const MaterialSchema = z
     contentType: z.string().trim().min(1).max(100).optional(),
     objectKey: z.string().trim().min(1).max(1024).optional(),
     textContent: z.string().trim().min(1).max(5000).optional(),
+    durationSeconds: z.number().int().positive().max(24 * 60 * 60).optional(),
     status: MaterialStatusSchema,
     createdAt: TimestampSchema,
     deletedAt: TimestampSchema.optional(),

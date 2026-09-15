@@ -39,6 +39,21 @@ describe("material contracts", () => {
         contentType: "image/png",
       }),
     ).toMatchObject({ type: "screenshot" });
+    expect(
+      CreateMaterialUploadRequestSchema.parse({
+        type: "audio",
+        filename: "voice.m4a",
+        contentType: "audio/mp4",
+        durationSeconds: 12,
+      }),
+    ).toMatchObject({ type: "audio", durationSeconds: 12 });
+    expect(
+      CreateMaterialUploadRequestSchema.safeParse({
+        type: "photo",
+        filename: "photo.jpg",
+        durationSeconds: 12,
+      }).success,
+    ).toBe(false);
   });
 
   it("requires text content and forces media through the binary upload flow", () => {

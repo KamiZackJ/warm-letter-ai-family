@@ -12,6 +12,7 @@ type DisplayReply = Reply & { dateLabel: string };
 type ImageLoadState = "loading" | "ready" | "error";
 type DisplaySource = ReaderSource & {
   typeLabel: string;
+  durationLabel: string;
   imageState: ImageLoadState;
   imageError: string;
   imageRetrying: boolean;
@@ -90,6 +91,12 @@ function toDisplaySource(
   return {
     ...source,
     typeLabel: TYPE_LABELS[source.type] || "素材",
+    durationLabel:
+      source.type === "voice"
+        ? source.durationSeconds
+          ? `${source.durationSeconds} 秒`
+          : "时长未知"
+        : "",
     imageState,
     imageError,
     imageRetrying,

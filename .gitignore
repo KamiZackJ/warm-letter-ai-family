@@ -13,6 +13,7 @@ apps/web/.env.production
 Thumbs.db
 apps/miniprogram/miniprogram_npm/
 apps/miniprogram/.miniprogram/
+apps/miniprogram/project.private.config.json
 apps/web/playwright-report/
 apps/web/test-results/
 .playwright-cli/

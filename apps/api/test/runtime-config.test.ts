@@ -46,6 +46,12 @@ describe("API runtime configuration", () => {
       host: "0.0.0.0",
       corsOrigins: ["http://127.0.0.1:4173", "http://localhost:4173"],
       publicBaseUrl: "http://127.0.0.1:8787",
+      generationRateLimits: {
+        windowMs: 60_000,
+        maxBuckets: 10_000,
+        perIp: 10,
+        perUser: 3,
+      },
     });
     expect(
       loadApiRuntimeConfig({
@@ -67,7 +73,10 @@ describe("API runtime configuration", () => {
     [{ ...demoEnvironment, NODE_ENV: undefined }, "NODE_ENV is required"],
     [{ ...demoEnvironment, NODE_ENV: "production" }, "NODE_ENV must be development"],
     [{ ...demoEnvironment, AI_PROVIDER: undefined }, "AI_PROVIDER is required"],
-    [{ ...demoEnvironment, AI_PROVIDER: "fallback" }, "AI_PROVIDER must be fake, openai, or deepseek"],
+    [
+      { ...demoEnvironment, AI_PROVIDER: "fallback" },
+      "AI_PROVIDER must be fake, openai, deepseek, or openai-compatible",
+    ],
     [{ ...demoEnvironment, AUTH_PROVIDER: undefined }, "AUTH_PROVIDER is required"],
     [
       { ...demoEnvironment, AUTH_PROVIDER: "fallback" },
@@ -106,6 +115,34 @@ describe("API runtime configuration", () => {
     });
   });
 
+  it("loads and validates generation cost rate limits", () => {
+    expect(
+      loadApiRuntimeConfig({
+        ...demoEnvironment,
+        GENERATION_RATE_LIMIT_WINDOW_SECONDS: "30",
+        GENERATION_RATE_LIMIT_MAX_BUCKETS: "500",
+        GENERATION_RATE_LIMIT_PER_IP: "8",
+        GENERATION_RATE_LIMIT_PER_USER: "2",
+      }).generationRateLimits,
+    ).toEqual({
+      windowMs: 30_000,
+      maxBuckets: 500,
+      perIp: 8,
+      perUser: 2,
+    });
+
+    for (const environment of [
+      { GENERATION_RATE_LIMIT_WINDOW_SECONDS: "0" },
+      { GENERATION_RATE_LIMIT_MAX_BUCKETS: "0" },
+      { GENERATION_RATE_LIMIT_PER_IP: "0" },
+      { GENERATION_RATE_LIMIT_PER_USER: "0" },
+    ]) {
+      expect(() => loadApiRuntimeConfig({ ...demoEnvironment, ...environment })).toThrow(
+        "must be an integer between 1",
+      );
+    }
+  });
+
   it("requires server-only WeChat credentials when WeChat auth is selected", () => {
     expect(() =>
       loadApiRuntimeConfig({ ...demoEnvironment, AUTH_PROVIDER: "wechat", WECHAT_APP_ID: undefined }),
@@ -136,6 +173,61 @@ describe("API runtime configuration", () => {
     expect(() =>
       loadApiRuntimeConfig({ ...deepSeekEnvironment, DEEPSEEK_MODEL: undefined }),
     ).toThrow("DEEPSEEK_MODEL is required");
+  });
+
+  it("validates an explicitly named OpenAI-compatible provider and its claimed capabilities", () => {
+    const compatibleEnvironment = {
+      ...demoEnvironment,
+      AI_PROVIDER: "openai-compatible",
+      OPENAI_COMPATIBLE_API_KEY: "test-api-key-not-secret",
+      OPENAI_COMPATIBLE_MODEL: "proxy-model",
+      OPENAI_COMPATIBLE_BASE_URL: "https://proxy.example.test/v1",
+    };
+    expect(loadApiRuntimeConfig(compatibleEnvironment)).toMatchObject({
+      deploymentMode: "demo",
+      aiProviderMode: "openai-compatible",
+    });
+    expect(() =>
+      loadApiRuntimeConfig({ ...compatibleEnvironment, OPENAI_COMPATIBLE_API_KEY: undefined }),
+    ).toThrow("OPENAI_COMPATIBLE_API_KEY is required");
+    expect(() =>
+      loadApiRuntimeConfig({ ...compatibleEnvironment, OPENAI_COMPATIBLE_BASE_URL: "http://proxy.example.test/v1" }),
+    ).toThrow("OPENAI_COMPATIBLE_BASE_URL must be an HTTPS URL");
+    expect(() =>
+      loadApiRuntimeConfig({ ...compatibleEnvironment, OPENAI_COMPATIBLE_AUDIO_MODE: "automatic" }),
+    ).toThrow("OPENAI_COMPATIBLE_AUDIO_MODE must be one of");
+    expect(() =>
+      loadApiRuntimeConfig({
+        ...compatibleEnvironment,
+        OPENAI_COMPATIBLE_AUDIO_MODE: "transcription",
+      }),
+    ).toThrow("OPENAI_COMPATIBLE_TRANSCRIPTION_MODEL is required");
+  });
+
+  it("requires explicit multimodal capability claims for an OpenAI-compatible competition run", () => {
+    const compatibleCompetitionEnvironment = competitionEnvironment({
+      AI_PROVIDER: "openai-compatible",
+      OPENAI_COMPATIBLE_API_KEY: "test-api-key-not-secret",
+      OPENAI_COMPATIBLE_MODEL: "qwen3.8-flash",
+      OPENAI_COMPATIBLE_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      OPENAI_COMPATIBLE_IMAGE_MODE: "native",
+      OPENAI_COMPATIBLE_AUDIO_MODE: "streaming-chat-transcription",
+      OPENAI_COMPATIBLE_TRANSCRIPTION_MODEL: "qwen3.5-omni-flash",
+      OPENAI_COMPATIBLE_JSON_MODE: "json-object",
+      OPENAI_COMPATIBLE_IMAGE_DETAIL: "omit",
+      OPENAI_COMPATIBLE_STORE_MODE: "omit",
+      OPENAI_COMPATIBLE_VERIFICATION_PROFILE: "dashscope-qwen-2026-09-16",
+    });
+    expect(loadApiRuntimeConfig(compatibleCompetitionEnvironment)).toMatchObject({
+      deploymentMode: "competition",
+      aiProviderMode: "openai-compatible",
+    });
+    expect(() =>
+      loadApiRuntimeConfig({
+        ...compatibleCompetitionEnvironment,
+        OPENAI_COMPATIBLE_IMAGE_MODE: "disabled",
+      }),
+    ).toThrow("competition mode requires the probed dashscope-qwen-2026-09-16 profile");
   });
 
   it.each([
@@ -250,6 +342,14 @@ describe("API deployment disclosure", () => {
       nonProduction: true,
       capabilities: {
         ai: "openai",
+        aiInputs: {
+          configured: {
+            text: "native",
+            image: "native",
+            audio: "transcription",
+          },
+          verification: "built-in",
+        },
         authentication: "development",
         authenticationReady: false,
         repository: "memory",

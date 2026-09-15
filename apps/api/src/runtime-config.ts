@@ -1,10 +1,11 @@
 import { isIP } from "node:net";
 import { resolve } from "node:path";
+import type { GenerationRateLimitConfig } from "./generation-rate-limit.js";
 import type { PublicRateLimitConfig } from "./public-rate-limit.js";
 
 export const DEPLOYMENT_MODES = ["demo", "test", "competition", "production"] as const;
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
-export type AIProviderMode = "fake" | "openai" | "deepseek";
+export type AIProviderMode = "fake" | "openai" | "deepseek" | "openai-compatible";
 export type AuthProviderMode = "development" | "wechat";
 
 export interface ApiRuntimeConfig {
@@ -22,6 +23,7 @@ export interface ApiRuntimeConfig {
   mediaTokenTtlMs: number;
   mediaSigningKeys?: Buffer[];
   publicRateLimits: PublicRateLimitConfig;
+  generationRateLimits: GenerationRateLimitConfig;
   replySafetyTimeoutMs: number;
   wechatAuthTimeoutMs?: number;
 }
@@ -64,10 +66,47 @@ function nodeEnvironmentFromEnv(
 
 function aiProviderModeFromEnv(env: NodeJS.ProcessEnv): AIProviderMode {
   const value = requiredEnv(env, "AI_PROVIDER").toLowerCase();
-  if (value !== "fake" && value !== "openai" && value !== "deepseek") {
-    throw new Error("AI_PROVIDER must be fake, openai, or deepseek");
+  if (
+    value !== "fake" &&
+    value !== "openai" &&
+    value !== "deepseek" &&
+    value !== "openai-compatible"
+  ) {
+    throw new Error("AI_PROVIDER must be fake, openai, deepseek, or openai-compatible");
   }
   return value;
+}
+
+function enumValueFromEnv<T extends string>(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  const value = (env[name]?.trim().toLowerCase() || fallback) as T;
+  if (!allowed.includes(value)) {
+    throw new Error(`${name} must be one of: ${allowed.join(", ")}`);
+  }
+  return value;
+}
+
+function assertSecureProviderBaseUrl(value: string, name: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid HTTPS URL`);
+  }
+  if (
+    url.protocol !== "https:" ||
+    !url.hostname ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error(`${name} must be an HTTPS URL without credentials, query, or fragment`);
+  }
 }
 
 function authProviderModeFromEnv(env: NodeJS.ProcessEnv): AuthProviderMode {
@@ -251,8 +290,14 @@ export function assertApiDeploymentSupported(
   aiProviderMode: AIProviderMode | "custom",
   authProviderMode: AuthProviderMode = "development",
 ): void {
-  if (deploymentMode === "competition" && aiProviderMode !== "openai") {
-    throw new Error("DEPLOYMENT_MODE=competition requires AI_PROVIDER=openai");
+  if (
+    deploymentMode === "competition" &&
+    aiProviderMode !== "openai" &&
+    aiProviderMode !== "openai-compatible"
+  ) {
+    throw new Error(
+      "DEPLOYMENT_MODE=competition requires AI_PROVIDER=openai or openai-compatible",
+    );
   }
   if (deploymentMode !== "production") return;
 
@@ -278,10 +323,86 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
   if (aiProviderMode === "openai") {
     requiredEnv(env, "OPENAI_API_KEY");
     requiredEnv(env, "OPENAI_MODEL");
+    integerFromEnv(env, "OPENAI_MAX_TOTAL_MEDIA_BYTES", 12 * 1024 * 1024, 1, 25 * 1024 * 1024);
   }
   if (aiProviderMode === "deepseek") {
     requiredEnv(env, "DEEPSEEK_API_KEY");
     requiredEnv(env, "DEEPSEEK_MODEL");
+  }
+  if (aiProviderMode === "openai-compatible") {
+    requiredEnv(env, "OPENAI_COMPATIBLE_API_KEY");
+    const model = requiredEnv(env, "OPENAI_COMPATIBLE_MODEL");
+    const baseUrl = requiredEnv(env, "OPENAI_COMPATIBLE_BASE_URL");
+    assertSecureProviderBaseUrl(
+      baseUrl,
+      "OPENAI_COMPATIBLE_BASE_URL",
+    );
+    const imageMode = enumValueFromEnv(
+      env,
+      "OPENAI_COMPATIBLE_IMAGE_MODE",
+      ["disabled", "native"] as const,
+      "disabled",
+    );
+    const audioMode = enumValueFromEnv(
+      env,
+      "OPENAI_COMPATIBLE_AUDIO_MODE",
+      ["disabled", "native", "transcription", "streaming-chat-transcription"] as const,
+      "disabled",
+    );
+    const jsonMode = enumValueFromEnv(
+      env,
+      "OPENAI_COMPATIBLE_JSON_MODE",
+      ["json-object", "prompt-only"] as const,
+      "json-object",
+    );
+    const imageDetail = enumValueFromEnv(
+      env,
+      "OPENAI_COMPATIBLE_IMAGE_DETAIL",
+      ["omit", "auto", "low", "high"] as const,
+      "auto",
+    );
+    const storeMode = enumValueFromEnv(
+      env,
+      "OPENAI_COMPATIBLE_STORE_MODE",
+      ["omit", "disabled"] as const,
+      "disabled",
+    );
+    const verificationProfile = enumValueFromEnv(
+      env,
+      "OPENAI_COMPATIBLE_VERIFICATION_PROFILE",
+      ["unverified", "dashscope-qwen-2026-09-16"] as const,
+      "unverified",
+    );
+    const transcriptionModel =
+      audioMode === "transcription" || audioMode === "streaming-chat-transcription"
+        ? requiredEnv(env, "OPENAI_COMPATIBLE_TRANSCRIPTION_MODEL")
+        : env.OPENAI_COMPATIBLE_TRANSCRIPTION_MODEL?.trim();
+    integerFromEnv(
+      env,
+      "OPENAI_COMPATIBLE_MAX_TOTAL_MEDIA_BYTES",
+      12 * 1024 * 1024,
+      1,
+      25 * 1024 * 1024,
+    );
+    integerFromEnv(env, "OPENAI_COMPATIBLE_MAX_TRANSCRIPT_CHARACTERS", 12_000, 1, 50_000);
+    if (deploymentMode === "competition") {
+      const verifiedQwenConfiguration =
+        verificationProfile === "dashscope-qwen-2026-09-16" &&
+        baseUrl.replace(/\/+$/, "") ===
+          "https://dashscope.aliyuncs.com/compatible-mode/v1" &&
+        model === "qwen3.8-flash" &&
+        imageMode === "native" &&
+        audioMode === "streaming-chat-transcription" &&
+        transcriptionModel === "qwen3.5-omni-flash" &&
+        jsonMode === "json-object" &&
+        imageDetail === "omit" &&
+        storeMode === "omit";
+      if (!verifiedQwenConfiguration) {
+        throw new Error(
+          "competition mode requires the probed dashscope-qwen-2026-09-16 profile",
+        );
+      }
+    }
   }
 
   if (authProviderMode === "wechat") {
@@ -334,6 +455,12 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
         perIp: integerFromEnv(env, "PUBLIC_REPLY_RATE_LIMIT_PER_IP", 20),
         perCredential: integerFromEnv(env, "PUBLIC_REPLY_RATE_LIMIT_PER_CREDENTIAL", 5),
       },
+    },
+    generationRateLimits: {
+      windowMs: integerFromEnv(env, "GENERATION_RATE_LIMIT_WINDOW_SECONDS", 60) * 1000,
+      maxBuckets: integerFromEnv(env, "GENERATION_RATE_LIMIT_MAX_BUCKETS", 10_000),
+      perIp: integerFromEnv(env, "GENERATION_RATE_LIMIT_PER_IP", 10),
+      perUser: integerFromEnv(env, "GENERATION_RATE_LIMIT_PER_USER", 3),
     },
     replySafetyTimeoutMs: integerFromEnv(env, "REPLY_SAFETY_TIMEOUT_MS", 3_000),
     wechatAuthTimeoutMs,

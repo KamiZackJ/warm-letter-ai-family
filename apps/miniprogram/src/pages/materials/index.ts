@@ -55,7 +55,9 @@ function displayMaterial(material: Material): DisplayMaterial {
     material.type === "text"
       ? material.text || ""
       : material.type === "voice"
-        ? `${material.durationSeconds || 0} 秒`
+        ? material.durationSeconds
+          ? `${material.durationSeconds} 秒`
+          : "时长未知"
         : material.name;
   return { ...material, typeLabel: TYPE_LABELS[material.type], detail };
 }
@@ -185,16 +187,16 @@ Page({
       wx.reLaunch({ url: "/pages/home/index" });
       return;
     }
-    recorder.offStop();
-    recorder.offError();
+    recorder.offStop?.();
+    recorder.offError?.();
   },
 
   onUnload() {
     this.disposed = true;
     this.loadRequestId += 1;
     this.recordingEpoch += 1;
-    recorder.offStop();
-    recorder.offError();
+    recorder.offStop?.();
+    recorder.offError?.();
     if (this.data.recording && !this.data.stoppingRecord) {
       try {
         recorder.stop();
@@ -362,8 +364,8 @@ Page({
 
   bindRecorderCallbacks(epoch: number) {
     let settled = false;
-    recorder.offStop();
-    recorder.offError();
+    recorder.offStop?.();
+    recorder.offError?.();
     recorder.onStop((result: { tempFilePath: string; duration: number }) => {
       if (settled || this.disposed || epoch !== this.recordingEpoch) return;
       settled = true;
@@ -468,8 +470,8 @@ Page({
       });
     } catch (error) {
       if (this.recordingEpoch === epoch) this.recordingEpoch += 1;
-      recorder.offStop();
-      recorder.offError();
+      recorder.offStop?.();
+      recorder.offError?.();
       const message = errorMessage(error, "录音未能开始");
       this.setData({ recording: false, stoppingRecord: false });
       this.upsertActionError({
@@ -491,8 +493,8 @@ Page({
       recorder.stop();
     } catch (error) {
       this.recordingEpoch += 1;
-      recorder.offStop();
-      recorder.offError();
+      recorder.offStop?.();
+      recorder.offError?.();
       const message = errorMessage(error, "录音未能结束");
       this.setData({ recording: false, stoppingRecord: false });
       this.upsertActionError({

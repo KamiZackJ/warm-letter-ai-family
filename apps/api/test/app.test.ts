@@ -16,6 +16,7 @@ async function uploadMediaMaterial(
     filename: string;
     contentType: string;
     bytes: Buffer;
+    durationSeconds?: number;
   },
 ): Promise<string> {
   const presignResponse = await app.inject({
@@ -78,6 +79,14 @@ describe("Warm Letter API", () => {
       nonProduction: true,
       capabilities: {
         ai: "fake",
+        aiInputs: {
+          configured: {
+            text: "synthetic",
+            image: "synthetic",
+            audio: "synthetic",
+          },
+          verification: "synthetic",
+        },
         authentication: "development",
         authenticationReady: true,
         repository: "memory",
@@ -182,6 +191,7 @@ describe("Warm Letter API", () => {
         filename: "voice-note.m4a",
         contentType: "audio/mp4",
         bytes: Buffer.from([0, 0, 0, 12, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x34, 0x61, 0x20]),
+        durationSeconds: 12,
       }),
       registerTextMaterial(app, token, "I learned a new recipe and thought of Mom."),
     ]);
@@ -383,7 +393,13 @@ describe("Warm Letter API", () => {
             sourceAttribution?: string;
           }>;
         };
-        sources: Array<{ id: string; type: string; mediaUrl?: string; mediaExpiresAt?: string }>;
+        sources: Array<{
+          id: string;
+          type: string;
+          mediaUrl?: string;
+          mediaExpiresAt?: string;
+          durationSeconds?: number;
+        }>;
       };
     }>(readerResponse).reader;
     expect(reader.draft.signature).toBe("Your Ning");
@@ -402,6 +418,8 @@ describe("Warm Letter API", () => {
     expect(Date.parse(photoSource!.mediaExpiresAt!)).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000);
     const textSource = reader.sources.find((source) => source.id === materialIds[3]);
     expect(textSource).not.toHaveProperty("mediaUrl");
+    const audioSource = reader.sources.find((source) => source.id === materialIds[2]);
+    expect(audioSource).toMatchObject({ type: "audio", durationSeconds: 12 });
     const mediaUrl = new URL(photoSource!.mediaUrl!);
     const publicMediaResponse = await app.inject({
       method: "GET",
@@ -538,6 +556,29 @@ describe("Warm Letter API", () => {
     });
     expect(createResponse.statusCode).toBe(409);
     expect(json<{ error: { code: string } }>(createResponse).error.code).toBe("MATERIAL_NOT_READY");
+  });
+
+  it("rejects selecting 31 materials for one letter", async () => {
+    const token = await login(app, "too-many-materials-owner");
+    const materialIds: string[] = [];
+    for (let index = 0; index < 31; index += 1) {
+      materialIds.push(
+        await registerTextMaterial(app, token, `第 ${index + 1} 条由用户主动选择的近况。`),
+      );
+    }
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/letters",
+      headers: auth(token),
+      payload: { recipient: "妈妈", materialIds },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(json<{ error: { code: string; message: string } }>(response).error).toEqual({
+      code: "INVALID_MATERIAL_IDS",
+      message: "一封家书最多选择 30 份素材",
+    });
   });
 
   it("keeps an existing letter unpublished if a referenced material is deleted before generation", async () => {
