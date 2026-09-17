@@ -501,9 +501,11 @@ export class QwenSpeechProvider implements SpeechProvider {
         error,
       );
     }
+    const trustedAliyunHost =
+      parsedUrl.hostname === "aliyuncs.com" || parsedUrl.hostname.endsWith(".aliyuncs.com");
     if (
-      parsedUrl.protocol !== "https:" ||
-      (parsedUrl.hostname !== "aliyuncs.com" && !parsedUrl.hostname.endsWith(".aliyuncs.com")) ||
+      (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") ||
+      !trustedAliyunHost ||
       Boolean(parsedUrl.username || parsedUrl.password) ||
       Boolean(parsedUrl.port && parsedUrl.port !== "443")
     ) {
@@ -514,6 +516,8 @@ export class QwenSpeechProvider implements SpeechProvider {
         false,
       );
     }
+    // DashScope currently returns an HTTP OSS URL; force transport upgrade before any request.
+    parsedUrl.protocol = "https:";
 
     let mediaResponse: Response;
     try {

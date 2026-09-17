@@ -205,16 +205,44 @@ describe("Qwen3 TTS provider", () => {
     expect(mediaRequest?.redirect).toBe("error");
   });
 
-  it("rejects insecure or redirected media locations before downloading audio", async () => {
+  it("upgrades a trusted DashScope HTTP media URL and forbids download redirects", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            request_id: "request-upgrade",
+            output: {
+              audio: {
+                url: "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/audio.wav",
+              },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(wavBytes, { status: 200 }));
+    const provider = new QwenSpeechProvider({
+      apiKey: "test-qwen-key",
+      fetchImpl: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      provider.synthesize({ text: "测试", voiceId: "Cherry", tone: "warm" }),
+    ).resolves.toMatchObject({ contentType: "audio/wav" });
+    const [mediaUrl, mediaRequest] = fetchMock.mock.calls[1] as Parameters<typeof fetch>;
+    expect(String(mediaUrl)).toBe(
+      "https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/audio.wav",
+    );
+    expect(mediaRequest?.redirect).toBe("error");
+  });
+
+  it("rejects an untrusted media host before downloading audio", async () => {
     const fetchMock = vi.fn(async () =>
       new Response(
         JSON.stringify({
-          request_id: "request-insecure",
-          output: {
-            audio: {
-              url: "http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/audio.wav",
-            },
-          },
+          request_id: "request-untrusted",
+          output: { audio: { url: "https://example.test/audio.wav" } },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       ),

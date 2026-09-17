@@ -51,7 +51,7 @@
 - AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本、独立命名的 OpenAI-compatible 多模态边界、豆包 Seed-TTS 适配层和 Qwen `qwen3-tts-flash` 家书朗读；公网演示 API 已启用阿里云百炼北京地域的 `qwen3.8-flash` 家书模型与 `qwen3.5-omni-flash` 流式转写，并通过服务器合成文字、图片和音频闭环。Qwen 朗读代码已完成，仍需以本轮提交重部署后做公网探针。该结果不替代密钥轮换、授权四素材小程序 E2E、隐私费用审核或生产放行，也不代表 GitHub Pages 已接入实时模型。
 - 动态长图：`scripts/create-confirmed-draft-long-image.ps1` 可从 API/共享契约的 `confirmedDraft` 生成 1080px 成品和审计 manifest；当前仍是离线渲染工具，尚未接入生产任务或短片流水线。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
-- 自动化基线：2026-09-17 当前工作树 contracts `17`、Web `75`、小程序 `143`、API `191`，共 `426` 项；已在 Node `22.23.2` 下通过全仓类型检查、测试和构建。该工作树推送后的远端 CI 状态仍以 GitHub 为准。
+- 自动化基线：2026-09-17 当前工作树 contracts `17`、Web `75`、小程序 `143`、API `192`，共 `427` 项；已在 Node `22.23.2` 下通过全仓类型检查、测试和构建。该工作树推送后的远端 CI 状态仍以 GitHub 为准。
 
 ## 仓库结构
 
