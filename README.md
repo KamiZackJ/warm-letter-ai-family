@@ -48,7 +48,7 @@
 - Fastify API：素材上传与校验、家书状态机、来源追溯、分享重签/撤销和回复。
 - React H5：受控 CASE-001 模式可加载队友真实图片与原始音频；默认开发模式使用合成脱敏素材，并提供系统朗读、来源展开、回复和失效状态。
 - 公共个性创作页：照片只在浏览器本地预览，支持五种文案风格、修改意见、草稿编辑和复制；未连接后端时如实标注为本地草稿。
-- AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本、独立命名的 OpenAI-compatible 多模态边界、豆包 Seed-TTS 适配层和 Qwen `qwen3-tts-flash` 家书朗读；公网演示 API 已启用阿里云百炼北京地域的 `qwen3.8-flash` 家书模型与 `qwen3.5-omni-flash` 流式转写，并通过服务器合成文字、图片和音频闭环。Qwen 朗读代码已完成，仍需以本轮提交重部署后做公网探针。该结果不替代密钥轮换、授权四素材小程序 E2E、隐私费用审核或生产放行，也不代表 GitHub Pages 已接入实时模型。
+- AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本、独立命名的 OpenAI-compatible 多模态边界、豆包 Seed-TTS 适配层和 Qwen `qwen3-tts-flash` 家书朗读；公网演示 API 已启用阿里云百炼北京地域的 `qwen3.8-flash` 家书模型与 `qwen3.5-omni-flash` 流式转写，并通过服务器合成文字、图片和音频闭环。公网 Qwen 朗读已部署 `11c545b`，服务器真实短句探针返回 `audio/wav`、`RIFF` 文件头和 88,364 字节。该结果不替代密钥轮换、授权四素材小程序 E2E、隐私费用审核或生产放行，也不代表 GitHub Pages 已接入实时模型。
 - 动态长图：`scripts/create-confirmed-draft-long-image.ps1` 可从 API/共享契约的 `confirmedDraft` 生成 1080px 成品和审计 manifest；当前仍是离线渲染工具，尚未接入生产任务或短片流水线。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
 - 自动化基线：2026-09-17 当前工作树 contracts `17`、Web `75`、小程序 `143`、API `192`，共 `427` 项；已在 Node `22.23.2` 下通过全仓类型检查、测试和构建。该工作树推送后的远端 CI 状态仍以 GitHub 为准。
