@@ -1,23 +1,27 @@
 import { environment, storageKey } from "../config/env";
 import type {
   CreateLetterInput,
+  GeneratedNarration,
   Letter,
   LetterDraft,
   LetterSummary,
   Material,
   ParagraphSourceAttribution,
   ReaderLetter,
+  ReaderNarration,
   ReaderSource,
   Reply,
+  SpeechCatalog,
 } from "../types/domain";
 import { createId } from "../utils/id";
+import { letterDraftSpeechText } from "../utils/letter-speech";
 import { mockApi } from "./mock-api";
 import {
   GenerationJobFailedError,
   resolveGenerationJobId,
   waitForGenerationJob,
 } from "./generation-polling";
-import { HttpRequestError, request, uploadBinary } from "./http-client";
+import { HttpRequestError, request, requestBinary, uploadBinary } from "./http-client";
 
 type ServerMaterial = {
   id: string;
@@ -86,6 +90,16 @@ type ServerReader = {
   draft: ServerDraft;
   publishedAt: string;
   sources: ServerReaderSource[];
+  narration?: {
+    id: string;
+    name: string;
+    voiceId: string;
+    voiceName: string;
+    contentType: "audio/mpeg" | "audio/wav";
+    mediaUrl: string;
+    mediaExpiresAt?: string;
+    generatedAt: string;
+  };
   replies: ServerReply[];
 };
 
@@ -196,6 +210,36 @@ function mapReaderSource(source: ServerReaderSource): ReaderSource {
   };
 }
 
+function mapReaderNarration(
+  narration: NonNullable<ServerReader["narration"]>,
+): ReaderNarration {
+  return { ...narration };
+}
+
+async function writeNarrationFile(
+  letterId: string,
+  data: ArrayBuffer,
+  contentType: string,
+): Promise<GeneratedNarration> {
+  const normalizedContentType = contentType === "audio/x-wav" ? "audio/wav" : contentType;
+  if (normalizedContentType !== "audio/wav" && normalizedContentType !== "audio/mpeg") {
+    throw new Error("语音服务返回了不支持的音频格式");
+  }
+  const extension = normalizedContentType === "audio/wav" ? "wav" : "mp3";
+  const safeLetterId = letterId.replace(/[^A-Za-z0-9_-]/g, "-");
+  const filePath = `${wx.env.USER_DATA_PATH}/warm-letter-narration-${safeLetterId}-${Date.now()}.${extension}`;
+  await new Promise<void>((resolve, reject) => {
+    wx.getFileSystemManager().writeFile({
+      filePath,
+      data,
+      success: () => resolve(),
+      fail: (error: { errMsg?: string }) =>
+        reject(new Error(error.errMsg || "保存朗读音频失败")),
+    });
+  });
+  return { filePath, contentType: normalizedContentType };
+}
+
 function mapDraft(draft?: ServerDraft): LetterDraft | undefined {
   if (!draft) return undefined;
   return {
@@ -225,6 +269,7 @@ function fallbackIntent(letter: ServerLetter): CreateLetterInput["intent"] {
 
 function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Letter {
   const intents = readRecord<CreateLetterInput["intent"]>(REAL_INTENTS_KEY);
+  const shareTokens = readRecord<string>(REAL_SHARE_TOKENS_KEY);
   const draft = serverLetter.confirmedDraft || serverLetter.draft;
   return {
     id: serverLetter.id,
@@ -242,7 +287,7 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
     createdAt: serverLetter.createdAt,
     updatedAt: serverLetter.updatedAt,
     confirmedAt: serverLetter.confirmedAt,
-    shareToken: serverLetter.shareToken,
+    shareToken: shareTokens[serverLetter.id],
   };
 }
 
@@ -506,6 +551,9 @@ export const realApi = {
       recipient: response.reader.recipient,
       draft: mapDraft(response.reader.draft)!,
       sources: response.reader.sources.map(mapReaderSource),
+      narration: response.reader.narration
+        ? mapReaderNarration(response.reader.narration)
+        : undefined,
       replies: response.reader.replies,
       publishedAt: response.reader.publishedAt,
       shareToken: token,
@@ -581,6 +629,35 @@ export const realApi = {
     }
   },
 
+  async getSpeechCatalog(): Promise<SpeechCatalog> {
+    return await authorized(() => request<SpeechCatalog>("/speech/voices"));
+  },
+
+  async generateNarration(
+    id: string,
+    draft: LetterDraft,
+    voiceId: string,
+    tone: CreateLetterInput["intent"]["tone"],
+  ): Promise<GeneratedNarration> {
+    const text = letterDraftSpeechText(draft);
+    if (text.length > 4_000) {
+      throw new Error("家书超过 4000 字，暂时无法生成整封朗读，请先精简文字");
+    }
+    const response = await authorized(() =>
+      requestBinary(`/letters/${id}/speech`, {
+        method: "POST",
+        timeoutMs: 130_000,
+        data: {
+          text,
+          voiceId,
+          tone: tone === "concise" ? "plain" : tone,
+          persist: true,
+        },
+      }),
+    );
+    return await writeNarrationFile(id, response.data, response.contentType);
+  },
+
   async updateDraft(id: string, draft: LetterDraft): Promise<Letter> {
     const response = await authorized(() =>
       request<{ letter: ServerLetter }>(`/letters/${id}`, {
@@ -600,14 +677,39 @@ export const realApi = {
   },
 
   async confirmLetter(id: string, draft: LetterDraft): Promise<Letter> {
-    await realApi.updateDraft(id, draft);
+    try {
+      await realApi.updateDraft(id, draft);
+      const response = await authorized(() =>
+        request<{
+          letter: ServerLetter;
+          shareToken: string;
+          shareExpiresAt: string;
+          readerUrl: string;
+        }>(`/letters/${id}/confirm`, { method: "POST", data: {} }),
+      );
+      saveShareToken(id, response.shareToken);
+      return { ...mapLetter(response.letter), shareToken: response.shareToken };
+    } catch (error) {
+      try {
+        const current = await realApi.getLetter(id);
+        if (current.status === "PUBLISHED" || current.status === "CONFIRMED") {
+          return await realApi.reissueShare(id);
+        }
+      } catch {
+        // Preserve the original confirmation error when recovery is unavailable.
+      }
+      throw error;
+    }
+  },
+
+  async reissueShare(id: string): Promise<Letter> {
     const response = await authorized(() =>
       request<{
         letter: ServerLetter;
         shareToken: string;
         shareExpiresAt: string;
         readerUrl: string;
-      }>(`/letters/${id}/confirm`, { method: "POST", data: {} }),
+      }>(`/letters/${id}/share/reissue`, { method: "POST", data: {} }),
     );
     saveShareToken(id, response.shareToken);
     return { ...mapLetter(response.letter), shareToken: response.shareToken };

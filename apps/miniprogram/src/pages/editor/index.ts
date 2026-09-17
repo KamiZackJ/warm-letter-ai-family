@@ -316,16 +316,12 @@ Page({
     }
   },
 
-  async confirmLetter() {
+  async previewLetter() {
     if (!this.validateDraft(true)) return;
-    const confirmed = await confirmDialog(
-      "请确认内容准确且没有不想寄出的信息。确认后将进入家书阅读页。",
-    );
-    if (!confirmed) return;
     this.setData({ saving: true });
     try {
-      await api.confirmLetter(this.data.letterId, this.data.draft);
-      wx.redirectTo({ url: `/pages/reader/index?id=${this.data.letterId}` });
+      await api.updateDraft(this.data.letterId, this.data.draft);
+      wx.navigateTo({ url: `/pages/preview/index?id=${this.data.letterId}` });
     } catch (error) {
       wx.showToast({ title: (error as Error).message, icon: "none" });
     } finally {

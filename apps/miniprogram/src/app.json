@@ -4,6 +4,7 @@
     "pages/materials/index",
     "pages/intent/index",
     "pages/editor/index",
+    "pages/preview/index",
     "pages/reader/index"
   ],
   "window": {

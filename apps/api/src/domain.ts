@@ -68,6 +68,15 @@ export interface LetterDraft {
   generatedAt: string;
 }
 
+export interface LetterNarration {
+  objectKey: string;
+  contentType: "audio/mpeg" | "audio/wav";
+  voiceId: string;
+  voiceName: string;
+  draftFingerprint: string;
+  generatedAt: string;
+}
+
 export interface Letter {
   id: string;
   userId: string;
@@ -77,6 +86,7 @@ export interface Letter {
   state: LetterState;
   draft?: LetterDraft;
   confirmedDraft?: LetterDraft;
+  narration?: LetterNarration;
   createdAt: string;
   updatedAt: string;
   confirmedAt?: string;

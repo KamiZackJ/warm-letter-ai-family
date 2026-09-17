@@ -197,6 +197,19 @@ export const PublicMaterialSourceSchema = z
   })
   .strict();
 
+export const PublicNarrationSchema = z
+  .object({
+    id: z.literal("ai-narration"),
+    name: z.string().trim().min(1).max(120),
+    voiceId: z.string().trim().min(1).max(100),
+    voiceName: z.string().trim().min(1).max(100),
+    contentType: z.enum(["audio/mpeg", "audio/wav"]),
+    mediaUrl: z.string().url(),
+    mediaExpiresAt: TimestampSchema.optional(),
+    generatedAt: TimestampSchema,
+  })
+  .strict();
+
 export const PublicLetterSchema = z
   .object({
     id: EntityIdSchema,
@@ -204,6 +217,7 @@ export const PublicLetterSchema = z
     draft: LetterDraftSchema,
     publishedAt: TimestampSchema,
     sources: z.array(PublicMaterialSourceSchema).max(30),
+    narration: PublicNarrationSchema.optional(),
     replies: z.array(ReplySchema).max(100),
   })
   .strict();
@@ -264,6 +278,7 @@ export type GetJobResponse = z.infer<typeof GetJobResponseSchema>;
 export type ConfirmLetterRequest = z.infer<typeof ConfirmLetterRequestSchema>;
 export type ConfirmLetterResponse = z.infer<typeof ConfirmLetterResponseSchema>;
 export type PublicMaterialSource = z.infer<typeof PublicMaterialSourceSchema>;
+export type PublicNarration = z.infer<typeof PublicNarrationSchema>;
 export type PublicLetter = z.infer<typeof PublicLetterSchema>;
 export type GetLetterReaderResponse = z.infer<typeof GetLetterReaderResponseSchema>;
 export type CreateReplyRequest = z.infer<typeof CreateReplyRequestSchema>;

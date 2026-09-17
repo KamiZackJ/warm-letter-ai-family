@@ -5,6 +5,7 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   data?: unknown;
   headers?: Record<string, string>;
+  timeoutMs?: number;
 };
 
 export class HttpRequestError extends Error {
@@ -25,6 +26,24 @@ function accessTokenHeader(): Record<string, string> {
 }
 
 let deploymentCheck: Promise<void> | null = null;
+
+async function ensureDeploymentMatches(): Promise<void> {
+  if (!deploymentCheck) {
+    deploymentCheck = executeRequest<{ deploymentMode?: unknown }>({
+      url: environment.healthUrl,
+      method: "GET",
+      header: {},
+    })
+      .then((health) => {
+        assertRemoteDeploymentMode(environment.deploymentMode, health.deploymentMode);
+      })
+      .catch((error) => {
+        deploymentCheck = null;
+        throw error;
+      });
+  }
+  await deploymentCheck;
+}
 
 const forbiddenUploadHeaders = new Set([
   "authorization",
@@ -92,21 +111,7 @@ function executeRequest<T>(options: {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (!deploymentCheck) {
-    deploymentCheck = executeRequest<{ deploymentMode?: unknown }>({
-      url: environment.healthUrl,
-      method: "GET",
-      header: {},
-    })
-      .then((health) => {
-        assertRemoteDeploymentMode(environment.deploymentMode, health.deploymentMode);
-      })
-      .catch((error) => {
-        deploymentCheck = null;
-        throw error;
-      });
-  }
-  await deploymentCheck;
+  await ensureDeploymentMatches();
   const header = { ...options.headers, ...accessTokenHeader() };
   if (options.data !== undefined) {
     header["content-type"] = "application/json";
@@ -116,6 +121,84 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     method: options.method || "GET",
     data: options.data,
     header,
+  });
+}
+
+function decodeBinaryError(data: unknown): {
+  message?: string;
+  error?: { code?: string; message?: string; retryable?: boolean };
+} {
+  if (!(data instanceof ArrayBuffer)) {
+    return data && typeof data === "object"
+      ? (data as {
+          message?: string;
+          error?: { code?: string; message?: string; retryable?: boolean };
+        })
+      : {};
+  }
+  try {
+    const bytes = new Uint8Array(data);
+    let percentEncoded = "";
+    for (const byte of bytes) percentEncoded += `%${byte.toString(16).padStart(2, "0")}`;
+    return JSON.parse(decodeURIComponent(percentEncoded)) as {
+      message?: string;
+      error?: { code?: string; message?: string; retryable?: boolean };
+    };
+  } catch {
+    return {};
+  }
+}
+
+export async function requestBinary(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ data: ArrayBuffer; contentType: string }> {
+  await ensureDeploymentMatches();
+  const header = { ...options.headers, ...accessTokenHeader() };
+  if (options.data !== undefined) header["content-type"] = "application/json";
+
+  return await new Promise((resolve, reject) => {
+    wx.request({
+      url: `${environment.apiBaseUrl}${path}`,
+      method: options.method || "GET",
+      data: options.data,
+      header,
+      responseType: "arraybuffer",
+      timeout: options.timeoutMs ?? environment.requestTimeoutMs,
+      success(response: {
+        statusCode: number;
+        data: unknown;
+        header?: Record<string, string>;
+      }) {
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          if (!(response.data instanceof ArrayBuffer)) {
+            reject(new Error("语音服务没有返回有效音频"));
+            return;
+          }
+          const headers = response.header || {};
+          const contentTypeEntry = Object.entries(headers).find(
+            ([name]) => name.toLowerCase() === "content-type",
+          );
+          resolve({
+            data: response.data,
+            contentType: contentTypeEntry?.[1]?.split(";", 1)[0]?.toLowerCase() || "",
+          });
+          return;
+        }
+        const payload = decodeBinaryError(response.data);
+        reject(
+          new HttpRequestError(
+            payload.error?.message || payload.message || "服务暂时不可用",
+            response.statusCode,
+            payload.error?.code,
+            payload.error?.retryable,
+          ),
+        );
+      },
+      fail(error: { errMsg?: string }) {
+        reject(new Error(error.errMsg || "网络连接失败"));
+      },
+    });
   });
 }
 

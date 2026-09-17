@@ -3,12 +3,12 @@
     <text class="environment-label">{{environmentLabel}}</text>
     <text class="environment-detail">{{environmentDetail}}</text>
   </view>
-  <text class="eyebrow">第 3 步，共 3 步</text>
+  <text class="eyebrow">第 3 步，共 4 步</text>
   <view class="title-row">
     <text class="page-title">逐段确认草稿</text>
     <text class="ai-mark">AI 辅助生成</text>
   </view>
-  <text class="page-subtitle">来源提示帮助你核对事实。修改、删减并确认后，家人才会看到正式内容。</text>
+  <text class="page-subtitle">来源提示帮助你核对事实。下一步会先看到完整预览，再决定是否寄出。</text>
 
   <view wx:if="{{loading}}" class="empty-state loading-state" aria-live="polite">
     {{generationPending ? '家书正在后台整理…' : '正在打开草稿…'}}
@@ -66,11 +66,12 @@
       <input class="input" aria-label="署名" data-field="signature" maxlength="30" value="{{draft.signature}}" bindinput="updateField" />
     </view>
 
-    <button class="regenerate-button" bindtap="regenerate">重新生成草稿</button>
+    <button class="secondary-button regenerate-button" loading="{{generationPending}}" disabled="{{generationPending || saving}}" bindtap="regenerate">{{generationPending ? '正在换一版…' : '换一版文字'}}</button>
+    <text class="regenerate-helper">不满意当前表达时使用，会覆盖尚未保存的修改。</text>
   </block>
 
   <view wx:if="{{!loading && !errorMessage}}" class="sticky-actions">
     <button class="secondary-button" loading="{{saving}}" disabled="{{saving || loading}}" bindtap="saveDraft">保存</button>
-    <button class="primary-button" loading="{{saving}}" disabled="{{saving || loading}}" bindtap="confirmLetter">确认并预览</button>
+    <button class="primary-button" loading="{{saving}}" disabled="{{saving || loading}}" bindtap="previewLetter">预览家书</button>
   </view>
 </view>

@@ -7,6 +7,7 @@ import {
   type GenerationJob,
   type Letter,
   type LetterDraft,
+  type LetterNarration,
   type LetterSettings,
   type Material,
   type MaterialType,
@@ -26,6 +27,23 @@ import {
 const defaultSettings: LetterSettings = { tone: "warm", length: "medium" };
 const maxRepliesPerLetter = 100;
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/u;
+export const NARRATION_MEDIA_ID = "ai-narration";
+
+export function letterDraftSpeechText(draft: LetterDraft): string {
+  return [
+    draft.greeting,
+    ...draft.paragraphs.map((paragraph) => paragraph.text),
+    draft.closing,
+    draft.signature,
+  ]
+    .map((part) => part.normalize("NFC").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function speechTextFingerprint(text: string): string {
+  return createHash("sha256").update(text.normalize("NFC").trim()).digest("hex");
+}
 
 function replyRequestFingerprint(text: string, authorName?: string): string {
   return JSON.stringify({
@@ -328,6 +346,40 @@ export class WarmLetterService {
     return this.requireOwnedLetter(userId, letterId);
   }
 
+  getNarrationText(userId: string, letterId: string): string {
+    const letter = this.requireOwnedLetter(userId, letterId);
+    if (letter.state !== "EDITING" || !letter.draft) {
+      throw new ApiError(409, "LETTER_NOT_READY", "请先生成家书草稿，再生成朗读");
+    }
+    return letterDraftSpeechText(letter.draft);
+  }
+
+  attachNarration(
+    userId: string,
+    letterId: string,
+    expectedText: string,
+    input: Omit<LetterNarration, "draftFingerprint" | "generatedAt">,
+  ): { narration: LetterNarration; previousObjectKey?: string } {
+    const letter = this.requireOwnedLetter(userId, letterId);
+    if (letter.state !== "EDITING" || !letter.draft) {
+      throw new ApiError(409, "LETTER_NOT_READY", "请先生成家书草稿，再生成朗读");
+    }
+    const currentText = letterDraftSpeechText(letter.draft);
+    if (currentText !== expectedText.normalize("NFC").trim()) {
+      throw new ApiError(409, "DRAFT_CHANGED", "草稿已更新，请重新生成朗读");
+    }
+    const previousObjectKey = letter.narration?.objectKey;
+    const narration: LetterNarration = {
+      ...input,
+      draftFingerprint: speechTextFingerprint(currentText),
+      generatedAt: this.now().toISOString(),
+    };
+    letter.narration = narration;
+    letter.updatedAt = this.now().toISOString();
+    this.repository.saveLetter(letter);
+    return { narration, previousObjectKey };
+  }
+
   editLetter(userId: string, letterId: string, input: EditLetterInput): Letter {
     const letter = this.requireOwnedLetter(userId, letterId);
     if (["GENERATING", "CONFIRMED", "PUBLISHED"].includes(letter.state)) {
@@ -508,9 +560,28 @@ export class WarmLetterService {
         mediaExpiresAt?: string;
       }
     >;
+    narration?: Pick<
+      LetterNarration,
+      "contentType" | "voiceId" | "voiceName" | "generatedAt"
+    > & {
+      id: string;
+      name: string;
+      mediaToken: string;
+      mediaExpiresAt: string;
+    };
     replies: Reply[];
   } {
     const { letter, access } = this.resolveShareAccess(letterId, shareToken);
+    const narration =
+      letter.narration &&
+      letter.confirmedDraft &&
+      letter.narration.draftFingerprint ===
+        speechTextFingerprint(letterDraftSpeechText(letter.confirmedDraft))
+        ? letter.narration
+        : undefined;
+    const narrationAccess = narration
+      ? this.issueMediaAccess(letter.id, NARRATION_MEDIA_ID, access)
+      : undefined;
     return {
       id: letter.id,
       recipient: letter.recipient,
@@ -546,8 +617,42 @@ export class WarmLetterService {
           mediaExpiresAt: mediaAccess.expiresAt,
         };
       }),
+      narration:
+        narration && narrationAccess
+          ? {
+              id: NARRATION_MEDIA_ID,
+              name: "AI 朗读全文",
+              contentType: narration.contentType,
+              voiceId: narration.voiceId,
+              voiceName: narration.voiceName,
+              generatedAt: narration.generatedAt,
+              mediaToken: narrationAccess.token,
+              mediaExpiresAt: narrationAccess.expiresAt,
+            }
+          : undefined,
       replies: this.repository.listReplies(letter.id),
     };
+  }
+
+  getPublicNarration(
+    letterId: string,
+    mediaToken: string | undefined,
+  ): LetterNarration {
+    const { letter } = this.resolveMediaAccess(
+      letterId,
+      NARRATION_MEDIA_ID,
+      mediaToken,
+    );
+    const narration = letter.narration;
+    if (
+      !narration ||
+      !letter.confirmedDraft ||
+      narration.draftFingerprint !==
+        speechTextFingerprint(letterDraftSpeechText(letter.confirmedDraft))
+    ) {
+      throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书的朗读暂时不可用");
+    }
+    return narration;
   }
 
   getPublicMaterial(

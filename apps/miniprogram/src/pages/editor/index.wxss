@@ -196,9 +196,16 @@
   min-height: 88rpx;
   margin-top: 30rpx;
   padding: 16rpx 20rpx;
-  background: transparent;
-  color: #5f6763;
-  font-size: 25rpx;
+  border-color: #98684d;
+  color: #754a33;
+  font-size: 27rpx;
   line-height: 1.35;
-  text-decoration: underline;
+}
+
+.regenerate-helper {
+  display: block;
+  margin-top: 10rpx;
+  color: #737975;
+  font-size: 23rpx;
+  line-height: 1.5;
 }

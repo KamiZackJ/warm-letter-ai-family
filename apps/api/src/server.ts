@@ -29,6 +29,7 @@ const app = buildApp({
   mediaSigningKeys: runtimeConfig.mediaSigningKeys,
   publicRateLimits: runtimeConfig.publicRateLimits,
   generationRateLimits: runtimeConfig.generationRateLimits,
+  speechRateLimits: runtimeConfig.speechRateLimits,
   replySafetyTimeoutMs: runtimeConfig.replySafetyTimeoutMs,
 });
 

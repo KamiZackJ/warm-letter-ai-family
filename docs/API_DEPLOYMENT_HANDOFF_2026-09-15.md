@@ -1,6 +1,6 @@
 # 暖笺公网 API 部署与移交状态
 
-- 状态时间：2026-09-16 02:30（Asia/Shanghai）
+- 状态时间：2026-09-17（Asia/Shanghai）
 - 公网 API：<https://api.warmjiashu.xyz>
 - 健康检查：<https://api.warmjiashu.xyz/health>
 - 服务器：阿里云轻量应用服务器，中国香港，Ubuntu 24.04
@@ -20,6 +20,7 @@
 9. 微信小程序 `develop` 环境已改为连接 `https://api.warmjiashu.xyz/v1`。
 10. 公网 API 已部署提交 `b6ce5b3`，启用 Qwen 双模型和生成费用双桶限流。
 11. 微信后台已核验 request、uploadFile、downloadFile 三类合法域名均为 `https://api.warmjiashu.xyz`。
+12. `0.2.0` 后端新增 Qwen `qwen3-tts-flash` 家书朗读：复用服务器端百炼密钥，音频保存到服务端对象目录，只通过家书短期分享凭据读取；小程序和日志不接触密钥。朗读有独立 IP/用户费用限频，供应商音频下载限定为 HTTPS 阿里云域名、禁止跳转并实施流式大小上限。
 
 ## 已验证
 
@@ -31,7 +32,7 @@
 | 服务状态 | `warm-letter-api` 与 `caddy` 均为 `active + enabled` |
 | 监听边界 | Node 仅监听 `127.0.0.1:8787`；Caddy 对外监听 `80/443` |
 | 运行模式 | `deploymentMode=demo`、`nonProduction=true` |
-| 能力声明 | `ai=openai-compatible`、text/image `native`、audio `transcription`、`verification=profile-match` |
+| 能力声明 | `ai=openai-compatible`、text/image `native`、audio `transcription`、`verification=profile-match`；家书输出另有 Qwen TTS |
 | 服务器真实模型探针 | 合成文字、图片、WAV 完整闭环约 97.5 秒，三份素材 ID 均进入最终来源引用 |
 | CORS 正向 | `Origin: https://warmjiashu.xyz` 获得允许头 |
 | CORS 负向 | 非白名单 Origin 不获得允许头 |
@@ -87,11 +88,13 @@ WARM_LETTER_BRANCH=master bash /tmp/bootstrap.sh
 
 ## 接手人的最短下一步
 
-1. 用微信开发者工具完成任意用户图片、文字和录音的上传、生成、确认、阅读和回复闭环，并保留脱敏验收记录。
-2. 开发版本 `0.1.0` 已从微信开发者工具上传成功；在版本管理中选为体验版后，用真机复测相同流程。`release` 仍保持生产地址未配置并失败关闭。
+1. 先部署本轮后端并上传小程序 `0.2.0`，再用开发者工具完成任意用户图片、文字和录音的上传、生成、预览、改写、AI 朗读、确认、选择微信好友、阅读和回复闭环。
+2. `0.1.0` 已设为体验版；`0.2.0` 上传后需要再次“选为体验版”。体验好友必须先加入“体验成员”；`release` 仍保持生产地址未配置并失败关闭。
 3. 轮换 Qwen 密钥，配置费用告警并复跑服务器合成探针。
 4. 修复 GitHub Pages 主域名证书，确认 `https://warmjiashu.xyz` 严格校验通过。
 5. 后续部署先在功能分支通过 CI，再快进合入 `master`；服务器只从已审核的 `master` 重部署。
+
+当前服务仍使用内存业务仓库。每次重启都会使旧会话、家书、分享凭据及朗读元数据失效，本地音频文件还需要后续清理；这是体验版已知限制，不得按生产持久化能力对外描述。
 6. 对外扩大体验范围前完成供应商隐私、事实约束、安全与费用验收。
 7. 生产化前接入 PostgreSQL、OSS/S3、共享限流、删除链路、备份恢复和正式内容审核。
 

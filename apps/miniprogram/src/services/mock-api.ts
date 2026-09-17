@@ -1,12 +1,15 @@
 import type {
   CreateLetterInput,
   DraftParagraph,
+  GeneratedNarration,
   Letter,
   LetterDraft,
   LetterSummary,
   Material,
   ReaderLetter,
+  ReaderNarration,
   Reply,
+  SpeechCatalog,
 } from "../types/domain";
 import { createId } from "../utils/id";
 import {
@@ -24,6 +27,16 @@ const replyRequestsByKey = new Map<
   string,
   { requestFingerprint: string; replyId: string }
 >();
+const mockNarrations = new Map<string, ReaderNarration>();
+const mockSpeechCatalog: SpeechCatalog = {
+  available: true,
+  provider: "local-demo",
+  voices: [
+    { id: "Cherry", name: "芊悦", description: "温柔清晰", gender: "female" },
+    { id: "Serena", name: "苏瑶", description: "舒缓自然", gender: "female" },
+    { id: "Ethan", name: "晨煦", description: "温暖有朝气", gender: "male" },
+  ],
+};
 
 function sameMaterial(left: Material, right: Material): boolean {
   return (
@@ -290,6 +303,7 @@ export const mockApi = {
         recipient: letter.intent.recipient,
         draft: letter.draft,
         sources,
+        narration: mockNarrations.get(id),
         replies: letter.replies,
         publishedAt: letter.confirmedAt,
         shareToken: letter.shareToken,
@@ -300,6 +314,7 @@ export const mockApi = {
 
   async generateLetter(id: string): Promise<Letter> {
     const current = requireLetter(id);
+    mockNarrations.delete(id);
     updateLetter({ ...current, status: "GENERATING", updatedAt: new Date().toISOString() });
     const generated: Letter = {
       ...current,
@@ -308,6 +323,31 @@ export const mockApi = {
       updatedAt: new Date().toISOString(),
     };
     return wait(updateLetter(generated), 850);
+  },
+
+  async getSpeechCatalog(): Promise<SpeechCatalog> {
+    return wait(structuredClone(mockSpeechCatalog), 80);
+  },
+
+  async generateNarration(
+    id: string,
+    _draft: LetterDraft,
+    voiceId: string,
+  ): Promise<GeneratedNarration> {
+    requireLetter(id);
+    const voice = mockSpeechCatalog.voices.find((item) => item.id === voiceId);
+    if (!voice) throw new Error("不支持的朗读音色");
+    const filePath = "/assets/demo/synthetic-voice-demo.wav";
+    mockNarrations.set(id, {
+      id: "ai-narration",
+      name: "AI 朗读全文",
+      voiceId: voice.id,
+      voiceName: voice.name,
+      contentType: "audio/wav",
+      mediaUrl: filePath,
+      generatedAt: new Date().toISOString(),
+    });
+    return wait({ filePath, contentType: "audio/wav" }, 420);
   },
 
   async updateDraft(id: string, draft: LetterDraft): Promise<Letter> {
@@ -339,6 +379,19 @@ export const mockApi = {
         updatedAt: now,
       }),
       280,
+    );
+  },
+
+  async reissueShare(id: string): Promise<Letter> {
+    const current = requireLetter(id);
+    if (!current.confirmedAt || !current.draft) throw new Error("家书尚未确认发布");
+    return wait(
+      updateLetter({
+        ...current,
+        shareToken: createId("share"),
+        updatedAt: new Date().toISOString(),
+      }),
+      180,
     );
   },
 

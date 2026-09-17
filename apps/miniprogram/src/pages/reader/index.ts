@@ -17,6 +17,8 @@ type DisplaySource = ReaderSource & {
   imageError: string;
   imageRetrying: boolean;
   imageAttempt: number;
+  generated?: boolean;
+  voiceName?: string;
 };
 type DisplayParagraphSource = {
   id: string;
@@ -297,6 +299,20 @@ Page({
       const materials = letter.sources.map((item) =>
         toDisplaySource(item, previousImages.get(item.id)),
       );
+      const narration = letter.narration
+        ? {
+            ...toDisplaySource({
+              id: letter.narration.id,
+              type: "voice",
+              name: letter.narration.name,
+              contentType: letter.narration.contentType,
+              mediaUrl: letter.narration.mediaUrl,
+              mediaExpiresAt: letter.narration.mediaExpiresAt,
+            }),
+            generated: true,
+            voiceName: letter.narration.voiceName,
+          }
+        : undefined;
       const paragraphs = toDisplayParagraphs(letter, materials, this.data.paragraphs);
       const replies = preserveContent
         ? mergeDisplayReplies(this.data.replies, letter.replies)
@@ -310,7 +326,10 @@ Page({
         imageMaterials: materials.filter(
           (item) => item.type === "photo" || item.type === "screenshot",
         ),
-        voiceMaterials: materials.filter((item) => item.type === "voice"),
+        voiceMaterials: [
+          ...(narration ? [narration] : []),
+          ...materials.filter((item) => item.type === "voice"),
+        ],
         replies,
         loadError: "",
       });

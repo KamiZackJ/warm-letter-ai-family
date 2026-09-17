@@ -10,9 +10,10 @@ import {
   GetJobResponseSchema,
   type ClientJob,
 } from "@warm-letter/contracts";
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { FakeAIProvider, type AIProvider } from "./ai.js";
-import type { GenerationJob, Material } from "./domain.js";
+import type { GenerationJob, Letter, Material } from "./domain.js";
 import { ApiError } from "./errors.js";
 import {
   GenerationRateLimiter,
@@ -50,7 +51,6 @@ import {
 } from "./service.js";
 import { UploadCredentialService, uploadCredentialHeader } from "./upload-credential.js";
 import {
-  SPEECH_VOICES,
   SpeechProviderError,
   type SpeechProvider,
   type SpeechTone,
@@ -111,6 +111,7 @@ export interface BuildAppOptions {
   uploadTokenTtlMs?: number;
   publicRateLimits?: PublicRateLimitConfig;
   generationRateLimits?: GenerationRateLimitConfig;
+  speechRateLimits?: GenerationRateLimitConfig;
   replySafetyPolicy?: ReplySafetyPolicy;
   replySafetyTimeoutMs?: number;
   loggerStream?: { write(message: string): void };
@@ -173,6 +174,11 @@ function requireOwnedMaterial(
 function mediaContentType(request: FastifyRequest): string | undefined {
   const value = request.headers["content-type"];
   return typeof value === "string" ? value.split(";", 1)[0]?.trim().toLowerCase() : undefined;
+}
+
+function ownerLetterDto(letter: Letter): Omit<Letter, "narration"> {
+  const { narration: _privateNarration, ...dto } = letter;
+  return dto;
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
@@ -259,6 +265,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     options.generationRateLimits,
     () => (options.now?.() ?? new Date()).getTime(),
   );
+  const speechRateLimiter = new GenerationRateLimiter(
+    options.speechRateLimits,
+    () => (options.now?.() ?? new Date()).getTime(),
+  );
 
   function enforcePublicRateLimit(
     kind: PublicRouteKind,
@@ -282,6 +292,18 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     if (!result.allowed) {
       reply.header("retry-after", String(result.retryAfterSeconds));
       throw new ApiError(429, "RATE_LIMITED", "生成请求过于频繁，请稍后再试");
+    }
+  }
+
+  function enforceSpeechRateLimit(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    userId: string,
+  ): void {
+    const result = speechRateLimiter.check(request.ip, userId);
+    if (!result.allowed) {
+      reply.header("retry-after", String(result.retryAfterSeconds));
+      throw new ApiError(429, "RATE_LIMITED", "朗读生成过于频繁，请稍后再试");
     }
   }
 
@@ -558,20 +580,21 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const user = service.authenticate(tokenFrom(request));
     const body = record(request.body);
     const letter = service.createLetter(user.id, body as unknown as CreateLetterInput);
-    return reply.status(201).send({ letter });
+    return reply.status(201).send({ letter: ownerLetterDto(letter) });
   });
 
   app.get("/v1/letters/:id", async (request) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
-    return { letter: service.getLetter(user.id, id) };
+    return { letter: ownerLetterDto(service.getLetter(user.id, id)) };
   });
 
   app.get("/v1/speech/voices", async (request) => {
     service.authenticate(tokenFrom(request));
     return {
       available: Boolean(speechProvider),
-      voices: SPEECH_VOICES,
+      provider: speechProvider?.name,
+      voices: speechProvider?.voices ?? [],
     };
   });
 
@@ -589,11 +612,45 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       const text = stringValue(body.text, "text")!.normalize("NFC").trim();
       const voiceId = stringValue(body.voiceId, "voiceId") as SpeechVoiceId;
       const tone = stringValue(body.tone, "tone") as SpeechTone;
+      if (body.persist !== undefined && typeof body.persist !== "boolean") {
+        throw new ApiError(400, "INVALID_BODY", "persist 必须是布尔值");
+      }
+      const persist = body.persist === true;
       if (!text || text.length > 4_000) {
         throw new ApiError(400, "INVALID_SPEECH_TEXT", "朗读文字必须为 1 到 4000 个字符");
       }
+      const expectedText = persist ? service.getNarrationText(user.id, id) : undefined;
+      if (expectedText !== undefined && text !== expectedText) {
+        throw new ApiError(409, "DRAFT_CHANGED", "草稿已更新，请重新生成朗读");
+      }
+      enforceSpeechRateLimit(request, reply, user.id);
       try {
         const audio = await speechProvider.synthesize({ text, voiceId, tone });
+        if (persist) {
+          const extension = audio.contentType === "audio/wav" ? ".wav" : ".mp3";
+          const objectKey = `${user.id}/narrations/${id}/${randomUUID()}${extension}`;
+          await objectStorage.put(objectKey, {
+            bytes: Buffer.from(audio.bytes),
+            contentType: audio.contentType,
+          });
+          let previousObjectKey: string | undefined;
+          try {
+            const attached = service.attachNarration(user.id, id, expectedText!, {
+              objectKey,
+              contentType: audio.contentType,
+              voiceId,
+              voiceName:
+                speechProvider.voices.find((voice) => voice.id === voiceId)?.name || voiceId,
+            });
+            previousObjectKey = attached.previousObjectKey;
+          } catch (error) {
+            await objectStorage.delete(objectKey).catch(() => undefined);
+            throw error;
+          }
+          if (previousObjectKey && previousObjectKey !== objectKey) {
+            await objectStorage.delete(previousObjectKey).catch(() => undefined);
+          }
+        }
         return reply
           .header("content-type", audio.contentType)
           .header("content-length", audio.bytes.byteLength)
@@ -614,7 +671,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
     const body = record(request.body);
-    return { letter: service.editLetter(user.id, id, body as unknown as EditLetterInput) };
+    return {
+      letter: ownerLetterDto(service.editLetter(user.id, id, body as unknown as EditLetterInput)),
+    };
   });
 
   app.post("/v1/letters/:id/generate", async (request, reply) => {
@@ -649,6 +708,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     reply.header("cache-control", "no-store");
     return {
       ...published,
+      letter: ownerLetterDto(published.letter),
       readerUrl: `/v1/letters/${published.letter.id}/reader?token=${encodeURIComponent(published.shareToken)}`,
     };
   });
@@ -660,6 +720,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     reply.header("cache-control", "no-store");
     return {
       ...published,
+      letter: ownerLetterDto(published.letter),
       readerUrl: `/v1/letters/${published.letter.id}/reader?token=${encodeURIComponent(published.shareToken)}`,
     };
   });
@@ -683,6 +744,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     return {
       reader: {
         ...reader,
+        narration: reader.narration
+          ? {
+              ...reader.narration,
+              mediaToken: undefined,
+              mediaUrl: `${publicBaseUrl}/v1/letters/${id}/narration/content?mediaToken=${encodeURIComponent(reader.narration.mediaToken)}`,
+            }
+          : undefined,
         sources: reader.sources.map((source) => {
           const { mediaToken, ...publicSource } = source;
           return source.type === "text"
@@ -694,6 +762,24 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         }),
       },
     };
+  });
+
+  app.get("/v1/letters/:id/narration/content", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const mediaToken = queryTokenFrom(request, "mediaToken");
+    enforcePublicRateLimit("media", request, reply, canonicalMediaCredential(mediaToken));
+    const narration = service.getPublicNarration(id, mediaToken);
+    const storedObject = await objectStorage.read(narration.objectKey);
+    if (!storedObject) {
+      throw new ApiError(410, "SHARE_UNAVAILABLE", "这封家书的朗读暂时不可用");
+    }
+    return reply
+      .header("content-type", storedObject.contentType)
+      .header("content-length", storedObject.sizeBytes)
+      .header("cache-control", "private, no-store")
+      .header("referrer-policy", "no-referrer")
+      .header("x-content-type-options", "nosniff")
+      .send(storedObject.bytes);
   });
 
   app.get("/v1/letters/:letterId/sources/:materialId/content", async (request, reply) => {

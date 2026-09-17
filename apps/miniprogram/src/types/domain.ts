@@ -68,11 +68,41 @@ export type ReaderSource = {
   durationSeconds?: number;
 };
 
+export type ReaderNarration = {
+  id: string;
+  name: string;
+  voiceId: string;
+  voiceName: string;
+  contentType: "audio/mpeg" | "audio/wav";
+  mediaUrl: string;
+  mediaExpiresAt?: string;
+  generatedAt: string;
+};
+
+export type SpeechVoice = {
+  id: string;
+  name: string;
+  description: string;
+  gender: "female" | "male";
+};
+
+export type SpeechCatalog = {
+  available: boolean;
+  provider?: string;
+  voices: SpeechVoice[];
+};
+
+export type GeneratedNarration = {
+  filePath: string;
+  contentType: "audio/mpeg" | "audio/wav";
+};
+
 export type ReaderLetter = {
   id: string;
   recipient: string;
   draft: LetterDraft;
   sources: ReaderSource[];
+  narration?: ReaderNarration;
   replies: Reply[];
   publishedAt: string;
   shareToken: string;

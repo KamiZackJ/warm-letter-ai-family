@@ -24,6 +24,7 @@ export interface ApiRuntimeConfig {
   mediaSigningKeys?: Buffer[];
   publicRateLimits: PublicRateLimitConfig;
   generationRateLimits: GenerationRateLimitConfig;
+  speechRateLimits: GenerationRateLimitConfig;
   replySafetyTimeoutMs: number;
   wechatAuthTimeoutMs?: number;
 }
@@ -461,6 +462,12 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
       maxBuckets: integerFromEnv(env, "GENERATION_RATE_LIMIT_MAX_BUCKETS", 10_000),
       perIp: integerFromEnv(env, "GENERATION_RATE_LIMIT_PER_IP", 10),
       perUser: integerFromEnv(env, "GENERATION_RATE_LIMIT_PER_USER", 3),
+    },
+    speechRateLimits: {
+      windowMs: integerFromEnv(env, "SPEECH_RATE_LIMIT_WINDOW_SECONDS", 60) * 1000,
+      maxBuckets: integerFromEnv(env, "SPEECH_RATE_LIMIT_MAX_BUCKETS", 10_000),
+      perIp: integerFromEnv(env, "SPEECH_RATE_LIMIT_PER_IP", 6),
+      perUser: integerFromEnv(env, "SPEECH_RATE_LIMIT_PER_USER", 3),
     },
     replySafetyTimeoutMs: integerFromEnv(env, "REPLY_SAFETY_TIMEOUT_MS", 3_000),
     wechatAuthTimeoutMs,

@@ -52,6 +52,12 @@ describe("API runtime configuration", () => {
         perIp: 10,
         perUser: 3,
       },
+      speechRateLimits: {
+        windowMs: 60_000,
+        maxBuckets: 10_000,
+        perIp: 6,
+        perUser: 3,
+      },
     });
     expect(
       loadApiRuntimeConfig({
@@ -136,6 +142,34 @@ describe("API runtime configuration", () => {
       { GENERATION_RATE_LIMIT_MAX_BUCKETS: "0" },
       { GENERATION_RATE_LIMIT_PER_IP: "0" },
       { GENERATION_RATE_LIMIT_PER_USER: "0" },
+    ]) {
+      expect(() => loadApiRuntimeConfig({ ...demoEnvironment, ...environment })).toThrow(
+        "must be an integer between 1",
+      );
+    }
+  });
+
+  it("loads and validates speech cost rate limits", () => {
+    expect(
+      loadApiRuntimeConfig({
+        ...demoEnvironment,
+        SPEECH_RATE_LIMIT_WINDOW_SECONDS: "30",
+        SPEECH_RATE_LIMIT_MAX_BUCKETS: "500",
+        SPEECH_RATE_LIMIT_PER_IP: "4",
+        SPEECH_RATE_LIMIT_PER_USER: "2",
+      }).speechRateLimits,
+    ).toEqual({
+      windowMs: 30_000,
+      maxBuckets: 500,
+      perIp: 4,
+      perUser: 2,
+    });
+
+    for (const environment of [
+      { SPEECH_RATE_LIMIT_WINDOW_SECONDS: "0" },
+      { SPEECH_RATE_LIMIT_MAX_BUCKETS: "0" },
+      { SPEECH_RATE_LIMIT_PER_IP: "0" },
+      { SPEECH_RATE_LIMIT_PER_USER: "0" },
     ]) {
       expect(() => loadApiRuntimeConfig({ ...demoEnvironment, ...environment })).toThrow(
         "must be an integer between 1",

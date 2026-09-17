@@ -1,0 +1,92 @@
+<view class="page preview-page">
+  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
+    <text class="environment-label">{{environmentLabel}}</text>
+    <text class="environment-detail">{{environmentDetail}}</text>
+  </view>
+  <text class="eyebrow">寄出前的最后一步</text>
+  <text class="page-title">先看看家人会收到什么</text>
+  <text class="page-subtitle">文字、称呼和朗读都可以在寄出前确认。</text>
+
+  <view wx:if="{{loading}}" class="empty-state preview-loading" aria-live="polite">正在排好这封家书…</view>
+  <view wx:elif="{{loadError}}" class="preview-error" aria-role="alert" aria-live="assertive">
+    <text class="preview-error-title">预览暂时打不开</text>
+    <text class="preview-error-detail">{{loadError}}</text>
+    <button class="primary-button" bindtap="retryLoad">重新打开</button>
+  </view>
+
+  <block wx:elif="{{letter && letter.draft}}">
+    <view class="recipient-strip">
+      <view>
+        <text class="recipient-kicker">信里写给</text>
+        <text class="recipient-name">{{letter.intent.recipient}}</text>
+      </view>
+      <text class="recipient-next">寄出时再选择具体微信好友</text>
+    </view>
+
+    <view class="letter-paper" aria-label="家书正文预览">
+      <text class="letter-heading">{{letter.draft.title}}</text>
+      <text class="letter-salutation">{{letter.draft.salutation}}</text>
+      <text wx:for="{{letter.draft.paragraphs}}" wx:key="id" class="letter-paragraph">{{item.text}}</text>
+      <text class="letter-closing">{{letter.draft.closing}}</text>
+      <text class="letter-signature">{{letter.draft.signature}}</text>
+    </view>
+
+    <scroll-view wx:if="{{photos.length > 0}}" class="preview-photos" scroll-x enable-flex>
+      <button wx:for="{{photos}}" wx:key="id" class="preview-photo-button" aria-label="查看照片：{{item.name}}" data-path="{{item.localPath}}" bindtap="previewPhoto">
+        <image class="preview-photo" src="{{item.localPath}}" mode="aspectFill" />
+      </button>
+    </scroll-view>
+
+    <view wx:if="{{!shareReady}}" class="revision-band">
+      <text class="band-heading">文字还不合适？</text>
+      <text class="band-copy">可以回去逐段修改，也可以让 AI 换一种表达。</text>
+      <view class="revision-actions">
+        <button class="secondary-button" bindtap="editLetter">返回修改</button>
+        <button class="secondary-button regenerate-action" loading="{{regenerating}}" disabled="{{regenerating}}" bindtap="regenerate">{{regenerating ? '正在换一版…' : '换一版文字'}}</button>
+      </view>
+    </view>
+
+    <view class="narration-band">
+      <text class="band-heading">生成家书朗读</text>
+      <text class="band-copy">适合不方便看字的家人。声音由 AI 合成，不是本人声音。</text>
+
+      <block wx:if="{{speechCatalog.available && speechCatalog.voices.length > 0}}">
+        <text class="control-label">朗读声音</text>
+        <picker class="voice-picker" mode="selector" range="{{speechCatalog.voices}}" range-key="name" value="{{selectedVoiceIndex}}" disabled="{{shareReady}}" bindchange="chooseVoice">
+          <view class="voice-picker-value">
+            <text>{{speechCatalog.voices[selectedVoiceIndex].name}}</text>
+            <text class="voice-description">{{speechCatalog.voices[selectedVoiceIndex].description}} ›</text>
+          </view>
+        </picker>
+        <button class="narration-generate" loading="{{speechLoading}}" disabled="{{speechLoading || shareReady}}" bindtap="generateNarration">
+          {{speechLoading ? '正在生成朗读…' : (speechPath ? '重新生成朗读' : '生成并试听朗读')}}
+        </button>
+        <button wx:if="{{speechPath}}" class="narration-play {{speechPlaying ? 'is-playing' : ''}}" aria-label="{{speechPlaying ? '暂停家书朗读' : '播放家书朗读'}}" aria-pressed="{{speechPlaying}}" bindtap="toggleNarration">
+          <view class="play-symbol" aria-hidden="true">{{speechPlaying ? 'Ⅱ' : '▶'}}</view>
+          <view class="play-copy">
+            <text class="play-title">{{speechPlaying ? '暂停朗读' : '播放整封家书'}}</text>
+            <text class="play-detail">{{speechCatalog.voices[selectedVoiceIndex].name}} · AI 合成</text>
+          </view>
+        </button>
+      </block>
+      <view wx:else class="speech-unavailable">朗读服务暂时不可用，仍可继续寄出文字家书。</view>
+      <text wx:if="{{speechError}}" class="speech-error" aria-role="alert" aria-live="assertive">{{speechError}}</text>
+    </view>
+
+    <view class="send-band">
+      <text class="band-heading">寄给微信好友</text>
+      <block wx:if="{{!shareReady}}">
+        <text class="band-copy">先确认内容。确认后会出现“选择微信好友寄出”。</text>
+        <button class="primary-button confirm-button" loading="{{confirming}}" disabled="{{confirming || regenerating || speechLoading}}" bindtap="confirmForShare">{{confirming ? '正在确认…' : '确认内容，准备寄出'}}</button>
+      </block>
+      <block wx:else>
+        <view class="ready-message" aria-live="polite">
+          <text class="ready-mark">✓</text>
+          <text>内容已确认，可以交给微信选择好友。</text>
+        </view>
+        <button class="share-button" open-type="share">选择微信好友寄出</button>
+        <text class="share-helper">暖笺不会读取你的好友列表，具体好友由你在微信面板中选择。</text>
+      </block>
+    </view>
+  </block>
+</view>
