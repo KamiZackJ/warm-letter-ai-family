@@ -228,9 +228,9 @@ describe("OpenAICompatibleChatProvider", () => {
     expect(calls).toHaveLength(2);
     for (const [request] of calls) {
       const systemPrompt = JSON.stringify(request.messages[0]?.content);
-      expect(systemPrompt).toContain("开会");
-      expect(systemPrompt).toContain("长会");
-      expect(systemPrompt).toContain("数量、容量、品牌");
+      expect(systemPrompt).toContain("原话和可见事实清单");
+      expect(systemPrompt).toContain("程度、数量或时长");
+      expect(systemPrompt).toContain("数字、量词、程度词");
       expect(systemPrompt).toContain("画面边缘人物");
     }
   });

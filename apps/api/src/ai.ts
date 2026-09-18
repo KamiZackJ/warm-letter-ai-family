@@ -547,10 +547,12 @@ const chatWritingDirections = [
 // This is repeated in both drafting and review prompts because either call can
 // introduce unsupported modifiers while trying to make the letter sound warm.
 const factualityGuardrails = [
-  "不得把模糊或未量化的表述升级为更强的程度、数量或时长：素材只写‘开会’，不能改成‘长会’；只写‘有点累’，不能升级为‘很累’或‘累坏了’。",
-  "不得把素材没有明确给出的数量、容量、品牌、时间、频率、因果或结果补出来；素材只写‘饮品’，不能自行补充品牌、容量或数量。",
-  "‘感觉、可能、似乎、看到’等不确定或感受性表达不得改成确定发生的事实；不得把联想、常识或画面边缘内容写进正文。",
+  "事实层只允许复制或轻微改写素材原文中已经出现的名词、动词、数字、量词、程度词和时间词；素材没有出现的具体词语不得新增。",
+  "不得把模糊或未量化的表述升级为更强的程度、数量或时长，也不得补出素材没有明确给出的品牌、容量、频率、因果或结果。",
+  "‘感觉、可能、似乎、看到’等不确定或感受性表达必须保留原有不确定程度；不得把联想、常识或画面边缘内容写进正文。",
   "图片只描述清晰可见的物体、文字和价格；不要识别、猜测或描述画面边缘人物的身份。",
+  "先在内部建立每份素材的原话和可见事实清单，逐句核对；无法找到直接依据时宁可删掉该细节，不要用更强的近义词替换。",
+  "不要新增表示惊讶、评价、转折或程度的副词；素材没有明确表达的态度，只保留可核对的事实。",
 ] as const;
 
 function maxTokensForLetterLength(length: LetterSettings["length"]): number {
