@@ -213,6 +213,28 @@ describe("OpenAICompatibleChatProvider", () => {
     }
   });
 
+  it("guards against unsupported duration, intensity, quantity, and edge-person expansions", async () => {
+    const client = compatibleClient([textId]);
+    const provider = new OpenAICompatibleChatProvider({
+      apiKey: "test-key",
+      model: "proxy-model",
+      baseURL: "https://proxy.example.test/v1",
+      client,
+    });
+
+    await provider.generateLetter(inputWith([textMaterial()]));
+
+    const calls = vi.mocked(client.chat.completions.create).mock.calls;
+    expect(calls).toHaveLength(2);
+    for (const [request] of calls) {
+      const systemPrompt = JSON.stringify(request.messages[0]?.content);
+      expect(systemPrompt).toContain("开会");
+      expect(systemPrompt).toContain("长会");
+      expect(systemPrompt).toContain("数量、容量、品牌");
+      expect(systemPrompt).toContain("画面边缘人物");
+    }
+  });
+
   it("sends image bytes only when native image input is explicitly enabled", async () => {
     const client = compatibleClient([imageId]);
     const provider = new OpenAICompatibleChatProvider({
