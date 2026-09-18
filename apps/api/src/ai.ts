@@ -128,6 +128,7 @@ type OpenAIImageDetail = "low" | "high" | "auto" | "original";
 
 const defaultOpenAITimeoutMs = 60_000;
 const defaultOpenAIMaxRetries = 2;
+const defaultCompatibleMaxRetries = 1;
 const defaultMaxTotalMediaBytes = 12 * 1024 * 1024;
 const maximumConfigurableTotalMediaBytes = 25 * 1024 * 1024;
 const imageDetails = new Set<OpenAIImageDetail>(["low", "high", "auto", "original"]);
@@ -264,24 +265,29 @@ async function preloadMaterialAssets(
   maximumBytes: number,
 ): Promise<Map<string, MaterialAsset>> {
   const assets = new Map<string, MaterialAsset>();
+  const mediaMaterials = input.materials.filter((material) => material.type !== "text");
+  const loadedAssets = await Promise.all(
+    mediaMaterials.map(async (material) => {
+      if (!material.objectKey || !assetReader) {
+        throw new AIProviderError(
+          "AI_MATERIAL_UNAVAILABLE",
+          `素材 ${material.id} 缺少可读取的媒体对象`,
+          false,
+        );
+      }
+      const asset = await assetReader.read(material.objectKey);
+      if (!asset) {
+        throw new AIProviderError(
+          "AI_MATERIAL_UNAVAILABLE",
+          `素材 ${material.id} 的媒体对象不存在`,
+          false,
+        );
+      }
+      return { material, asset };
+    }),
+  );
   let totalMediaBytes = 0;
-  for (const material of input.materials) {
-    if (material.type === "text") continue;
-    if (!material.objectKey || !assetReader) {
-      throw new AIProviderError(
-        "AI_MATERIAL_UNAVAILABLE",
-        `素材 ${material.id} 缺少可读取的媒体对象`,
-        false,
-      );
-    }
-    const asset = await assetReader.read(material.objectKey);
-    if (!asset) {
-      throw new AIProviderError(
-        "AI_MATERIAL_UNAVAILABLE",
-        `素材 ${material.id} 的媒体对象不存在`,
-        false,
-      );
-    }
+  for (const { material, asset } of loadedAssets) {
     totalMediaBytes = consumeMediaBudget(totalMediaBytes, asset, maximumBytes);
     assets.set(material.id, asset);
   }
@@ -535,6 +541,13 @@ const chatWritingDirections = [
   "采用短段落和留白，少形容词，多具体事实",
   "像给熟悉的人发一段近况，转折自然但不假设多久没见",
 ] as const;
+
+function maxTokensForLetterLength(length: LetterSettings["length"]): number {
+  // Keep JSON responses bounded so a short family note does not wait for an
+  // unnecessarily large completion. The schema and factual checks remain the
+  // final authority on what can be accepted.
+  return length === "short" ? 720 : length === "long" ? 1_500 : 1_050;
+}
 
 function parseJsonLetterOutput(content: string | null | undefined): LetterOutput {
   if (!content) {
@@ -832,7 +845,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
 
   constructor(options: OpenAICompatibleChatProviderOptions) {
     const timeoutMs = options.timeoutMs ?? defaultOpenAITimeoutMs;
-    const maxRetries = options.maxRetries ?? defaultOpenAIMaxRetries;
+    const maxRetries = options.maxRetries ?? defaultCompatibleMaxRetries;
     if (!options.apiKey.trim() || !options.model.trim()) {
       throw new Error("OpenAI-compatible apiKey 和 model 不能为空");
     }
@@ -917,6 +930,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
       const response = await this.client.chat.completions.create({
         model: this.model,
         temperature: 0.72,
+        max_tokens: maxTokensForLetterLength(input.settings.length),
         ...storeOption,
         ...responseFormat,
         messages: [
@@ -955,6 +969,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
       const reviewResponse = await this.client.chat.completions.create({
         model: this.model,
         temperature: 0,
+        max_tokens: maxTokensForLetterLength(input.settings.length),
         ...storeOption,
         ...responseFormat,
         messages: [
@@ -1379,7 +1394,7 @@ export function createAIProviderFromEnv(
       maxRetries: integerFromEnv(
         env,
         "OPENAI_COMPATIBLE_MAX_RETRIES",
-        defaultOpenAIMaxRetries,
+        defaultCompatibleMaxRetries,
         0,
         5,
       ),

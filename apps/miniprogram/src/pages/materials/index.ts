@@ -2,6 +2,7 @@ import { api } from "../../services/api";
 import { createDemoMaterials } from "../../config/demo-materials";
 import { environment, environmentView } from "../../config/env";
 import { resolveDemoRequest } from "../../config/runtime-environment";
+import { prepareImageForUpload } from "../../utils/media-preparation";
 import type { Material, MaterialType } from "../../types/domain";
 import { createId } from "../../utils/id";
 import {
@@ -318,11 +319,14 @@ Page({
 
     if (!result || this.disposed) return;
     if (retryId) this.removeActionError(retryId);
-    const created = result.tempFiles.map((file, index) => ({
+    const preparedPaths = await Promise.all(
+      result.tempFiles.map((file) => prepareImageForUpload(file.tempFilePath, type)),
+    );
+    const created = preparedPaths.map((localPath, index) => ({
       id: createId(type),
       type,
       name: `${TYPE_LABELS[type]} ${this.data.materials.length + index + 1}`,
-      localPath: file.tempFilePath,
+      localPath,
       createdAt: new Date().toISOString(),
     }));
     if (created.length > 0) {

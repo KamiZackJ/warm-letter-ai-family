@@ -6,6 +6,64 @@
   margin-top: 32rpx;
 }
 
+.generation-progress {
+  margin-top: 28rpx;
+  padding: 24rpx;
+  border: 2rpx solid #c9ddd4;
+  border-radius: 10rpx;
+  background: #f5faf7;
+}
+
+.generation-progress-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.generation-stage {
+  color: #245a4b;
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.generation-time {
+  flex: none;
+  color: #5b6963;
+  font-size: 23rpx;
+}
+
+.generation-track {
+  height: 12rpx;
+  margin-top: 18rpx;
+  overflow: hidden;
+  border-radius: 6rpx;
+  background: #dfe9e3;
+}
+
+.generation-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #438a72;
+  transition: width 600ms ease;
+}
+
+.generation-hint {
+  display: block;
+  margin-top: 16rpx;
+  color: #52645c;
+  font-size: 24rpx;
+  line-height: 1.55;
+}
+
+.generation-later {
+  min-height: 88rpx;
+  margin-top: 16rpx;
+  padding: 0 20rpx;
+  color: #245a4b;
+  border: 2rpx solid #9bbcaf;
+}
+
 .compact-textarea {
   min-height: 128rpx;
 }

@@ -188,8 +188,29 @@ describe("OpenAICompatibleChatProvider", () => {
         model: "proxy-model",
         store: false,
         response_format: { type: "json_object" },
+        max_tokens: 1_050,
       }),
     );
+  });
+
+  it("keeps short-letter completions bounded on both the draft and review calls", async () => {
+    const client = compatibleClient([textId]);
+    const provider = new OpenAICompatibleChatProvider({
+      apiKey: "test-key",
+      model: "proxy-model",
+      baseURL: "https://proxy.example.test/v1",
+      client,
+    });
+
+    const input = inputWith([textMaterial()]);
+    await provider.generateLetter({
+      ...input,
+      settings: { ...input.settings, length: "short" },
+    });
+
+    for (const [request] of vi.mocked(client.chat.completions.create).mock.calls) {
+      expect(request).toHaveProperty("max_tokens", 720);
+    }
   });
 
   it("sends image bytes only when native image input is explicitly enabled", async () => {

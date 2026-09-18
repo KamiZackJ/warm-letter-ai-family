@@ -7,6 +7,18 @@
   <text class="page-title">这封信想说什么</text>
   <text class="page-subtitle">你提供方向，AI 只负责整理草稿。生成后仍要由你逐段确认。</text>
 
+  <view wx:if="{{generating}}" class="generation-progress" aria-live="polite" aria-atomic="true">
+    <view class="generation-progress-heading">
+      <text class="generation-stage">{{generationStageLabel}}</text>
+      <text class="generation-time">已等待 {{generationElapsedSeconds}} 秒</text>
+    </view>
+    <view class="generation-track" aria-hidden="true">
+      <view class="generation-fill" style="width: {{generationProgress}}%;"></view>
+    </view>
+    <text class="generation-hint">{{generationStageHint}}</text>
+    <button wx:if="{{generationElapsedSeconds >= 90 || generationTimedOut}}" class="quiet-button generation-later" bindtap="continueLater">先去首页，稍后查看</button>
+  </view>
+
   <view class="section form-section">
     <text class="field-label">信里怎样称呼对方</text>
     <input class="input" aria-label="信里怎样称呼对方" maxlength="20" placeholder="例如：妈妈、爷爷、爸爸妈妈" value="{{recipient}}" bindinput="updateRecipient" />
@@ -53,6 +65,6 @@
   </view>
 
   <view class="sticky-actions">
-    <button class="primary-button" loading="{{generating}}" disabled="{{generating}}" bindtap="generate">生成家书草稿</button>
+    <button class="primary-button" loading="{{generating}}" disabled="{{generating || generationTimedOut}}" bindtap="generate">{{generating ? generationStageLabel : (generationTimedOut ? '已在后台生成' : '生成家书草稿')}}</button>
   </view>
 </view>

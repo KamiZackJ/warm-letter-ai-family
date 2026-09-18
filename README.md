@@ -20,6 +20,8 @@
 
 [真实 AI Provider 探测与上线交接（9 月 16 日更新）](./docs/REAL_AI_PROVIDER_HANDOFF_2026-09-15.md)：记录 Qwen 双模型合成探针、历史 Gemini 代理 `503`、密钥轮换、隐私边界和上线门禁。
 
+[家书生成性能与等待体验说明（9 月 18 日更新）](./docs/GENERATION_PERFORMANCE.md)：记录真实 Qwen 延迟原因、已落地的压缩/输出上限/后台恢复，以及重新部署和体验版复测步骤。
+
 [观看 2 分 15 秒公开脱敏演示视频](https://kamizackj.github.io/warm-letter-ai-family/warm-letter-public-demo.mp4)，可先快速了解队友固定审核稿如何接入素材选择、来源复核、确认快照与家人回复闭环。
 
 体验顺序：选择素材，生成并比较 A/B/C 三版家书；编辑后核对段落来源并确认；进入收信端切换字号、展开来源并发送一条本地回复。公开页面只展示审核后的文字结构，不包含队友真实照片、语音或访问凭据，也不调用实时 OpenAI。
@@ -38,6 +40,7 @@
 - [2026-09-12 主域名绑定执行状态](./docs/DOMAIN_STATUS_2026-09-12.md)
 - [2026-09-15 公网 API 部署与移交状态](./docs/API_DEPLOYMENT_HANDOFF_2026-09-15.md)
 - [真实 AI Provider 探测与上线交接（9 月 16 日更新）](./docs/REAL_AI_PROVIDER_HANDOFF_2026-09-15.md)
+- [家书生成性能与等待体验说明（9 月 18 日更新）](./docs/GENERATION_PERFORMANCE.md)
 - [快手与 iCAN 可直接粘贴的提交文案](./docs/contest/FAST_SUBMISSION_COPY.md)
 
 队内受控压缩包除了上述文档，还包含队友照片的物理裁切派生图、授权示例语音、A/B/C 固定审核稿、离线交互闭环、长图适配器和完整性 manifest。这些受控媒体不进入公开 Git 或 Pages。
@@ -51,7 +54,7 @@
 - AI 与语音适配：API 已包含 OpenAI 多模态、DeepSeek 纯文本、独立命名的 OpenAI-compatible 多模态边界、豆包 Seed-TTS 适配层和 Qwen `qwen3-tts-flash` 家书朗读；公网演示 API 已启用阿里云百炼北京地域的 `qwen3.8-flash` 家书模型与 `qwen3.5-omni-flash` 流式转写，并通过服务器合成文字、图片和音频闭环。公网 Qwen 朗读已部署 `11c545b`，服务器真实短句探针返回 `audio/wav`、`RIFF` 文件头和 88,364 字节。该结果不替代密钥轮换、授权四素材小程序 E2E、隐私费用审核或生产放行，也不代表 GitHub Pages 已接入实时模型。
 - 动态长图：`scripts/create-confirmed-draft-long-image.ps1` 可从 API/共享契约的 `confirmedDraft` 生成 1080px 成品和审计 manifest；当前仍是离线渲染工具，尚未接入生产任务或短片流水线。
 - 共享契约：Zod 运行时校验、TypeScript 类型和状态转换规则。
-- 自动化基线：2026-09-17 当前工作树 contracts `17`、Web `75`、小程序 `143`、API `192`，共 `427` 项；已在 Node `22.23.2` 下通过全仓类型检查、测试和构建。该工作树推送后的远端 CI 状态仍以 GitHub 为准。
+- 自动化基线：2026-09-18 当前工作树 contracts `17`、Web `75`、小程序 `147`、API `193`，共 `432` 项；已在本机完成全仓类型检查、测试和构建（本机 Node 24 仅有引擎警告，规范运行时为 Node `22.23.2`）。该工作树推送后的远端 CI 状态仍以 GitHub 为准。
 
 ## 仓库结构
 
