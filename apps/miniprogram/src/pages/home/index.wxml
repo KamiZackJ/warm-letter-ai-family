@@ -1,13 +1,25 @@
-<view class="page home-page">
-  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
-    <text class="environment-label">{{environmentLabel}}</text>
-    <text class="environment-detail">{{environmentDetail}}</text>
+<template name="guideBubble">
+  <view class="guide-bubble guide-bubble-step-{{guideStep}}">
+    <view aria-live="polite">
+      <text class="guide-progress">第 {{guideStep + 1}} 步，共 {{guideStepCount}} 步</text>
+      <text class="guide-body">{{guideContent.body}}</text>
+    </view>
+    <view class="guide-actions">
+      <button class="guide-skip" bindtap="dismissGuide">跳过</button>
+      <button wx:if="{{guideStep < guideStepCount - 1}}" class="guide-next" bindtap="nextGuideStep">下一步</button>
+      <button wx:else class="guide-next" bindtap="dismissGuide">知道了</button>
+    </view>
   </view>
+</template>
+
+<view class="page home-page">
   <view class="brand-band">
     <text class="brand-name">暖笺</text>
     <text class="brand-line">把没来得及说的话，写成一封家书。</text>
-    <button class="primary-button main-action" loading="{{startingFlow}}" disabled="{{startingFlow}}" bindtap="startLetter">{{startingFlow ? '正在打开…' : '写一封家书'}}</button>
-    <button wx:if="{{demoEnabled}}" class="demo-link" disabled="{{startingFlow}}" bindtap="startDemo">快速演示完整流程</button>
+    <view id="guide-write" class="write-entry">
+      <button class="primary-button main-action" loading="{{startingFlow}}" disabled="{{startingFlow}}" bindtap="startLetter">{{startingFlow ? '正在打开…' : '写一封家书'}}</button>
+      <template wx:if="{{guideVisible && guideStep === 0}}" is="guideBubble" data="{{guideStep, guideStepCount, guideContent}}" />
+    </view>
   </view>
 
   <view class="trust-row" aria-label="隐私与内容说明">
@@ -21,16 +33,17 @@
     </view>
   </view>
 
-  <view class="section recent-section">
+  <view id="guide-recent" class="section recent-section">
     <view class="section-heading">
       <text class="section-title">最近家书</text>
-      <text class="section-note">草稿会保存在本机</text>
+      <text class="section-note">可在这里继续写</text>
     </view>
+    <template wx:if="{{guideVisible && guideStep === 1}}" is="guideBubble" data="{{guideStep, guideStepCount, guideContent}}" />
 
     <view wx:if="{{loadError}}" class="recent-error" aria-role="alert" aria-live="assertive">
       <text class="recent-error-title">暂时无法读取最近家书</text>
       <text class="recent-error-message">{{loadError}}</text>
-      <text class="recent-error-hint">可以继续写新家书；已保存的家书不会因此删除。</text>
+      <text class="recent-error-hint">可以重新读取，也可以先写一封新家书。</text>
       <button
         class="secondary-button recent-retry"
         loading="{{loading}}"
@@ -38,7 +51,7 @@
         bindtap="retryLetters"
       >重新读取</button>
     </view>
-    <view wx:if="{{loading && recentLetters.length === 0}}" class="empty-state" aria-live="polite">正在整理家书…</view>
+    <view wx:if="{{loading && recentLetters.length === 0}}" class="empty-state" aria-live="polite">正在读取最近家书…</view>
     <view wx:elif="{{recentLetters.length === 0 && !loadError}}" class="empty-state">
       还没有家书。添加几张照片或一段近况，就可以开始。
     </view>
@@ -59,5 +72,9 @@
         <text class="row-arrow" aria-hidden="true">›</text>
       </button>
     </view>
+  </view>
+  <view id="guide-replay" class="guide-replay">
+    <button class="guide-entry" disabled="{{startingFlow}}" bindtap="openGuide">使用指南</button>
+    <template wx:if="{{guideVisible && guideStep === 2}}" is="guideBubble" data="{{guideStep, guideStepCount, guideContent}}" />
   </view>
 </view>

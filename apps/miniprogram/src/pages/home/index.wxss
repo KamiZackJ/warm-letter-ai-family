@@ -2,6 +2,112 @@
   padding-bottom: calc(56rpx + env(safe-area-inset-bottom));
 }
 
+.guide-bubble {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  margin-top: 12px;
+  padding: 14px 16px 10px;
+  border: 1px solid #b9cbbf;
+  border-radius: 10px;
+  background: #e8f0e9;
+  color: #244f43;
+}
+
+.guide-bubble::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 24px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid #b9cbbf;
+  border-left: 1px solid #b9cbbf;
+  background: #e8f0e9;
+  transform: rotate(45deg);
+}
+
+.guide-bubble-step-0::before,
+.guide-bubble-step-2::before {
+  left: calc(50% - 5px);
+}
+
+.guide-progress,
+.guide-body {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.guide-progress {
+  color: #535955;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.guide-body {
+  margin-top: 6px;
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.guide-actions > button.guide-skip,
+.guide-actions > button.guide-next {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
+  min-width: 76px;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.guide-skip {
+  background: transparent;
+  color: #244f43;
+}
+
+.guide-next {
+  background: #244f43;
+  color: #ffffff;
+}
+
+.guide-replay {
+  margin-top: 28px;
+}
+
+.guide-entry {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  background: transparent;
+  color: #244f43;
+  font-size: 18px;
+  line-height: 1.5;
+  text-decoration: underline;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.guide-next:focus,
+.guide-skip:focus,
+.guide-entry:focus {
+  outline: 2px solid #244f43;
+  outline-offset: 3px;
+}
+
 .brand-band {
   padding: 56rpx 0 44rpx;
   border-bottom: 2rpx solid #d8d5cd;
@@ -24,21 +130,13 @@
   line-height: 1.7;
 }
 
-.main-action {
-  width: 100%;
+.write-entry {
   margin-top: 48rpx;
 }
 
-.demo-link {
+.home-page .write-entry > button.main-action {
   width: 100%;
-  min-height: 88rpx;
-  margin-top: 10rpx;
-  padding: 16rpx 20rpx;
-  background: transparent;
-  color: #52645e;
-  font-size: 25rpx;
-  line-height: 1.35;
-  text-decoration: underline;
+  margin: 0;
 }
 
 .trust-row {

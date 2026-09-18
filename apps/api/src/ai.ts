@@ -19,6 +19,7 @@ import type {
 import type { ResponseInputContent } from "openai/resources/responses/responses";
 import { z } from "zod";
 import type { AudioTranscript, LetterDraft, LetterSettings, Material } from "./domain.js";
+import { OperationDeadline } from "./deadline.js";
 
 const defaultLetterSignature = "想念你的我";
 
@@ -135,6 +136,7 @@ type OpenAIImageDetail = "low" | "high" | "auto" | "original";
 const defaultOpenAITimeoutMs = 60_000;
 const defaultOpenAIMaxRetries = 2;
 const defaultCompatibleMaxRetries = 1;
+const defaultCompatibleGenerationTimeoutMs = 150_000;
 const defaultMaxTotalMediaBytes = 12 * 1024 * 1024;
 const maximumConfigurableTotalMediaBytes = 25 * 1024 * 1024;
 const imageDetails = new Set<OpenAIImageDetail>(["low", "high", "auto", "original"]);
@@ -776,6 +778,7 @@ export interface OpenAICompatibleChatProviderOptions {
   maxTranscriptCharacters?: number;
   maxTotalMediaBytes?: number;
   timeoutMs?: number;
+  generationTimeoutMs?: number;
   maxRetries?: number;
   assetReader?: MaterialAssetReader;
   client?: OpenAI;
@@ -877,11 +880,13 @@ export class OpenAICompatibleChatProvider implements AIProvider {
   private readonly verificationProfile: OpenAICompatibleVerificationProfile;
   private readonly maxTranscriptCharacters: number;
   private readonly transcriptionTimeoutMs: number;
+  private readonly generationTimeoutMs: number;
   private readonly maxTotalMediaBytes: number;
   private readonly assetReader?: MaterialAssetReader;
 
   constructor(options: OpenAICompatibleChatProviderOptions) {
     const timeoutMs = options.timeoutMs ?? defaultOpenAITimeoutMs;
+    const generationTimeoutMs = options.generationTimeoutMs ?? defaultCompatibleGenerationTimeoutMs;
     const maxRetries = options.maxRetries ?? defaultCompatibleMaxRetries;
     if (!options.apiKey.trim() || !options.model.trim()) {
       throw new Error("OpenAI-compatible apiKey 和 model 不能为空");
@@ -889,11 +894,15 @@ export class OpenAICompatibleChatProvider implements AIProvider {
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 300_000) {
       throw new Error("OpenAI-compatible timeoutMs 必须是 1000 到 300000 之间的整数");
     }
+    if (!Number.isSafeInteger(generationTimeoutMs) || generationTimeoutMs < 1_000 || generationTimeoutMs > 300_000) {
+      throw new Error("OpenAI-compatible generationTimeoutMs 必须是 1000 到 300000 之间的整数");
+    }
     if (!Number.isSafeInteger(maxRetries) || maxRetries < 0 || maxRetries > 5) {
       throw new Error("OpenAI-compatible maxRetries 必须是 0 到 5 之间的整数");
     }
     const baseURL = compatibleBaseURL(options.baseURL);
     this.transcriptionTimeoutMs = timeoutMs;
+    this.generationTimeoutMs = generationTimeoutMs;
     this.imageMode = options.imageMode ?? "disabled";
     this.audioMode = options.audioMode ?? "disabled";
     this.transcriptionModel = options.transcriptionModel?.trim() || undefined;
@@ -956,8 +965,27 @@ export class OpenAICompatibleChatProvider implements AIProvider {
   }
 
   async generateLetter(input: GenerateLetterInput): Promise<LetterDraft> {
+    const deadline = new OperationDeadline(
+      this.generationTimeoutMs,
+      () => new AIProviderError("AI_PROVIDER_TIMEOUT", "家书生成超时，请稍后重试", true),
+    );
+    const boundedInput: GenerateLetterInput = {
+      ...input,
+      onTranscript: (transcript) => {
+        deadline.check();
+        input.onTranscript?.(transcript);
+      },
+    };
     try {
-      const materialContent = await this.buildMaterialContent(input);
+      return await deadline.wait(() => this.generateWithinDeadline(boundedInput, deadline));
+    } finally {
+      deadline.dispose();
+    }
+  }
+
+  private async generateWithinDeadline(input: GenerateLetterInput, deadline: OperationDeadline): Promise<LetterDraft> {
+    try {
+      const materialContent = await this.buildMaterialContent(input, deadline);
       const writingDirection =
         chatWritingDirections[(Math.max(1, input.version) - 1) % chatWritingDirections.length];
       const responseFormat =
@@ -1027,7 +1055,9 @@ export class OpenAICompatibleChatProvider implements AIProvider {
           },
         ],
       };
-      let response = await this.client.chat.completions.create(draftRequest);
+      let response = await deadline.wait(() => this.client.chat.completions.create(draftRequest, {
+        signal: deadline.signal,
+      }));
       const firstChoice = response.choices[0];
       const firstContent = firstChoice?.message.content;
       let completedEmptyDraft = false;
@@ -1047,24 +1077,33 @@ export class OpenAICompatibleChatProvider implements AIProvider {
         }
       }
       if (completedEmptyDraft) {
-        response = await this.client.chat.completions.create({
-          ...draftRequest,
-          temperature: 0,
-          messages: draftRequest.messages.map((message, index) =>
-            index === 0 && message.role === "system" && typeof message.content === "string"
-              ? {
-                  ...message,
-                  content: `${message.content}\n上次未返回家书内容。请根据相同素材输出完整 JSON，必须包含 title、greeting、paragraphs（每段含 text、sourceRefs）、closing 四个字段，不得输出空对象。`,
-                }
-              : message,
-          ),
-        }, { maxRetries: 0, timeout: 30_000, signal: AbortSignal.timeout(30_000) });
+        const recoveryDeadline = new OperationDeadline(
+          30_000,
+          () => new AIProviderError("AI_PROVIDER_TIMEOUT", "家书生成超时，请稍后重试", true),
+          deadline.signal,
+        );
+        try {
+          response = await recoveryDeadline.wait(() => this.client.chat.completions.create({
+            ...draftRequest,
+            temperature: 0,
+            messages: draftRequest.messages.map((message, index) =>
+              index === 0 && message.role === "system" && typeof message.content === "string"
+                ? {
+                    ...message,
+                    content: `${message.content}\n上次未返回家书内容。请根据相同素材输出完整 JSON，必须包含 title、greeting、paragraphs（每段含 text、sourceRefs）、closing 四个字段，不得输出空对象。`,
+                  }
+                : message,
+            ),
+          }, { maxRetries: 0, timeout: 30_000, signal: recoveryDeadline.signal }));
+        } finally {
+          recoveryDeadline.dispose();
+        }
       }
       const initialDraft = parseCompletedOutput(
         response.choices[0]?.message.content,
         response.choices[0]?.finish_reason,
       );
-      const reviewResponse = await this.client.chat.completions.create({
+      const reviewResponse = await deadline.wait(() => this.client.chat.completions.create({
         model: this.model,
         temperature: 0,
         max_tokens: maxTokensForLetterLength(input.settings.length),
@@ -1099,7 +1138,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
             ],
           },
         ],
-      });
+      }, { signal: deadline.signal }));
       const reviewedDraft = {
         ...parseCompletedOutput(
           reviewResponse.choices[0]?.message.content,
@@ -1143,11 +1182,13 @@ export class OpenAICompatibleChatProvider implements AIProvider {
 
   private async buildMaterialContent(
     input: GenerateLetterInput,
+    deadline: OperationDeadline,
   ): Promise<ChatCompletionContentPart[]> {
     this.assertMaterialModes(input.materials);
-    const assets = await preloadMaterialAssets(input, this.assetReader, this.maxTotalMediaBytes);
+    const assets = await deadline.wait(() => preloadMaterialAssets(input, this.assetReader, this.maxTotalMediaBytes));
     const content: ChatCompletionContentPart[] = [];
     for (const material of input.materials) {
+      deadline.check();
       if (material.type === "text") {
         content.push({
           type: "text",
@@ -1206,11 +1247,12 @@ export class OpenAICompatibleChatProvider implements AIProvider {
         continue;
       }
       if (this.audioMode === "transcription") {
-        const transcription = await this.client.audio.transcriptions.create({
-          file: await toFile(asset.bytes, material.name, { type: asset.contentType }),
+        const file = await deadline.wait(() => toFile(asset.bytes, material.name, { type: asset.contentType }));
+        const transcription = await deadline.wait(() => this.client.audio.transcriptions.create({
+          file,
           model: this.transcriptionModel!,
           response_format: "json",
-        });
+        }, { signal: deadline.signal }));
         const transcript = this.validateTranscript(material, transcription.text);
         input.onTranscript?.({ materialId: material.id, text: transcript, confirmed: false });
         content.push({
@@ -1226,7 +1268,8 @@ export class OpenAICompatibleChatProvider implements AIProvider {
       }
 
       if (this.audioMode === "streaming-chat-transcription") {
-        const transcript = await this.transcribeWithStreamingChat(material, asset);
+        const transcript = await this.transcribeWithStreamingChat(material, asset, deadline.signal);
+        deadline.check();
         input.onTranscript?.({ materialId: material.id, text: transcript, confirmed: false });
         content.push({
           type: "text",
@@ -1313,6 +1356,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
   private async transcribeWithStreamingChat(
     material: Material,
     asset: MaterialAsset,
+    parentSignal?: AbortSignal,
   ): Promise<string> {
     const format = streamingChatAudioFormat(asset.contentType);
     if (!format) {
@@ -1349,13 +1393,18 @@ export class OpenAICompatibleChatProvider implements AIProvider {
     const deadlineAt = Date.now() + this.transcriptionTimeoutMs;
     const timeoutError = new AIProviderError("AI_PROVIDER_TIMEOUT", "语音转写超时，请重试或缩短录音", true);
     let deadlineTimer: ReturnType<typeof setTimeout>;
+    let cancelTranscription!: () => void;
     const deadline = new Promise<never>((_resolve, reject) => {
-      deadlineTimer = setTimeout(() => {
+      cancelTranscription = () => {
         deadlineExpired = true;
         reject(timeoutError);
         closeStream();
-      }, this.transcriptionTimeoutMs);
+      };
+      deadlineTimer = setTimeout(cancelTranscription, this.transcriptionTimeoutMs);
     });
+    void deadline.catch(() => undefined);
+    // The complete generation may have less time left than this audio segment.
+    parentSignal?.addEventListener("abort", cancelTranscription, { once: true });
     const assertWithinDeadline = (): void => {
       // Also cover a stream of immediately resolved chunks that starves timer
       // callbacks. The budget never restarts when another chunk arrives.
@@ -1365,6 +1414,8 @@ export class OpenAICompatibleChatProvider implements AIProvider {
       }
     };
     try {
+      if (parentSignal?.aborted) cancelTranscription();
+      assertWithinDeadline();
       const requestedStream = this.client.chat.completions.create({
         model: this.transcriptionModel!,
         messages: [
@@ -1450,6 +1501,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
       throw error;
     } finally {
       clearTimeout(deadlineTimer!);
+      parentSignal?.removeEventListener("abort", cancelTranscription);
       closeStream();
     }
   }
@@ -1582,6 +1634,13 @@ export function createAIProviderFromEnv(
         env,
         "OPENAI_COMPATIBLE_TIMEOUT_MS",
         defaultOpenAITimeoutMs,
+        1_000,
+        300_000,
+      ),
+      generationTimeoutMs: integerFromEnv(
+        env,
+        "OPENAI_COMPATIBLE_GENERATION_TIMEOUT_MS",
+        defaultCompatibleGenerationTimeoutMs,
         1_000,
         300_000,
       ),

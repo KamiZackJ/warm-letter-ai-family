@@ -79,15 +79,6 @@ function confirmMaterialDeletion(name: string): Promise<boolean> {
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
-  if (
-    error &&
-    typeof error === "object" &&
-    "errMsg" in error &&
-    typeof error.errMsg === "string" &&
-    error.errMsg
-  ) {
-    return error.errMsg;
-  }
   return fallback;
 }
 
@@ -132,7 +123,7 @@ function batchProgressHint(action: RetryAction, stage: RetryStage): string {
   const pendingRemote = action.pendingMaterials?.length || 0;
   const pendingLocal = action.pendingCommits?.length || 0;
   if (stage === "local") {
-    return `已加入 ${completed}/${total} 项；${pendingLocal} 项已保存到服务。重试只恢复页面记录，再继续剩余 ${pendingRemote} 项。`;
+    return `已加入 ${completed}/${total} 项，另有 ${pendingLocal} 项已保存。点重试更新列表，再继续添加剩余 ${pendingRemote} 项。`;
   }
   return `已加入 ${completed}/${total} 项，重试只继续剩余 ${pendingRemote} 项。`;
 }
@@ -428,7 +419,7 @@ Page({
               ? "文字已保存，页面尚未更新"
               : "录音已保存，页面尚未更新",
           message,
-          hint: "素材已保存到服务，重试只恢复本页记录，不会再次上传。",
+          hint: "素材已保存，点重试更新列表，无需重新上传。",
         });
         wx.showToast({ title: message, icon: "none" });
         return;
@@ -750,7 +741,7 @@ Page({
           stage: "local",
           title: "删除已完成，页面尚未更新",
           message,
-          hint: "服务端删除已完成，重试只更新本页记录，不会再次发送删除请求。",
+          hint: "素材已删除，点重试更新列表。",
         });
         wx.showToast({ title: message, icon: "none" });
         return;

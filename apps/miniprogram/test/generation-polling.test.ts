@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GenerationPollingTimeoutError,
   resolveGenerationJobId,
@@ -6,6 +6,7 @@ import {
 } from "../src/services/generation-polling";
 
 describe("generation polling", () => {
+  afterEach(() => { vi.useRealTimers(); });
   it("keeps waiting for a 12-second generation job within the real-provider window", async () => {
     let elapsedMs = 0;
     const fetchJob = vi.fn(async () => ({
@@ -50,7 +51,7 @@ describe("generation polling", () => {
     await expect(result).rejects.toEqual(
       expect.objectContaining<Partial<GenerationPollingTimeoutError>>({
         name: "GenerationPollingTimeoutError",
-        message: "家书仍在后台整理，请稍后返回查看",
+        message: "暂时未读到生成结果，请从最近家书查看",
       }),
     );
   });
@@ -90,5 +91,31 @@ describe("generation polling", () => {
       }),
     ).rejects.toBe(permanentError);
     expect(fetchJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the background timeout even when a single fetch never settles", async () => {
+    vi.useFakeTimers();
+    let finish!: (job: { status: string }) => void;
+    const fetchJob = vi.fn(() => new Promise<{ status: string }>((resolve) => { finish = resolve; }));
+    const result = waitForGenerationJob("job-1", fetchJob, { timeoutMs: 100, shouldRetryError: () => true })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).toBeInstanceOf(GenerationPollingTimeoutError);
+    finish({ status: "succeeded" });
+    await Promise.resolve();
+    expect(fetchJob).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("also bounds a custom sleep and clears polling timers on quick completion", async () => {
+    vi.useFakeTimers();
+    const result = waitForGenerationJob("job-1", async () => ({ status: "running" }), {
+      timeoutMs: 100,
+      sleep: () => new Promise(() => undefined),
+    }).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await result).toBeInstanceOf(GenerationPollingTimeoutError);
+    await expect(waitForGenerationJob("job-2", async () => ({ status: "succeeded" }))).resolves.toEqual({ status: "succeeded" });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

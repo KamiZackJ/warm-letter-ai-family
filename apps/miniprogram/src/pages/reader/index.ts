@@ -220,7 +220,7 @@ Page({
     if (!options.id) {
       this.setData({
         loading: false,
-        loadError: "链接里缺少家书编号，请返回后重新打开完整分享链接。",
+        loadError: "家书链接不完整，请返回后重新打开分享。",
       });
       return;
     }
@@ -531,7 +531,7 @@ Page({
     }
     const audioContext = this.audioContext;
     if (!audioContext) {
-      this.setAudioError(id, "语音播放器初始化失败，请重新播放。");
+      this.setAudioError(id, "暂时无法播放语音，请重试。");
       return;
     }
 

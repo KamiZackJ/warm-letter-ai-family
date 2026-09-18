@@ -1,7 +1,12 @@
 import { api } from "../../services/api";
-import { environment, environmentView } from "../../config/env";
+import { environment } from "../../config/env";
 import type { LetterSummary } from "../../types/domain";
 import { formatDate } from "../../utils/date";
+import {
+  ONBOARDING_STEPS,
+  readOnboardingState,
+  rememberOnboardingDismissed,
+} from "../../utils/onboarding";
 import {
   beginCurrentMaterialSelection,
   clearPendingGeneration,
@@ -41,24 +46,91 @@ function errorMessage(error: unknown): string {
 Page({
   disposed: false,
   loadRequestId: 0,
+  onboardingInitialized: false,
+  onboardingAutoEligible: false,
+  onboardingManuallyOpened: false,
+  onboardingInteracted: false,
 
   data: {
-    ...environmentView,
     recentLetters: [] as DisplayLetter[],
     loading: true,
     loadError: "",
     startingFlow: false,
+    guideVisible: false,
+    guideStep: 0,
+    guideStepCount: ONBOARDING_STEPS.length,
+    guideContent: ONBOARDING_STEPS[0] as (typeof ONBOARDING_STEPS)[number],
   },
 
   async onShow() {
     this.disposed = false;
     this.setData({ startingFlow: false });
+    this.prepareOnboarding();
     await this.loadLetters();
   },
 
   onUnload() {
     this.disposed = true;
     this.loadRequestId += 1;
+  },
+
+  prepareOnboarding() {
+    if (this.onboardingInitialized) return;
+    this.onboardingInitialized = true;
+    const state = readOnboardingState();
+    this.onboardingAutoEligible = state === "new" && this.data.recentLetters.length === 0;
+    this.setData({ guideVisible: this.onboardingAutoEligible });
+    if (state === "returning" || this.data.recentLetters.length > 0) {
+      rememberOnboardingDismissed();
+    }
+  },
+
+  settleOnboarding(hasHistory: boolean) {
+    if (hasHistory) {
+      rememberOnboardingDismissed();
+      this.onboardingAutoEligible = false;
+      if (!this.onboardingManuallyOpened && !this.onboardingInteracted) {
+        this.setData({ guideVisible: false });
+      }
+      return;
+    }
+    if (this.onboardingAutoEligible && !this.onboardingManuallyOpened && !this.data.startingFlow) {
+      this.setData({ guideVisible: true });
+    }
+  },
+
+  openGuide() {
+    if (this.disposed || this.data.startingFlow) return;
+    this.onboardingManuallyOpened = true;
+    this.onboardingInteracted = true;
+    this.onboardingAutoEligible = false;
+    this.showGuideStep(0);
+  },
+
+  showGuideStep(step: number) {
+    const content = ONBOARDING_STEPS[step];
+    if (!content) return;
+    this.setData({ guideVisible: true, guideStep: step, guideContent: content }, () => {
+      if (this.disposed || !this.data.guideVisible || this.data.guideStep !== step) return;
+      try {
+        wx.pageScrollTo?.({ selector: `#${content.anchorId}`, duration: 0, fail: () => undefined });
+      } catch { /* The inline tip stays usable if scrolling is unavailable. */ }
+    });
+  },
+
+  nextGuideStep() {
+    if (!this.data.guideVisible || this.data.startingFlow) return;
+    this.onboardingInteracted = true;
+    const next = Math.min(this.data.guideStep + 1, ONBOARDING_STEPS.length - 1);
+    this.showGuideStep(next);
+  },
+
+  dismissGuide() {
+    this.onboardingAutoEligible = false;
+    this.onboardingManuallyOpened = false;
+    this.onboardingInteracted = true;
+    rememberOnboardingDismissed();
+    this.setData({ guideVisible: false });
   },
 
   async loadLetters() {
@@ -76,10 +148,12 @@ Page({
         })),
         loadError: "",
       });
+      this.settleOnboarding(letters.length > 0);
     } catch (error) {
       if (this.disposed || this.loadRequestId !== requestId) return;
       const message = errorMessage(error);
       this.setData({ loadError: message });
+      this.settleOnboarding(this.data.recentLetters.length > 0);
       wx.showToast({ title: message, icon: "none" });
     } finally {
       if (!this.disposed && this.loadRequestId === requestId) {
@@ -107,6 +181,7 @@ Page({
 
   startMaterialFlow(demo: boolean) {
     if (this.disposed || this.data.startingFlow) return;
+    this.dismissGuide();
     this.setData({ startingFlow: true });
     let previousPendingGeneration: ReturnType<typeof getPendingGeneration> = undefined;
     let canRestorePendingGeneration = false;
@@ -151,6 +226,7 @@ Page({
   },
 
   openLetter(event: { currentTarget: { dataset: { id: string; status: string } } }) {
+    this.dismissGuide();
     const { id, status } = event.currentTarget.dataset;
     const page = status === "CONFIRMED" || status === "PUBLISHED" ? "reader" : "editor";
     wx.navigateTo({ url: `/pages/${page}/index?id=${id}` });

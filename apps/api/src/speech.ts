@@ -1,3 +1,5 @@
+import { OperationDeadline } from "./deadline.js";
+
 const doubaoSpeechEndpoint = "https://openspeech.bytedance.com/api/v3/tts/unidirectional";
 const qwenSpeechEndpoint =
   "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
@@ -174,6 +176,38 @@ function mapHttpError(status: number): SpeechProviderError {
   );
 }
 
+async function withSpeechDeadline(
+  timeoutMs: number,
+  operation: (deadline: OperationDeadline) => Promise<SpeechAudio>,
+): Promise<SpeechAudio> {
+  const deadline = new OperationDeadline(timeoutMs, () => new SpeechProviderError(
+    504, "SPEECH_PROVIDER_TIMEOUT", "朗读生成超时，请稍后重试；仍可先寄出文字家书", true,
+  ));
+  try {
+    return await deadline.wait(() => operation(deadline));
+  } catch (error) {
+    deadline.check();
+    if (error instanceof SpeechProviderError) throw error;
+    throw new SpeechProviderError(502, "SPEECH_PROVIDER_UNAVAILABLE", "语音服务暂时不可用，请稍后重试", true, error);
+  } finally {
+    deadline.dispose();
+  }
+}
+
+async function fetchWithinDeadline(
+  fetchImpl: typeof fetch,
+  url: Parameters<typeof fetch>[0],
+  init: RequestInit,
+  deadline: OperationDeadline,
+): Promise<Response> {
+  return deadline.wait(() => fetchImpl(url, { ...init, signal: deadline.signal }).then((response) => {
+    deadline.addCleanup(() => {
+      if (!response.body?.locked) return response.body?.cancel();
+    });
+    return response;
+  }));
+}
+
 export class DoubaoSpeechProvider implements SpeechProvider {
   readonly name = "doubao-seed-tts-2.0";
   readonly voices = DOUBAO_SPEECH_VOICES;
@@ -194,7 +228,11 @@ export class DoubaoSpeechProvider implements SpeechProvider {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async synthesize(input: SpeechSynthesisInput): Promise<SpeechAudio> {
+  synthesize(input: SpeechSynthesisInput): Promise<SpeechAudio> {
+    return withSpeechDeadline(this.timeoutMs, (deadline) => this.synthesizeWithinDeadline(input, deadline));
+  }
+
+  private async synthesizeWithinDeadline(input: SpeechSynthesisInput, deadline: OperationDeadline): Promise<SpeechAudio> {
     const text = input.text.normalize("NFC").trim();
     if (!text || text.length > 4_000) {
       throw new SpeechProviderError(
@@ -213,7 +251,7 @@ export class DoubaoSpeechProvider implements SpeechProvider {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(doubaoSpeechEndpoint, {
+      response = await fetchWithinDeadline(this.fetchImpl, doubaoSpeechEndpoint, {
         method: "POST",
         headers: {
           "X-Api-Key": this.apiKey,
@@ -239,8 +277,7 @@ export class DoubaoSpeechProvider implements SpeechProvider {
             },
           },
         }),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
+      }, deadline);
     } catch (error) {
       throw new SpeechProviderError(
         502,
@@ -255,8 +292,11 @@ export class DoubaoSpeechProvider implements SpeechProvider {
     const chunks: Buffer[] = [];
     let totalBytes = 0;
     let completed = false;
-    const responseText = await response.text();
+    const responseText = new TextDecoder().decode(await readLimitedResponse(
+      response, maximumQwenResponseBytes, "语音服务响应过大，请缩短家书后重试", deadline,
+    ));
     for (const line of responseText.split(/\r?\n/u)) {
+      deadline.check();
       if (!line.trim()) continue;
       let item: DoubaoStreamItem;
       try {
@@ -312,6 +352,7 @@ async function readLimitedResponse(
   response: Response,
   maximumBytes: number,
   tooLargeMessage: string,
+  deadline: OperationDeadline,
 ): Promise<Uint8Array> {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maximumBytes) {
@@ -325,7 +366,7 @@ async function readLimitedResponse(
 
   const reader = response.body?.getReader();
   if (!reader) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const bytes = new Uint8Array(await deadline.wait(() => response.arrayBuffer()));
     if (bytes.byteLength > maximumBytes) {
       throw new SpeechProviderError(
         502,
@@ -339,21 +380,31 @@ async function readLimitedResponse(
 
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    totalBytes += value.byteLength;
-    if (totalBytes > maximumBytes) {
-      await reader.cancel().catch(() => undefined);
-      throw new SpeechProviderError(
-        502,
-        "SPEECH_PROVIDER_RESPONSE_TOO_LARGE",
-        tooLargeMessage,
-        false,
-      );
+  const cleanup = () => {
+    void reader.cancel().catch(() => undefined).then(() => {
+      try { reader.releaseLock(); } catch { /* A pending transport may still own the reader. */ }
+    });
+  };
+  const unregister = deadline.addCleanup(cleanup);
+  try {
+    while (true) {
+      const { done, value } = await deadline.wait(() => reader.read());
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maximumBytes) {
+        throw new SpeechProviderError(
+          502,
+          "SPEECH_PROVIDER_RESPONSE_TOO_LARGE",
+          tooLargeMessage,
+          false,
+        );
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } finally {
+    unregister();
+    cleanup();
   }
 
   const bytes = new Uint8Array(totalBytes);
@@ -385,7 +436,11 @@ export class QwenSpeechProvider implements SpeechProvider {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async synthesize(input: SpeechSynthesisInput): Promise<SpeechAudio> {
+  synthesize(input: SpeechSynthesisInput): Promise<SpeechAudio> {
+    return withSpeechDeadline(this.timeoutMs, (deadline) => this.synthesizeWithinDeadline(input, deadline));
+  }
+
+  private async synthesizeWithinDeadline(input: SpeechSynthesisInput, deadline: OperationDeadline): Promise<SpeechAudio> {
     const text = input.text.normalize("NFC").trim();
     if (!text || text.length > 4_000) {
       throw new SpeechProviderError(
@@ -404,7 +459,7 @@ export class QwenSpeechProvider implements SpeechProvider {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(qwenSpeechEndpoint, {
+      response = await fetchWithinDeadline(this.fetchImpl, qwenSpeechEndpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -418,8 +473,7 @@ export class QwenSpeechProvider implements SpeechProvider {
             language_type: "Chinese",
           },
         }),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
+      }, deadline);
     } catch (error) {
       throw new SpeechProviderError(
         502,
@@ -437,6 +491,7 @@ export class QwenSpeechProvider implements SpeechProvider {
         response,
         maximumQwenResponseBytes,
         "语音服务响应过大，请缩短家书后重试",
+        deadline,
       );
       payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as QwenSpeechResponse;
     } catch (error) {
@@ -521,10 +576,9 @@ export class QwenSpeechProvider implements SpeechProvider {
 
     let mediaResponse: Response;
     try {
-      mediaResponse = await this.fetchImpl(parsedUrl, {
-        signal: AbortSignal.timeout(this.timeoutMs),
+      mediaResponse = await fetchWithinDeadline(this.fetchImpl, parsedUrl, {
         redirect: "error",
-      });
+      }, deadline);
     } catch (error) {
       throw new SpeechProviderError(
         502,
@@ -539,6 +593,7 @@ export class QwenSpeechProvider implements SpeechProvider {
       mediaResponse,
       maximumAudioBytes,
       "语音文件过大，请缩短家书后重试",
+      deadline,
     );
     if (!isWav(bytes)) {
       throw new SpeechProviderError(

@@ -87,6 +87,12 @@ button {
   border-radius: 0;
 }
 
+.eyebrow,
+.page-title,
+.page-subtitle {
+  display: block;
+}
+
 .eyebrow {
   color: #6b716e;
   font-size: 24rpx;

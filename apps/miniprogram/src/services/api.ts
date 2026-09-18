@@ -22,6 +22,7 @@ import {
   waitForGenerationJob,
 } from "./generation-polling";
 import { HttpRequestError, request, requestBinary, uploadBinary } from "./http-client";
+import { runCallbackTask } from "./async-task";
 
 type ServerMaterial = {
   id: string;
@@ -166,7 +167,7 @@ function mediaUploadDescriptor(material: Material): {
   localPath: string;
 } {
   if (!material.localPath) {
-    throw new Error("真实模式必须选择本机图片或语音文件");
+    throw new HttpRequestError("请重新选择要添加的照片或录音", 0, "MATERIAL_FILE_REQUIRED", false);
   }
   const pathWithoutQuery = material.localPath.split("?", 1)[0] || material.localPath;
   const matchedExtension = pathWithoutQuery.match(/\.[a-zA-Z0-9]+$/)?.[0].toLowerCase();
@@ -186,10 +187,10 @@ function mediaUploadDescriptor(material: Material): {
   };
   const contentType = contentTypes[extension];
   if (!contentType) {
-    throw new Error("暂不支持该媒体文件格式");
+    throw new HttpRequestError("暂不支持这个文件格式，请换一个文件", 0, "UNSUPPORTED_MATERIAL_FORMAT", false);
   }
   if (material.type === "voice" ? !contentType.startsWith("audio/") : !contentType.startsWith("image/")) {
-    throw new Error("素材类型与文件格式不匹配");
+    throw new HttpRequestError("请选择对应的照片或录音文件", 0, "MATERIAL_FORMAT_MISMATCH", false);
   }
   return {
     contentType,
@@ -225,20 +226,32 @@ async function writeNarrationFile(
 ): Promise<GeneratedNarration> {
   const normalizedContentType = contentType === "audio/x-wav" ? "audio/wav" : contentType;
   if (normalizedContentType !== "audio/wav" && normalizedContentType !== "audio/mpeg") {
-    throw new Error("语音服务返回了不支持的音频格式");
+    throw new HttpRequestError("朗读暂时无法播放，请重新生成", 0, "UNSUPPORTED_AUDIO_FORMAT", true);
   }
   const extension = normalizedContentType === "audio/wav" ? "wav" : "mp3";
   const safeLetterId = letterId.replace(/[^A-Za-z0-9_-]/g, "-");
-  const filePath = `${wx.env.USER_DATA_PATH}/warm-letter-narration-${safeLetterId}-${Date.now()}.${extension}`;
-  await new Promise<void>((resolve, reject) => {
-    wx.getFileSystemManager().writeFile({
-      filePath,
-      data,
-      success: () => resolve(),
-      fail: (error: { errMsg?: string }) =>
-        reject(new Error(error.errMsg || "保存朗读音频失败")),
+  const filePath = `${wx.env.USER_DATA_PATH}/warm-letter-narration-${safeLetterId}-${createId("audio")}.${extension}`;
+  const cleanup = () => {
+    try { wx.getFileSystemManager().unlink({ filePath, fail: () => undefined }); } catch { /* Best effort. */ }
+  };
+  try {
+    await runCallbackTask<void>(({ success, fail }) => {
+      wx.getFileSystemManager().writeFile({
+        filePath,
+        data,
+        success: () => success(undefined),
+        fail: () => fail(new HttpRequestError("保存朗读失败，请重试", 0, "FILE_WRITE_FAILED", true)),
+      });
+    }, {
+      timeoutMs: 12_000,
+      timeoutError: () => new HttpRequestError("保存朗读音频超时，请重新生成", 0, "FILE_WRITE_TIMEOUT", true),
+      onLateSuccess: cleanup,
     });
-  });
+  } catch (error) {
+    cleanup();
+    if (error instanceof HttpRequestError) throw error;
+    throw new HttpRequestError("保存朗读失败，请重试", 0, "FILE_WRITE_FAILED", true);
+  }
   return { filePath, contentType: normalizedContentType };
 }
 
@@ -298,12 +311,15 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
 let loginInFlight: Promise<void> | null = null;
 
 async function loginWithWeChat(): Promise<void> {
-  const loginResult = await new Promise<{ code: string }>((resolve, reject) => {
-    wx.login({ success: resolve, fail: reject });
+  const loginResult = await runCallbackTask<{ code: string }>(({ success, fail }) => {
+    wx.login({ timeout: 12_000, success, fail: () => fail(new Error("微信登录失败，请重试")) });
+  }, {
+    timeoutMs: 12_000,
+    timeoutError: () => new HttpRequestError("微信登录超时，请重试", 0, "LOGIN_TIMEOUT", true),
   });
   const code = loginResult.code?.trim();
   if (!code && environment.deploymentMode !== "demo" && environment.deploymentMode !== "test") {
-    throw new Error("微信登录未返回有效 code，当前环境禁止开发凭据回退");
+    throw new Error("微信登录未完成，请重试");
   }
   const response = await request<{ token: string }>("/auth/wx-login", {
     method: "POST",
@@ -425,7 +441,7 @@ export const realApi = {
         return mapMaterial(presigned.material);
       }
       if (!presigned.uploadUrl || !presigned.headers) {
-        throw new Error("上传服务没有返回可用的上传凭据");
+        throw new Error("暂时无法上传，请稍后重试");
       }
       try {
         await uploadBinary(presigned.uploadUrl, upload.localPath, presigned.headers);

@@ -14,13 +14,9 @@ export interface GenerationPollingOptions {
 const defaultIntervalMs = 1_000;
 const defaultTimeoutMs = 180_000;
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
 export class GenerationPollingTimeoutError extends Error {
   constructor() {
-    super("家书仍在后台整理，请稍后返回查看");
+    super("暂时未读到生成结果，请从最近家书查看");
     this.name = "GenerationPollingTimeoutError";
   }
 }
@@ -51,25 +47,48 @@ export async function waitForGenerationJob(
 ): Promise<GenerationJobSnapshot> {
   const intervalMs = options.intervalMs ?? defaultIntervalMs;
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 2_147_483_647 ||
+    !Number.isFinite(intervalMs) || intervalMs < 1) {
+    throw new Error("生成进度等待设置无效");
+  }
   const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? delay;
   const startedAt = now();
+  let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+  let deadlineTimer: ReturnType<typeof setTimeout>;
+  let expired = false;
+  const timeoutError = new GenerationPollingTimeoutError();
+  const deadline = new Promise<never>((_, reject) => {
+    deadlineTimer = setTimeout(() => { expired = true; reject(timeoutError); }, timeoutMs);
+  });
+  const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => {
+    pauseTimer = setTimeout(() => { pauseTimer = undefined; resolve(); }, milliseconds);
+  }));
+  const remaining = (): number => {
+    const milliseconds = timeoutMs - (now() - startedAt);
+    if (expired || milliseconds <= 0) throw timeoutError;
+    return milliseconds;
+  };
 
-  while (true) {
-    let job: GenerationJobSnapshot;
-    try {
-      job = await fetchJob(jobId);
-    } catch (error) {
-      if (!options.shouldRetryError?.(error)) throw error;
-      const elapsedMs = now() - startedAt;
-      if (elapsedMs >= timeoutMs) throw new GenerationPollingTimeoutError();
-      await sleep(Math.min(intervalMs, timeoutMs - elapsedMs));
-      continue;
+  try {
+    while (true) {
+      remaining();
+      let job: GenerationJobSnapshot;
+      try {
+        // Native network callbacks can disappear. A single pending fetch must
+        // not bypass the overall foreground polling budget.
+        job = await Promise.race([fetchJob(jobId), deadline]);
+      } catch (error) {
+        const milliseconds = remaining();
+        if (error instanceof GenerationPollingTimeoutError || !options.shouldRetryError?.(error)) throw error;
+        await Promise.race([sleep(Math.min(intervalMs, milliseconds)), deadline]);
+        continue;
+      }
+      const milliseconds = remaining();
+      if (job.status === "succeeded" || job.status === "failed") return job;
+      await Promise.race([sleep(Math.min(intervalMs, milliseconds)), deadline]);
     }
-    if (job.status === "succeeded" || job.status === "failed") return job;
-
-    const elapsedMs = now() - startedAt;
-    if (elapsedMs >= timeoutMs) throw new GenerationPollingTimeoutError();
-    await sleep(Math.min(intervalMs, timeoutMs - elapsedMs));
+  } finally {
+    clearTimeout(deadlineTimer!);
+    if (pauseTimer !== undefined) clearTimeout(pauseTimer);
   }
 }

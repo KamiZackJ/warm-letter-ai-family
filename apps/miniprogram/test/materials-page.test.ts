@@ -869,7 +869,7 @@ describe("materials page recovery", () => {
     const action = findAction(context, (item) => item.singlePurpose === "text");
     expect(action.stage).toBe("local");
     expect(action.material?.id).toBe(saved.id);
-    expect(action.hint).toContain("不会再次上传");
+    expect(action.hint).toContain("无需重新上传");
     expect(context.data.materials).toEqual([]);
     expect(mocks.saveMaterial).toHaveBeenCalledTimes(1);
 
@@ -1101,7 +1101,7 @@ describe("materials page recovery", () => {
     expect(action.stage).toBe("local");
     expect(action.pendingCommits?.map((item) => item.id)).toEqual(["remote-a"]);
     expect(action.pendingMaterials).toEqual([]);
-    expect(action.hint).toContain("已保存到服务");
+    expect(action.hint).toContain("1 项已保存");
 
     await context.retryFailedAction(retryEvent(action.id));
 
@@ -1178,7 +1178,7 @@ describe("materials page recovery", () => {
 
     const action = findAction(context, (item) => item.deleteId === remove.id);
     expect(action.stage).toBe("local");
-    expect(action.hint).toContain("不会再次发送删除请求");
+    expect(action.hint).toContain("素材已删除");
     expect(context.data.materials).toEqual([keep, remove]);
 
     await context.retryFailedAction(retryEvent(action.id));

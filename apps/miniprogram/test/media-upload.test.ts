@@ -231,7 +231,7 @@ describe("real media upload", () => {
     for (const unsafeHeaders of unsafeHeaderSets) {
       await expect(
         uploadBinary(uploadUrl, DEMO_MEDIA_PATHS.photo, unsafeHeaders),
-      ).rejects.toThrow("不安全的请求头");
+      ).rejects.toMatchObject({ code: "UNSAFE_UPLOAD_HEADERS", retryable: false });
     }
 
     expect(readFileMock).not.toHaveBeenCalled();

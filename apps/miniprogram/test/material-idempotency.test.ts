@@ -94,7 +94,7 @@ describe("real material idempotency recovery", () => {
       text: "Dinner went well.",
       createdAt: "2026-08-16T08:00:00.000Z",
     };
-    await expect(realApi.saveMaterial(material)).rejects.toThrow("response lost after commit");
+    await expect(realApi.saveMaterial(material)).rejects.toMatchObject({ code: "NETWORK_ERROR", retryable: true });
     await expect(realApi.saveMaterial(material)).resolves.toMatchObject({
       id: "server-text",
       text: "Dinner went well.",
@@ -160,9 +160,7 @@ describe("real material idempotency recovery", () => {
       localPath: "/tmp/family.png",
       createdAt: "2026-08-16T08:00:00.000Z",
     };
-    await expect(realApi.saveMaterial(material)).rejects.toThrow(
-      "upload response lost after commit",
-    );
+    await expect(realApi.saveMaterial(material)).rejects.toMatchObject({ code: "NETWORK_ERROR", retryable: true });
     await expect(realApi.saveMaterial(material)).resolves.toMatchObject({
       id: "server-photo",
       localPath: material.localPath,
@@ -238,9 +236,7 @@ describe("real material idempotency recovery", () => {
       localPath: "/tmp/family.png",
       createdAt: "2026-08-16T08:00:00.000Z",
     };
-    await expect(realApi.saveMaterial(material)).rejects.toThrow(
-      "complete response lost after commit",
-    );
+    await expect(realApi.saveMaterial(material)).rejects.toMatchObject({ code: "NETWORK_ERROR", retryable: true });
     await expect(realApi.saveMaterial(material)).resolves.toMatchObject({
       id: "server-photo",
       localPath: material.localPath,

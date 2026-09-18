@@ -190,6 +190,7 @@ describe("OpenAICompatibleChatProvider", () => {
         response_format: { type: "json_object" },
         max_tokens: 1_050,
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     for (const [request] of vi.mocked(client.chat.completions.create).mock.calls) {
       expect(request).not.toHaveProperty("enable_thinking");
@@ -351,7 +352,8 @@ describe("OpenAICompatibleChatProvider", () => {
     await expect(provider.generateLetter(inputWith([textMaterial()]))).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
     expect(client.chat.completions.create).toHaveBeenCalledTimes(2);
     for (const [, options] of vi.mocked(client.chat.completions.create).mock.calls) {
-      expect(options).toBeUndefined();
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+      expect(options?.maxRetries).toBeUndefined();
     }
   });
 
@@ -501,6 +503,7 @@ describe("OpenAICompatibleChatProvider", () => {
         model: "proxy-transcription-model",
         response_format: "json",
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     const request = vi.mocked(client.chat.completions.create).mock.calls[0]?.[0];
     expect(JSON.stringify(request?.messages[1]?.content)).toContain("外卖送的饮品");

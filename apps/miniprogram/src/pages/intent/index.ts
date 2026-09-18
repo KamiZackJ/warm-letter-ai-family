@@ -186,10 +186,10 @@ Page({
         this.setData({
           generationTimedOut: true,
           generationProgress: 90,
-          generationStageLabel: "已转到后台整理",
-          generationStageHint: "家书仍在后台生成，不需要重复提交。请回首页，在“最近家书”中打开。",
+          generationStageLabel: "暂时未读到生成结果",
+          generationStageHint: "不需要重新添加素材。请回首页，在“最近家书”中查看结果。",
         });
-        wx.showToast({ title: "任务已转到后台，请稍后从最近家书查看", icon: "none" });
+        wx.showToast({ title: "暂时未读到结果，请稍后从最近家书查看", icon: "none" });
       } else {
         wx.showToast({ title: (error as Error).message, icon: "none" });
       }

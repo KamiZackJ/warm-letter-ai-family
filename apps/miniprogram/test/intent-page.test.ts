@@ -128,7 +128,7 @@ describe("intent generation waiting experience", () => {
     expect(mocks.redirectTo).not.toHaveBeenCalled();
     expect(context.data.generating).toBe(false);
     expect(context.data.generationTimedOut).toBe(true);
-    expect(context.data.generationStageLabel).toBe("已转到后台整理");
+    expect(context.data.generationStageLabel).toBe("暂时未读到生成结果");
 
     context.continueLater();
     expect(mocks.reLaunch).toHaveBeenCalledWith({ url: "/pages/home/index" });

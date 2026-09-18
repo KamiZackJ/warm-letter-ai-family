@@ -1,8 +1,4 @@
 <view class="page editor-page">
-  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
-    <text class="environment-label">{{environmentLabel}}</text>
-    <text class="environment-detail">{{environmentDetail}}</text>
-  </view>
   <text class="eyebrow">第 3 步，共 4 步</text>
   <view class="title-row">
     <text class="page-title">逐段确认草稿</text>
@@ -11,12 +7,12 @@
   <text class="page-subtitle">来源提示帮助你核对事实。下一步会先看到完整预览，再决定是否寄出。</text>
 
   <view wx:if="{{loading}}" class="empty-state loading-state" aria-live="polite">
-    {{generationPending ? '家书正在后台整理…' : '正在打开草稿…'}}
+    {{generationPending ? '正在查看家书生成结果…' : '正在打开草稿…'}}
   </view>
   <view wx:elif="{{errorMessage}}" class="generation-state" aria-role="alert">
     <text class="generation-state-title">暂时还不能编辑</text>
     <text class="generation-state-message">{{errorMessage}}</text>
-    <text class="generation-state-hint">后台任务会保留，继续查看不会重复提交。</text>
+    <text class="generation-state-hint">可以继续查看这封家书的结果，无需重新添加素材。</text>
     <button class="secondary-button retry-generation" bindtap="loadLetter" aria-label="继续查看家书生成进度">继续查看</button>
   </view>
   <block wx:else>
@@ -54,7 +50,7 @@
         </view>
         <textarea class="textarea paragraph-textarea" aria-label="正文第 {{paragraphIndex + 1}} 段" data-index="{{paragraphIndex}}" maxlength="1000" value="{{item.text}}" bindinput="updateParagraph" />
         <view class="source-trace">
-          <text class="source-label">内容归因</text>
+          <text class="source-label">内容来源</text>
           <text class="source-value">{{paragraphAttributionViews[paragraphIndex].label}}</text>
         </view>
         <view wx:if="{{paragraphAttributionViews[paragraphIndex].needsReview || paragraphAttributionViews[paragraphIndex].sourcePickerOpen}}" class="attribution-review" aria-live="polite">

@@ -97,7 +97,7 @@ Page({
 
   async onLoad(options: { id?: string }) {
     if (!options.id) {
-      this.setData({ loading: false, errorMessage: "缺少家书编号，请返回首页重新选择" });
+      this.setData({ loading: false, errorMessage: "家书链接不完整，请返回首页重新打开" });
       return;
     }
     this.setData({ letterId: options.id });

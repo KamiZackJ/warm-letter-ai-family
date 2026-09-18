@@ -112,7 +112,7 @@ export function restoreCurrentMaterialSelection(
     }
   }
   if (!restoredSessionId) {
-    throw new Error("无法创建新的素材恢复会话");
+    throw new Error("暂时无法恢复已选素材，请重试");
   }
   wx.setStorageSync(CURRENT_MATERIAL_SELECTION_KEY, {
     sessionId: restoredSessionId,

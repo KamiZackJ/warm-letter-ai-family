@@ -156,7 +156,7 @@ beforeEach(() => {
 });
 
 describe("home page recent letters recovery", () => {
-  it("keeps the local-draft note readable and recent-letter text multiline", () => {
+  it("keeps the recent-letter note readable and recent-letter text multiline", () => {
     const styles = fileSystem.readFileSync(
       `${miniprogramDirectory}/src/pages/home/index.wxss`,
       "utf8",
@@ -189,6 +189,22 @@ describe("home page recent letters recovery", () => {
     expect(template).toContain('wx:elif="{{recentLetters.length > 0}}"');
     expect(template).toContain('disabled="{{startingFlow}}"');
     expect(template).toContain('loading="{{startingFlow}}"');
+  });
+
+  it("keeps the normal home controls available beside anchored tips without demo banners", () => {
+    const template = fileSystem.readFileSync(
+      `${miniprogramDirectory}/src/pages/home/index.wxml`,
+      "utf8",
+    );
+    expect(template).toContain('<view class="brand-band">');
+    expect(template).not.toContain("environment-banner");
+    expect(template).not.toContain("快速演示");
+    expect(template).not.toContain("onboarding-card");
+    expect(template).toContain('id="guide-write"');
+    expect(template).toContain('id="guide-recent"');
+    expect(template).toContain('id="guide-replay"');
+    expect(template).toContain('bindtap="dismissGuide">跳过');
+    expect(template).toContain('bindtap="dismissGuide">知道了');
   });
 
   it("does not present a failed load as an empty history and retries only once", async () => {

@@ -1,8 +1,4 @@
 <view class="page preview-page">
-  <view class="environment-banner environment-banner-{{environmentMode}}" aria-label="{{environmentLabel}}，{{environmentDetail}}">
-    <text class="environment-label">{{environmentLabel}}</text>
-    <text class="environment-detail">{{environmentDetail}}</text>
-  </view>
   <text class="eyebrow">寄出前的最后一步</text>
   <text class="page-title">先看看家人会收到什么</text>
   <text class="page-subtitle">文字、称呼和朗读都可以在寄出前确认。</text>
@@ -41,8 +37,8 @@
       <text class="band-heading">文字还不合适？</text>
       <text class="band-copy">可以回去逐段修改，也可以让 AI 换一种表达。</text>
       <view class="revision-actions">
-        <button class="secondary-button" bindtap="editLetter">返回修改</button>
-        <button class="secondary-button regenerate-action" loading="{{regenerating}}" disabled="{{regenerating}}" bindtap="regenerate">{{regenerating ? '正在换一版…' : '换一版文字'}}</button>
+        <button class="secondary-button" disabled="{{regenerating || confirming || speechLoading}}" bindtap="editLetter">返回修改</button>
+        <button class="secondary-button regenerate-action" loading="{{regenerating}}" disabled="{{regenerating || confirming || speechLoading}}" bindtap="regenerate">{{regenerating ? '正在换一版…' : '换一版文字'}}</button>
       </view>
     </view>
 
@@ -51,21 +47,25 @@
       <text class="band-copy">适合不方便看字的家人。声音由 AI 合成，不是本人声音。</text>
 
       <block wx:if="{{speechCatalog.available && speechCatalog.voices.length > 0}}">
-        <text class="control-label">朗读声音</text>
-        <picker class="voice-picker" mode="selector" range="{{speechCatalog.voices}}" range-key="name" value="{{selectedVoiceIndex}}" disabled="{{shareReady}}" bindchange="chooseVoice">
+        <text class="control-label">生成时使用的声音</text>
+        <picker class="voice-picker" mode="selector" range="{{speechCatalog.voices}}" range-key="name" value="{{selectedVoiceIndex}}" disabled="{{shareReady || speechLoading || regenerating || confirming}}" bindchange="chooseVoice">
           <view class="voice-picker-value">
             <text>{{speechCatalog.voices[selectedVoiceIndex].name}}</text>
             <text class="voice-description">{{speechCatalog.voices[selectedVoiceIndex].description}} ›</text>
           </view>
         </picker>
-        <button class="narration-generate" loading="{{speechLoading}}" disabled="{{speechLoading || shareReady}}" bindtap="generateNarration">
+        <text wx:if="{{voiceChangePending}}" class="band-copy" aria-live="polite">想用这个声音，需要重新生成朗读。也可以暂不更换。</text>
+        <text wx:elif="{{!persistedVoiceKnown}}" class="band-copy">选好声音后，点下方按钮生成朗读。之前生成过的朗读会随信保留。</text>
+        <button wx:if="{{voiceChangePending}}" class="secondary-button" disabled="{{speechLoading || regenerating || confirming}}" bindtap="keepSavedNarration">暂不更换声音</button>
+        <button class="narration-generate" loading="{{speechLoading}}" disabled="{{speechLoading || regenerating || confirming || shareReady}}" bindtap="generateNarration">
           {{speechLoading ? '正在生成朗读…' : (speechPath ? '重新生成朗读' : '生成并试听朗读')}}
         </button>
+        <text wx:if="{{speechLoading}}" class="band-copy" aria-live="polite">正在生成朗读，完成后就能试听。暂时离开也不会自动播放。</text>
         <button wx:if="{{speechPath}}" class="narration-play {{speechPlaying ? 'is-playing' : ''}}" aria-label="{{speechPlaying ? '暂停家书朗读' : '播放家书朗读'}}" aria-pressed="{{speechPlaying}}" bindtap="toggleNarration">
           <view class="play-symbol" aria-hidden="true">{{speechPlaying ? 'Ⅱ' : '▶'}}</view>
           <view class="play-copy">
             <text class="play-title">{{speechPlaying ? '暂停朗读' : '播放整封家书'}}</text>
-            <text class="play-detail">{{speechCatalog.voices[selectedVoiceIndex].name}} · AI 合成</text>
+            <text class="play-detail">{{generatedVoiceName || '朗读'}} · AI 合成{{persistedVoiceKnown ? '' : ' · 上次试听'}}</text>
           </view>
         </button>
       </block>
@@ -77,7 +77,7 @@
       <text class="band-heading">寄给微信好友</text>
       <block wx:if="{{!shareReady}}">
         <text class="band-copy">先确认内容。确认后会出现“选择微信好友寄出”。</text>
-        <button class="primary-button confirm-button" loading="{{confirming}}" disabled="{{confirming || regenerating || speechLoading}}" bindtap="confirmForShare">{{confirming ? '正在确认…' : '确认内容，准备寄出'}}</button>
+        <button class="primary-button confirm-button" loading="{{confirming}}" disabled="{{confirming || regenerating || speechLoading || voiceChangePending}}" bindtap="confirmForShare">{{confirming ? '正在确认…' : '确认内容，准备寄出'}}</button>
       </block>
       <block wx:else>
         <view class="ready-message" aria-live="polite">
