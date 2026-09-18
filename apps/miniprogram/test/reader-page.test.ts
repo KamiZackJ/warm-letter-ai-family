@@ -297,7 +297,7 @@ describe("reader page recovery", () => {
         id: "paragraph-traced",
         sourceSummary: "语音、生活照片",
         sourceCount: 2,
-        attributionLabel: "写信人修改，已重新核对依据",
+        attributionLabel: "写信人已核对依据",
         sourcesExpanded: false,
       }),
     );

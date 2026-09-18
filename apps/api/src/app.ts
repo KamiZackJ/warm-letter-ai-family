@@ -8,6 +8,7 @@ import {
   ClientJobSchema,
   GenerateLetterResponseSchema,
   GetJobResponseSchema,
+  UpdateAudioTranscriptRequestSchema,
   type ClientJob,
 } from "@warm-letter/contracts";
 import { randomUUID } from "node:crypto";
@@ -763,6 +764,22 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       },
     };
   });
+
+  app.patch(
+    "/v1/letters/:id/audio-transcripts/:materialId",
+    { bodyLimit: 256 * 1024 },
+    async (request) => {
+      const user = service.authenticate(tokenFrom(request));
+      const { id, materialId } = request.params as { id: string; materialId: string };
+      const parsed = UpdateAudioTranscriptRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ApiError(400, "INVALID_AUDIO_TRANSCRIPT", "语音转写必须为 1 到 50000 个字符");
+      }
+      return {
+        letter: ownerLetterDto(service.updateAudioTranscript(user.id, id, materialId, parsed.data.text)),
+      };
+    },
+  );
 
   app.get("/v1/letters/:id/narration/content", async (request, reply) => {
     const { id } = request.params as { id: string };

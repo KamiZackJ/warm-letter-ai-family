@@ -114,6 +114,8 @@ export type Letter = {
   materialIds: string[];
   intent: LetterIntent;
   draft?: LetterDraft;
+  audioTranscripts?: Array<{ materialId: string; text: string; confirmed: boolean }>;
+  audioTranscriptRevisionPending?: boolean;
   replies: Reply[];
   createdAt: string;
   updatedAt: string;

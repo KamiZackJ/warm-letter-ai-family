@@ -59,6 +59,8 @@ type ServerLetter = {
   };
   state: Letter["status"];
   draft?: ServerDraft;
+  audioTranscripts?: Letter["audioTranscripts"];
+  audioTranscriptRevisionPending?: boolean;
   confirmedDraft?: ServerDraft;
   shareToken?: string;
   createdAt: string;
@@ -277,6 +279,8 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
     materialIds: serverLetter.materialIds,
     intent: intents[serverLetter.id] || fallbackIntent(serverLetter),
     draft: mapDraft(draft),
+    audioTranscripts: serverLetter.audioTranscripts,
+    audioTranscriptRevisionPending: serverLetter.audioTranscriptRevisionPending,
     replies: replies.map((reply) => ({
       id: reply.id,
       text: reply.text,
@@ -538,6 +542,16 @@ export const realApi = {
       getServerReplies(id).catch(() => []),
     ]);
     return mapLetter(letter, replies);
+  },
+
+  async updateAudioTranscript(id: string, materialId: string, text: string): Promise<Letter> {
+    const response = await authorized(() =>
+      request<{ letter: ServerLetter }>(
+        `/letters/${encodeURIComponent(id)}/audio-transcripts/${encodeURIComponent(materialId)}`,
+        { method: "PATCH", data: { text } },
+      ),
+    );
+    return mapLetter(response.letter);
   },
 
   async getReader(id: string, shareToken?: string): Promise<ReaderLetter> {

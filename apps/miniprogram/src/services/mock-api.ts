@@ -111,9 +111,12 @@ function generateDraft(letter: Letter): LetterDraft {
   }
 
   if (voiceMaterial) {
+    const confirmedTranscript = letter.audioTranscripts?.find(
+      (item) => item.materialId === voiceMaterial.id && item.confirmed,
+    );
     paragraphs.push({
       id: createId("paragraph"),
-      text: "有些话写下来还是不够，我也留了一段声音。希望你读到这里时，能像平常聊天一样听见我的语气。",
+      text: confirmedTranscript?.text || "有些话写下来还是不够，我也留了一段声音。希望你读到这里时，能像平常聊天一样听见我的语气。",
       sourceRefs: [voiceMaterial.id],
       sourceAttribution: "ai",
     });
@@ -280,6 +283,25 @@ export const mockApi = {
     return wait(requireLetter(id), 160);
   },
 
+  async updateAudioTranscript(id: string, materialId: string, text: string): Promise<Letter> {
+    const current = requireLetter(id);
+    const normalized = text.trim();
+    if (current.status !== "EDITING") throw new Error("请在草稿编辑阶段核对语音文字");
+    if (!normalized || normalized.length > 50_000) throw new Error("语音文字须为 1 到 50000 个字符");
+    if (!current.audioTranscripts?.some((item) => item.materialId === materialId)) {
+      throw new Error("没有找到这段语音的识别文字");
+    }
+    mockNarrations.delete(id);
+    return wait(updateLetter({
+      ...current,
+      audioTranscripts: current.audioTranscripts.map((item) => item.materialId === materialId
+        ? { materialId, text: normalized, confirmed: true }
+        : item),
+      audioTranscriptRevisionPending: true,
+      updatedAt: new Date().toISOString(),
+    }), 180);
+  },
+
   async getReader(id: string, shareToken?: string): Promise<ReaderLetter> {
     const letter = requireLetter(id);
     if (!letter.draft || !letter.confirmedAt || !letter.shareToken) {
@@ -320,6 +342,7 @@ export const mockApi = {
       ...current,
       status: "EDITING",
       draft: generateDraft(current),
+      audioTranscriptRevisionPending: false,
       updatedAt: new Date().toISOString(),
     };
     return wait(updateLetter(generated), 850);
@@ -334,7 +357,8 @@ export const mockApi = {
     _draft: LetterDraft,
     voiceId: string,
   ): Promise<GeneratedNarration> {
-    requireLetter(id);
+    const current = requireLetter(id);
+    if (current.audioTranscriptRevisionPending) throw new Error("语音文字已修改，请先重新生成家书");
     const voice = mockSpeechCatalog.voices.find((item) => item.id === voiceId);
     if (!voice) throw new Error("不支持的朗读音色");
     const filePath = "/assets/demo/synthetic-voice-demo.wav";
@@ -366,6 +390,7 @@ export const mockApi = {
 
   async confirmLetter(id: string, draft: LetterDraft): Promise<Letter> {
     const current = requireLetter(id);
+    if (current.audioTranscriptRevisionPending) throw new Error("语音文字已修改，请先重新生成家书");
     const normalizedDraft = normalizeDraftAttribution(current.draft, draft);
     assertDraftReadyForConfirmation(normalizedDraft);
     const now = new Date().toISOString();

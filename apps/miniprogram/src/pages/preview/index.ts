@@ -1,6 +1,7 @@
 import { environmentView } from "../../config/env";
 import { api } from "../../services/api";
 import type { Letter, Material, SpeechCatalog } from "../../types/domain";
+import { draftNeedsSourceReview } from "../../utils/paragraph-attribution";
 
 type PreviewAudioContext = {
   src: string;
@@ -118,6 +119,13 @@ Page({
       }
       if (!letter.draft) throw new Error("家书草稿还没有生成完成");
       if (this.disposed) return;
+      if (letter.status === "EDITING" && (
+        letter.audioTranscriptRevisionPending || draftNeedsSourceReview(letter.draft.paragraphs)
+      )) {
+        wx.showToast({ title: "请先核对草稿内容依据", icon: "none" });
+        wx.redirectTo({ url: `/pages/editor/index?id=${encodeURIComponent(this.data.letterId)}` });
+        return;
+      }
       const materialIds = new Set(letter.materialIds);
       this.setData({
         letter,
@@ -167,6 +175,11 @@ Page({
       if (!letter.draft) throw new Error("新草稿还没有生成完成");
       if (!this.disposed) {
         this.setData({ letter });
+        if (letter.audioTranscriptRevisionPending || draftNeedsSourceReview(letter.draft.paragraphs)) {
+          wx.showToast({ title: "新草稿需先核对内容依据", icon: "none" });
+          wx.redirectTo({ url: `/pages/editor/index?id=${encodeURIComponent(this.data.letterId)}` });
+          return;
+        }
         wx.showToast({ title: "已经换了一版", icon: "success" });
       }
     } catch (error) {

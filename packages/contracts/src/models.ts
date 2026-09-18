@@ -79,6 +79,12 @@ export const LetterStateSchema = z.enum([
   "PUBLISHED",
 ]);
 
+export const AudioTranscriptSchema = z.object({
+  materialId: EntityIdSchema,
+  text: z.string().trim().min(1).max(50_000),
+  confirmed: z.boolean(),
+}).strict();
+
 export const LetterSchema = z
   .object({
     id: EntityIdSchema,
@@ -89,6 +95,8 @@ export const LetterSchema = z
     state: LetterStateSchema,
     draft: LetterDraftSchema.optional(),
     confirmedDraft: LetterDraftSchema.optional(),
+    audioTranscripts: z.array(AudioTranscriptSchema).max(30).optional(),
+    audioTranscriptRevisionPending: z.boolean().optional(),
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
     confirmedAt: TimestampSchema.optional(),
@@ -164,6 +172,7 @@ export type AiDisclosure = z.infer<typeof AiDisclosureSchema>;
 export type LetterDraft = z.infer<typeof LetterDraftSchema>;
 export type LetterState = z.infer<typeof LetterStateSchema>;
 export type Letter = z.infer<typeof LetterSchema>;
+export type AudioTranscript = z.infer<typeof AudioTranscriptSchema>;
 export type JobType = z.infer<typeof JobTypeSchema>;
 export type JobStatus = z.infer<typeof JobStatusSchema>;
 export type JobError = z.infer<typeof JobErrorSchema>;

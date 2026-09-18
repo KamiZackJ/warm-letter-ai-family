@@ -151,6 +151,10 @@ export const UpdateLetterRequestSchema = z
   .refine((value) => Object.keys(value).length > 0, { message: "At least one field is required" });
 
 export const UpdateLetterResponseSchema = GetLetterResponseSchema;
+export const UpdateAudioTranscriptRequestSchema = z.object({
+  text: z.string().trim().min(1).max(50_000),
+}).strict();
+export const UpdateAudioTranscriptResponseSchema = GetLetterResponseSchema;
 export const GenerateLetterRequestSchema = z.object({}).strict();
 export const ClientJobErrorSchema = z
   .object({
@@ -270,6 +274,8 @@ export type GetLetterResponse = z.infer<typeof GetLetterResponseSchema>;
 export type DraftPatch = z.infer<typeof DraftPatchSchema>;
 export type UpdateLetterRequest = z.infer<typeof UpdateLetterRequestSchema>;
 export type UpdateLetterResponse = z.infer<typeof UpdateLetterResponseSchema>;
+export type UpdateAudioTranscriptRequest = z.infer<typeof UpdateAudioTranscriptRequestSchema>;
+export type UpdateAudioTranscriptResponse = z.infer<typeof UpdateAudioTranscriptResponseSchema>;
 export type GenerateLetterRequest = z.infer<typeof GenerateLetterRequestSchema>;
 export type ClientJobError = z.infer<typeof ClientJobErrorSchema>;
 export type ClientJob = z.infer<typeof ClientJobSchema>;

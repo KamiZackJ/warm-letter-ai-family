@@ -262,4 +262,24 @@ describe("letter preview and delivery page", () => {
       path: "/pages/reader/index?id=letter-1&token=share-token",
     });
   });
+
+  it("returns a regenerated audio draft to the editor when its sources need review", async () => {
+    const generated = structuredClone(letter);
+    generated.draft!.paragraphs[0]!.sourceAttribution = "needs-review";
+    mocks.generateLetter.mockResolvedValue(generated);
+    const context = createContext({ letterId: "letter-1", letter: structuredClone(letter) });
+    context.setupAudio();
+    await context.regenerate();
+    expect(mocks.redirectTo).toHaveBeenCalledWith({ url: "/pages/editor/index?id=letter-1" });
+    expect(mocks.confirmLetter).not.toHaveBeenCalled();
+    expect(context.data.regenerating).toBe(false);
+  });
+
+  it("routes a direct preview of a pending transcript correction back to editing", async () => {
+    mocks.getLetter.mockResolvedValue({ ...structuredClone(letter), audioTranscriptRevisionPending: true });
+    const context = createContext();
+    await context.onLoad({ id: "letter-1" });
+    expect(mocks.redirectTo).toHaveBeenCalledWith({ url: "/pages/editor/index?id=letter-1" });
+    expect(mocks.showShareMenu).not.toHaveBeenCalled();
+  });
 });

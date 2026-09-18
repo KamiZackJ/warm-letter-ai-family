@@ -191,6 +191,73 @@ describe("OpenAICompatibleChatProvider", () => {
         max_tokens: 1_050,
       }),
     );
+    for (const [request] of vi.mocked(client.chat.completions.create).mock.calls) {
+      expect(request).not.toHaveProperty("enable_thinking");
+    }
+  });
+
+  it("disables Qwen default thinking only for the verified profile and preserves factual review", async () => {
+    for (const verificationProfile of ["dashscope-qwen-2026-09-16", "unverified"] as const) {
+      const client = compatibleClient([textId]);
+      const provider = qwenProvider(client, assetReader("image/jpeg"), { verificationProfile });
+
+      await provider.generateLetter(inputWith([textMaterial()]));
+
+      const requests = vi.mocked(client.chat.completions.create).mock.calls;
+      expect(requests).toHaveLength(2);
+      for (const [request] of requests) {
+        if (verificationProfile === "dashscope-qwen-2026-09-16") {
+          expect(request).toHaveProperty("enable_thinking", false);
+        } else {
+          expect(request).not.toHaveProperty("enable_thinking");
+        }
+        expect(request).not.toHaveProperty("extra_body");
+      }
+      expect(JSON.stringify(requests[1]?.[0].messages)).toContain("严格事实审校员");
+    }
+  });
+
+  it.each([
+    { stage: "draft", finishReason: "length", code: "AI_OUTPUT_TRUNCATED", retryable: true },
+    { stage: "review", finishReason: "length", code: "AI_OUTPUT_TRUNCATED", retryable: true },
+    { stage: "draft", finishReason: "content_filter", code: "AI_OUTPUT_FILTERED", retryable: false },
+    { stage: "review", finishReason: "content_filter", code: "AI_OUTPUT_FILTERED", retryable: false },
+    { stage: "draft", finishReason: "tool_calls", code: "AI_OUTPUT_INVALID", retryable: false },
+    { stage: "review", finishReason: null, code: "AI_OUTPUT_INVALID", retryable: false },
+  ] as const)("rejects parseable JSON when $stage ends with $finishReason", async ({ stage, finishReason, code, retryable }) => {
+    const client = compatibleClient([textId]);
+    const create = vi.mocked(client.chat.completions.create);
+    if (stage === "review") {
+      create.mockResolvedValueOnce({
+        model: "resolved-proxy-model",
+        choices: [{ finish_reason: "stop", message: { content: validOutput([textId]) } }],
+      } as never);
+    }
+    create.mockResolvedValueOnce({
+      model: "resolved-proxy-model",
+      choices: [{ finish_reason: finishReason, message: { content: validOutput([textId]) } }],
+    } as never);
+    const provider = qwenProvider(client, assetReader("image/jpeg"));
+
+    await expect(provider.generateLetter(inputWith([textMaterial()]))).rejects.toMatchObject({
+      code,
+      retryable,
+    } satisfies Partial<AIProviderError>);
+    expect(create).toHaveBeenCalledTimes(stage === "draft" ? 1 : 2);
+  });
+
+  it("accepts normally completed draft and review responses", async () => {
+    const client = compatibleClient([textId]);
+    vi.mocked(client.chat.completions.create).mockResolvedValue({
+      model: "resolved-proxy-model",
+      choices: [{ finish_reason: "stop", message: { content: validOutput([textId]) } }],
+    } as never);
+    const provider = qwenProvider(client, assetReader("image/jpeg"));
+
+    const draft = await provider.generateLetter(inputWith([textMaterial()]));
+
+    expect(draft.paragraphs[0]?.sourceRefs).toEqual([textId]);
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(2);
   });
 
   it("keeps short-letter completions bounded on both the draft and review calls", async () => {
@@ -385,13 +452,31 @@ describe("OpenAICompatibleChatProvider", () => {
       client,
     });
 
-    await provider.generateLetter(inputWith([audioMaterial("audio/mp4", "近况.m4a")]));
+    const onTranscript = vi.fn();
+    const input = {
+      ...inputWith([audioMaterial("audio/mp4", "近况.m4a")]),
+      audioTranscripts: [{ materialId: audioId, text: "未经确认的文字不能覆盖识别结果", confirmed: false }],
+      onTranscript,
+    };
+    await provider.generateLetter(input);
 
     expect(client.chat.completions.create).toHaveBeenCalledTimes(3);
     const firstGenerationRequest = vi.mocked(client.chat.completions.create).mock.calls[1]?.[0];
     expect(JSON.stringify(firstGenerationRequest?.messages[1]?.content)).toContain(
       "开会有点累，但项目顺利。",
     );
+    expect(onTranscript).toHaveBeenCalledWith({
+      materialId: audioId, text: "开会有点累，但项目顺利。", confirmed: false,
+    });
+    await provider.generateLetter({
+      ...input,
+      audioTranscripts: [{ materialId: audioId, text: "今天开了个会。", confirmed: true }],
+    });
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(5);
+    expect(onTranscript).toHaveBeenCalledTimes(1);
+    const regenerated = vi.mocked(client.chat.completions.create).mock.calls[3]?.[0];
+    expect(JSON.stringify(regenerated?.messages[1]?.content)).toContain("今天开了个会。");
+    expect(JSON.stringify(regenerated?.messages[1]?.content)).not.toContain("开会有点累");
   });
 
   it("fails closed when streaming chat transcription returns no text", async () => {
@@ -546,6 +631,7 @@ describe("OpenAICompatibleChatProvider", () => {
       stream: true,
       modalities: ["text"],
     });
+    expect(transcriptionRequest).not.toHaveProperty("enable_thinking");
     expect(JSON.stringify(transcriptionRequest)).toContain("data:;base64,AQID");
 
     for (const [request] of vi.mocked(client.chat.completions.create).mock.calls.slice(1)) {
@@ -595,6 +681,21 @@ describe("OpenAICompatibleChatProvider", () => {
     expect(reader.read).toHaveBeenCalledTimes(2);
     expect(client.chat.completions.create).not.toHaveBeenCalled();
     expect(client.audio.transcriptions.create).not.toHaveBeenCalled();
+  });
+
+  it("requires explicit author review of image-derived paragraphs even after AI review", async () => {
+    const client = compatibleClient([imageId]);
+    const provider = new OpenAICompatibleChatProvider({
+      apiKey: "test-key",
+      model: "proxy-model",
+      baseURL: "https://proxy.example.test/v1",
+      imageMode: "native",
+      assetReader: assetReader("image/jpeg"),
+      client,
+    });
+    const draft = await provider.generateLetter(inputWith([imageMaterial()]));
+    expect(draft.paragraphs[0]?.sourceAttribution).toBe("needs-review");
+    expect(draft.paragraphs[0]?.sourceRefs).toEqual([imageId]);
   });
 
   it("supports prompt-only JSON compatibility mode", async () => {

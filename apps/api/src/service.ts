@@ -351,6 +351,7 @@ export class WarmLetterService {
     if (letter.state !== "EDITING" || !letter.draft) {
       throw new ApiError(409, "LETTER_NOT_READY", "请先生成家书草稿，再生成朗读");
     }
+    this.assertTranscriptRevisionApplied(letter);
     return letterDraftSpeechText(letter.draft);
   }
 
@@ -364,6 +365,7 @@ export class WarmLetterService {
     if (letter.state !== "EDITING" || !letter.draft) {
       throw new ApiError(409, "LETTER_NOT_READY", "请先生成家书草稿，再生成朗读");
     }
+    this.assertTranscriptRevisionApplied(letter);
     const currentText = letterDraftSpeechText(letter.draft);
     if (currentText !== expectedText.normalize("NFC").trim()) {
       throw new ApiError(409, "DRAFT_CHANGED", "草稿已更新，请重新生成朗读");
@@ -413,6 +415,51 @@ export class WarmLetterService {
     }
     letter.updatedAt = new Date().toISOString();
     return this.repository.saveLetter(letter);
+  }
+
+  updateAudioTranscript(userId: string, letterId: string, materialId: string, text: string): Letter {
+    const letter = this.requireOwnedLetter(userId, letterId);
+    if (letter.state !== "EDITING" || !letter.draft) {
+      throw new ApiError(409, "INVALID_LETTER_STATE", "请在编辑草稿时核对语音转写");
+    }
+    const normalizedText = typeof text === "string" ? text.trim() : "";
+    if (!normalizedText || normalizedText.length > 50_000) {
+      throw new ApiError(400, "INVALID_AUDIO_TRANSCRIPT", "语音转写必须为 1 到 50000 个字符");
+    }
+    if (!letter.materialIds.includes(materialId)) {
+      throw new ApiError(404, "AUDIO_TRANSCRIPT_NOT_FOUND", "当前家书没有这份语音转写");
+    }
+    const material = this.requireReadyMaterial(userId, materialId);
+    const previous = letter.audioTranscripts?.find((item) => item.materialId === materialId);
+    if (material.type !== "audio" || !previous) {
+      throw new ApiError(404, "AUDIO_TRANSCRIPT_NOT_FOUND", "当前家书没有这份语音转写");
+    }
+    if (previous.confirmed && previous.text === normalizedText) return letter;
+    letter.audioTranscripts = letter.audioTranscripts!.map((item) =>
+      item.materialId === materialId
+        ? { materialId, text: normalizedText, confirmed: true }
+        : item,
+    );
+    // Keep the old text visible until generation succeeds, but never publish or
+    // narrate it as though the newly corrected evidence had already been used.
+    letter.audioTranscriptRevisionPending = true;
+    letter.draft.paragraphs = letter.draft.paragraphs.map((paragraph) =>
+      paragraph.sourceRefs.includes(materialId)
+        ? { ...paragraph, sourceAttribution: "needs-review" }
+        : paragraph,
+    );
+    letter.updatedAt = this.now().toISOString();
+    return this.repository.saveLetter(letter);
+  }
+
+  private assertTranscriptRevisionApplied(letter: Letter): void {
+    if (letter.audioTranscriptRevisionPending) {
+      throw new ApiError(
+        409,
+        "AUDIO_TRANSCRIPT_REGENERATION_REQUIRED",
+        "语音转写已更新，请先重新生成家书",
+      );
+    }
   }
 
   enqueueGeneration(userId: string, letterId: string, idempotencyKey?: string): GenerationJob {
@@ -472,6 +519,7 @@ export class WarmLetterService {
     if (letter.state !== "EDITING" || !letter.draft) {
       throw new ApiError(409, "LETTER_NOT_READY", "请先生成并确认家书草稿");
     }
+    this.assertTranscriptRevisionApplied(letter);
     this.validateReadyMaterials(userId, letter.materialIds);
     letter.draft.signature = this.normalizeSignature(letter.draft.signature);
     for (const paragraph of letter.draft.paragraphs) {
@@ -480,7 +528,7 @@ export class WarmLetterService {
         throw new ApiError(
           409,
           "SOURCE_REVIEW_REQUIRED",
-          "请先为修改后的段落重新核对素材依据，或标记为本人补充",
+          "请先为待核对的段落确认素材依据，或标记为本人补充",
         );
       }
       if (sourceAttribution === "sources-confirmed" && paragraph.sourceRefs.length === 0) {
@@ -767,11 +815,37 @@ export class WarmLetterService {
         settings: letter.settings,
         materials,
         version: (letter.draft?.version ?? 0) + 1,
+        audioTranscripts: letter.audioTranscripts?.filter((transcript) =>
+          materials.some((material) => material.id === transcript.materialId && material.type === "audio"),
+        ),
+        onTranscript: (transcript) => {
+          const material = materials.find((item) => item.id === transcript.materialId);
+          if (material?.type !== "audio" || !transcript.text.trim() || transcript.text.length > 50_000) {
+            throw new AIProviderError("AI_OUTPUT_INVALID", "AI 返回了无效的语音转写", false);
+          }
+          const otherTranscripts = (letter.audioTranscripts ?? []).filter(
+            (item) => item.materialId !== transcript.materialId,
+          );
+          letter.audioTranscripts = [
+            ...otherTranscripts,
+            { materialId: material.id, text: transcript.text.trim(), confirmed: false },
+          ];
+          this.repository.saveLetter(letter);
+        },
       });
+      const unconfirmedAudioIds = new Set(
+        (letter.audioTranscripts ?? []).filter((item) => !item.confirmed).map((item) => item.materialId),
+      );
       letter.draft = {
         ...generatedDraft,
+        paragraphs: generatedDraft.paragraphs.map((paragraph) =>
+          paragraph.sourceRefs.some((materialId) => unconfirmedAudioIds.has(materialId))
+            ? { ...paragraph, sourceAttribution: "needs-review" }
+            : paragraph,
+        ),
         signature: this.normalizeSignature(previousSignature ?? generatedDraft.signature),
       };
+      letter.audioTranscriptRevisionPending = false;
       this.transition(letter, "EDITING");
       letter.updatedAt = new Date().toISOString();
       this.repository.saveLetter(letter);
@@ -817,10 +891,13 @@ export class WarmLetterService {
       let sourceAttribution: ParagraphSourceAttribution;
 
       if (requestedAttribution === "needs-review") {
-        if (paragraph.sourceRefs && paragraph.sourceRefs.length > 0) {
+        const preservedUnconfirmedRefs =
+          !textChanged && previous?.sourceAttribution === "needs-review" &&
+          this.sameSourceRefs(paragraph.sourceRefs ?? [], previous.sourceRefs);
+        if (paragraph.sourceRefs && paragraph.sourceRefs.length > 0 && !preservedUnconfirmedRefs) {
           throw new ApiError(400, "INVALID_SOURCE_ATTRIBUTION", "待核对段落不能保留素材引用");
         }
-        sourceRefs = [];
+        sourceRefs = preservedUnconfirmedRefs ? previous.sourceRefs : [];
         sourceAttribution = "needs-review";
       } else if (requestedAttribution === "user-supplied") {
         if (paragraph.sourceRefs && paragraph.sourceRefs.length > 0) {

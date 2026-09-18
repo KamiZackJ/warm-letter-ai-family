@@ -77,6 +77,13 @@ export interface LetterNarration {
   generatedAt: string;
 }
 
+// Private working evidence for the sender; never included in the reader DTO.
+export interface AudioTranscript {
+  materialId: string;
+  text: string;
+  confirmed: boolean;
+}
+
 export interface Letter {
   id: string;
   userId: string;
@@ -87,6 +94,8 @@ export interface Letter {
   draft?: LetterDraft;
   confirmedDraft?: LetterDraft;
   narration?: LetterNarration;
+  audioTranscripts?: AudioTranscript[];
+  audioTranscriptRevisionPending?: boolean;
   createdAt: string;
   updatedAt: string;
   confirmedAt?: string;

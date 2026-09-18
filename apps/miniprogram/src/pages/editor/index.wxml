@@ -20,6 +20,22 @@
     <button class="secondary-button retry-generation" bindtap="loadLetter" aria-label="继续查看家书生成进度">继续查看</button>
   </view>
   <block wx:else>
+    <view wx:if="{{audioTranscripts.length}}" class="transcript-review section">
+      <text class="field-label">核对语音文字</text>
+      <text class="transcript-hint">语音识别可能有误。请核对下面的原话，尤其是时间、数字和描述程度；有误可直接修改。</text>
+      <view wx:for="{{audioTranscripts}}" wx:key="materialId" class="transcript-item">
+        <view class="transcript-heading">
+          <text class="transcript-name">{{item.name}}</text>
+          <text class="transcript-status">{{item.text !== item.savedText ? '未保存' : item.confirmed ? '已核对' : '待核对'}}</text>
+        </view>
+        <textarea class="textarea transcript-textarea" aria-label="核对{{item.name}}的语音文字" data-material-id="{{item.materialId}}" maxlength="50000" value="{{item.text}}" disabled="{{transcriptSaving || generationPending || saving}}" bindinput="updateAudioTranscript" />
+      </view>
+      <text wx:if="{{audioTranscriptRevisionPending}}" class="transcript-pending" aria-live="polite">语音文字已保存，需重新生成家书后才能预览和寄出。</text>
+      <text wx:if="{{transcriptError}}" class="transcript-error" aria-role="alert">{{transcriptError}}</text>
+      <button class="secondary-button transcript-save" loading="{{transcriptSaving}}" disabled="{{transcriptSaving || generationPending || saving}}" bindtap="saveTranscriptsAndRegenerate">{{transcriptSaving ? (generationPending ? '已保存，正在重新生成…' : '正在保存语音文字…') : '保存并重新生成'}}</button>
+      <text class="transcript-hint">核对后的文字用于整理家书，重新生成会覆盖当前草稿修改。</text>
+    </view>
+
     <view class="section editor-section">
       <text class="field-label">标题</text>
       <input class="input title-input" aria-label="标题" data-field="title" maxlength="40" value="{{draft.title}}" bindinput="updateField" />
@@ -49,6 +65,7 @@
               <text class="source-choice-name">{{source.name}}</text>
             </label>
           </checkbox-group>
+          <button class="source-review-button" data-index="{{paragraphIndex}}" bindtap="confirmParagraphSources">内容无误，已核对所选素材</button>
           <button class="personal-supplement-button" data-index="{{paragraphIndex}}" bindtap="markParagraphUserSupplied">标记为本人补充</button>
         </view>
         <button wx:else class="source-review-button" data-index="{{paragraphIndex}}" bindtap="beginParagraphSourceReview">重新核对依据</button>
@@ -66,12 +83,13 @@
       <input class="input" aria-label="署名" data-field="signature" maxlength="30" value="{{draft.signature}}" bindinput="updateField" />
     </view>
 
-    <button class="secondary-button regenerate-button" loading="{{generationPending}}" disabled="{{generationPending || saving}}" bindtap="regenerate">{{generationPending ? '正在换一版…' : '换一版文字'}}</button>
+    <text wx:if="{{generationError}}" class="transcript-error" aria-role="alert">{{generationError}}。当前草稿和已保存的语音文字会保留，可再次重新生成。</text>
+    <button class="secondary-button regenerate-button" loading="{{generationPending}}" disabled="{{generationPending || saving || transcriptSaving}}" bindtap="regenerate">{{generationPending ? '正在重新生成…' : audioTranscriptRevisionPending ? '重新生成家书' : '换一版文字'}}</button>
     <text class="regenerate-helper">不满意当前表达时使用，会覆盖尚未保存的修改。</text>
   </block>
 
   <view wx:if="{{!loading && !errorMessage}}" class="sticky-actions">
-    <button class="secondary-button" loading="{{saving}}" disabled="{{saving || loading}}" bindtap="saveDraft">保存</button>
-    <button class="primary-button" loading="{{saving}}" disabled="{{saving || loading}}" bindtap="previewLetter">预览家书</button>
+    <button class="secondary-button" loading="{{saving}}" disabled="{{saving || loading || generationPending || transcriptSaving}}" bindtap="saveDraft">保存</button>
+    <button class="primary-button" loading="{{saving}}" disabled="{{saving || loading || generationPending || transcriptSaving || audioTranscriptRevisionPending || audioTranscriptUnsaved}}" bindtap="previewLetter">预览家书</button>
   </view>
 </view>

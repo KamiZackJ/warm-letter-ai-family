@@ -14,7 +14,7 @@ import { zodTextFormat } from "openai/helpers/zod";
 import type { ChatCompletionContentPart } from "openai/resources/chat/completions/completions";
 import type { ResponseInputContent } from "openai/resources/responses/responses";
 import { z } from "zod";
-import type { LetterDraft, LetterSettings, Material } from "./domain.js";
+import type { AudioTranscript, LetterDraft, LetterSettings, Material } from "./domain.js";
 
 const defaultLetterSignature = "想念你的我";
 
@@ -23,6 +23,8 @@ export interface GenerateLetterInput {
   settings: LetterSettings;
   materials: Material[];
   version: number;
+  audioTranscripts?: readonly AudioTranscript[];
+  onTranscript?: (transcript: AudioTranscript) => void;
 }
 
 export interface AIProvider {
@@ -132,6 +134,18 @@ const defaultCompatibleMaxRetries = 1;
 const defaultMaxTotalMediaBytes = 12 * 1024 * 1024;
 const maximumConfigurableTotalMediaBytes = 25 * 1024 * 1024;
 const imageDetails = new Set<OpenAIImageDetail>(["low", "high", "auto", "original"]);
+
+function confirmedAudioTranscript(input: GenerateLetterInput, materialId: string): string | undefined {
+  const confirmed = input.audioTranscripts?.find(
+    (transcript) => transcript.materialId === materialId && transcript.confirmed,
+  );
+  if (!confirmed) return undefined;
+  const text = confirmed.text.trim();
+  if (!text || text.length > 50_000) {
+    throw new AIProviderError("AI_TRANSCRIPTION_INVALID", "已核对的语音转写内容无效", false);
+  }
+  return text;
+}
 
 export class AIProviderError extends Error {
   constructor(
@@ -485,18 +499,21 @@ export class OpenAIResponsesProvider implements AIProvider {
         );
       }
 
-      const transcription = await this.client.audio.transcriptions.create({
+      const confirmedText = confirmedAudioTranscript(input, material.id);
+      const transcript = confirmedText ?? (await this.client.audio.transcriptions.create({
         file: await toFile(asset.bytes, material.name, { type: asset.contentType }),
         model: this.transcriptionModel,
         response_format: "json",
-      });
-      const transcript = transcription.text.trim();
+      })).text.trim();
       if (!transcript) {
         throw new AIProviderError(
           "AI_TRANSCRIPTION_EMPTY",
           `素材 ${material.id} 的语音转写为空`,
           false,
         );
+      }
+      if (confirmedText === undefined) {
+        input.onTranscript?.({ materialId: material.id, text: transcript, confirmed: false });
       }
       content.push({
         type: "input_text",
@@ -942,12 +959,35 @@ export class OpenAICompatibleChatProvider implements AIProvider {
           ? { response_format: { type: "json_object" as const } }
           : {};
       const storeOption = this.storeMode === "disabled" ? { store: false as const } : {};
+      // Qwen 3.8 Flash enables thinking by default. Scope this vendor extension
+      // to the verified profile; the separate factual review still runs.
+      const thinkingOption = this.verificationProfile === "dashscope-qwen-2026-09-16"
+        ? { enable_thinking: false }
+        : {};
+      const parseCompletedOutput = (
+        content: string | null | undefined,
+        finishReason: string | null | undefined,
+      ): LetterOutput => {
+        // Some compatible gateways omit finish_reason. Explicit interruption
+        // must fail even when the partial content happens to be valid JSON.
+        if (finishReason !== undefined && finishReason !== "stop") {
+          if (finishReason === "length") {
+            throw new AIProviderError("AI_OUTPUT_TRUNCATED", "AI 家书生成未完整结束，请重试", true);
+          }
+          if (finishReason === "content_filter") {
+            throw new AIProviderError("AI_OUTPUT_FILTERED", "AI 服务未能返回完整家书，请调整素材后重试", false);
+          }
+          throw new AIProviderError("AI_OUTPUT_INVALID", "AI 家书响应未正常结束，请重试", false);
+        }
+        return parseJsonLetterOutput(content);
+      };
       const response = await this.client.chat.completions.create({
         model: this.model,
         temperature: 0.72,
         max_tokens: maxTokensForLetterLength(input.settings.length),
         ...storeOption,
         ...responseFormat,
+        ...thinkingOption,
         messages: [
           {
             role: "system",
@@ -981,13 +1021,17 @@ export class OpenAICompatibleChatProvider implements AIProvider {
           },
         ],
       });
-      const initialDraft = parseJsonLetterOutput(response.choices[0]?.message.content);
+      const initialDraft = parseCompletedOutput(
+        response.choices[0]?.message.content,
+        response.choices[0]?.finish_reason,
+      );
       const reviewResponse = await this.client.chat.completions.create({
         model: this.model,
         temperature: 0,
         max_tokens: maxTokensForLetterLength(input.settings.length),
         ...storeOption,
         ...responseFormat,
+        ...thinkingOption,
         messages: [
           {
             role: "system",
@@ -1018,7 +1062,10 @@ export class OpenAICompatibleChatProvider implements AIProvider {
         ],
       });
       const reviewedDraft = {
-        ...parseJsonLetterOutput(reviewResponse.choices[0]?.message.content),
+        ...parseCompletedOutput(
+          reviewResponse.choices[0]?.message.content,
+          reviewResponse.choices[0]?.finish_reason,
+        ),
         greeting: `${input.recipient}：`,
       };
       const responseModel = reviewResponse.model?.trim() || response.model?.trim() || this.model;
@@ -1031,11 +1078,22 @@ export class OpenAICompatibleChatProvider implements AIProvider {
         this.transcriptionModel
           ? `openai-compatible-chat:${responseModel}+audio:${this.transcriptionModel}`
           : `openai-compatible-chat:${responseModel}`;
-      return draftFromOutput(
+      const draft = draftFromOutput(
         input,
         reviewedDraft,
         providerAttribution,
       );
+      // Image interpretation remains probabilistic, including after model
+      // review. Require the author's explicit source check before publishing.
+      const imageIds = new Set(input.materials
+        .filter((material) => material.type === "photo" || material.type === "screenshot")
+        .map((material) => material.id));
+      for (const paragraph of draft.paragraphs) {
+        if (paragraph.sourceRefs.some((id) => imageIds.has(id))) {
+          paragraph.sourceAttribution = "needs-review";
+        }
+      }
+      return draft;
     } catch (error) {
       if (error instanceof AIProviderError) throw error;
       const mappedError = mapOpenAIError(error);
@@ -1063,7 +1121,6 @@ export class OpenAICompatibleChatProvider implements AIProvider {
         });
         continue;
       }
-
       if (material.type === "photo" || material.type === "screenshot") {
         const asset = assets.get(material.id)!;
         if (!asset.contentType.startsWith("image/")) {
@@ -1080,7 +1137,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
               materialId: material.id,
               type: material.type,
               name: material.name,
-              instruction: "请读取紧随其后的图片内容和其中可见文字。",
+              instruction: "请读取紧随其后的图片内容和其中可见文字。用‘照片里’或‘截图中’描述；图片本身不能证明拍摄时间、写信人的行程、购买或食用行为，不能把画面编成亲身经历。",
             }),
           },
           {
@@ -1095,6 +1152,20 @@ export class OpenAICompatibleChatProvider implements AIProvider {
       if (!asset.contentType.startsWith("audio/")) {
         throw new AIProviderError("AI_MATERIAL_INVALID", `素材 ${material.id} 不是可识别的音频`, false);
       }
+      const confirmedText = confirmedAudioTranscript(input, material.id);
+      if (confirmedText !== undefined) {
+        content.push({
+          type: "text",
+          text: JSON.stringify({
+            materialId: material.id,
+            type: material.type,
+            name: material.name,
+            transcript: confirmedText,
+            transcriptConfirmedBySender: true,
+          }),
+        });
+        continue;
+      }
       if (this.audioMode === "transcription") {
         const transcription = await this.client.audio.transcriptions.create({
           file: await toFile(asset.bytes, material.name, { type: asset.contentType }),
@@ -1102,6 +1173,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
           response_format: "json",
         });
         const transcript = this.validateTranscript(material, transcription.text);
+        input.onTranscript?.({ materialId: material.id, text: transcript, confirmed: false });
         content.push({
           type: "text",
           text: JSON.stringify({
@@ -1116,6 +1188,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
 
       if (this.audioMode === "streaming-chat-transcription") {
         const transcript = await this.transcribeWithStreamingChat(material, asset);
+        input.onTranscript?.({ materialId: material.id, text: transcript, confirmed: false });
         content.push({
           type: "text",
           text: JSON.stringify({

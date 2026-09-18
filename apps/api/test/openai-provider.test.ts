@@ -234,8 +234,10 @@ describe("OpenAIResponsesProvider", () => {
       },
     });
 
-    await provider.generateLetter({
+    const onTranscript = vi.fn();
+    const audioInput: GenerateLetterInput = {
       ...input,
+      onTranscript,
       materials: [
         {
           id: materialIds.audio,
@@ -248,7 +250,8 @@ describe("OpenAIResponsesProvider", () => {
           createdAt: "2026-08-14T10:00:00.000Z",
         },
       ],
-    });
+    };
+    await provider.generateLetter(audioInput);
 
     expect(client.audio.transcriptions.create).toHaveBeenCalledWith(
       expect.objectContaining({ model: "gpt-transcribe", response_format: "json" }),
@@ -264,6 +267,18 @@ describe("OpenAIResponsesProvider", () => {
         }),
       ]),
     );
+    expect(onTranscript).toHaveBeenCalledWith({
+      materialId: materialIds.audio, text: "妈妈，我最近一切顺利。", confirmed: false,
+    });
+    await provider.generateLetter({
+      ...audioInput,
+      audioTranscripts: [{ materialId: materialIds.audio, text: "我已经平安到家。", confirmed: true }],
+    });
+    expect(client.audio.transcriptions.create).toHaveBeenCalledTimes(1);
+    expect(onTranscript).toHaveBeenCalledTimes(1);
+    const regenerated = vi.mocked(client.responses.parse).mock.calls[1]?.[0];
+    expect(JSON.stringify(regenerated)).toContain("我已经平安到家。");
+    expect(JSON.stringify(regenerated)).not.toContain("妈妈，我最近一切顺利。");
   });
 
   it("accepts a four-material draft only when every selected source is referenced", async () => {

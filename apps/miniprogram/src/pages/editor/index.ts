@@ -1,6 +1,6 @@
 import { api } from "../../services/api";
 import { environmentView } from "../../config/env";
-import type { LetterDraft, Material } from "../../types/domain";
+import type { Letter, LetterDraft, Material } from "../../types/domain";
 import { createId } from "../../utils/id";
 import { clearPendingGeneration } from "../../utils/storage";
 import {
@@ -33,6 +33,14 @@ type ParagraphAttributionView = {
   needsReview: boolean;
   sourcePickerOpen: boolean;
   sourceChoices: ParagraphSourceChoice[];
+};
+
+type AudioTranscriptView = {
+  materialId: string;
+  name: string;
+  text: string;
+  savedText: string;
+  confirmed: boolean;
 };
 
 function buildParagraphAttributionViews(
@@ -77,6 +85,12 @@ Page({
     paragraphAttributionViews: [] as ParagraphAttributionView[],
     loading: true,
     generationPending: false,
+    generationError: "",
+    audioTranscripts: [] as AudioTranscriptView[],
+    audioTranscriptRevisionPending: false,
+    audioTranscriptUnsaved: false,
+    transcriptSaving: false,
+    transcriptError: "",
     errorMessage: "",
     saving: false,
   },
@@ -95,8 +109,8 @@ Page({
     try {
       let letter = await api.getLetter(this.data.letterId);
       if (
-        !letter.draft &&
-        (letter.status === "GENERATING" || letter.status === "MATERIALS_READY")
+        letter.status === "GENERATING" ||
+        (!letter.draft && letter.status === "MATERIALS_READY")
       ) {
         this.setData({ generationPending: true });
         letter = await api.generateLetter(this.data.letterId);
@@ -107,23 +121,93 @@ Page({
       const materials = await api.listMaterials();
       const sourceMaterials = materials.filter((material) => letter.materialIds.includes(material.id));
       clearPendingGeneration(this.data.letterId);
-      this.setData({
-        draft: letter.draft,
-        sourceMaterials,
-        sourcePickerOpenIds: [],
-        paragraphAttributionViews: buildParagraphAttributionViews(
-          letter.draft,
-          sourceMaterials,
-          [],
-        ),
-        errorMessage: "",
-      });
+      this.applyLetter(letter, sourceMaterials);
     } catch (error) {
       const message = (error as Error).message || "暂时无法打开草稿";
       this.setData({ errorMessage: message });
       wx.showToast({ title: message, icon: "none" });
     } finally {
       this.setData({ loading: false, generationPending: false });
+    }
+  },
+
+  applyLetter(letter: Letter, sourceMaterials: Material[]) {
+    if (!letter.draft) throw new Error("草稿还没有生成完成");
+    this.setData({
+      draft: letter.draft,
+      sourceMaterials,
+      sourcePickerOpenIds: [],
+      paragraphAttributionViews: buildParagraphAttributionViews(letter.draft, sourceMaterials, []),
+      audioTranscripts: (letter.audioTranscripts || []).map((item) => ({
+        ...item,
+        savedText: item.text,
+        name: sourceMaterials.find((material) => material.id === item.materialId)?.name || "语音素材",
+      })),
+      audioTranscriptRevisionPending: Boolean(letter.audioTranscriptRevisionPending),
+      audioTranscriptUnsaved: false,
+      transcriptError: "",
+      generationError: "",
+      errorMessage: "",
+    });
+  },
+
+  updateAudioTranscript(event: {
+    currentTarget: { dataset: { materialId: string } };
+    detail: { value: string };
+  }) {
+    if (this.data.transcriptSaving || this.data.generationPending) return;
+    const audioTranscripts = this.data.audioTranscripts.map((item) =>
+      item.materialId === event.currentTarget.dataset.materialId
+        ? { ...item, text: event.detail.value }
+        : item,
+    );
+    this.setData({
+      audioTranscripts,
+      audioTranscriptUnsaved: audioTranscripts.some((item) => item.text !== item.savedText),
+      transcriptError: "",
+    });
+  },
+
+  async saveTranscriptsAndRegenerate() {
+    if (this.data.transcriptSaving || this.data.generationPending || this.data.saving) return;
+    if (this.data.audioTranscripts.some((item) => !item.text.trim() || item.text.trim().length > 50_000)) {
+      this.setData({ transcriptError: "请填写每段语音文字，每段最多 50000 个字符。" });
+      return;
+    }
+    this.setData({ transcriptSaving: true, transcriptError: "", generationError: "" });
+    let transcriptSaveCompleted = false;
+    try {
+      const confirmed = await confirmDialog("将按你核对后的语音文字重新生成家书，覆盖当前草稿修改，是否继续？");
+      if (!confirmed) return;
+      const toSave = this.data.audioTranscripts.filter((item) => !item.confirmed || item.text !== item.savedText);
+      for (const item of toSave) {
+        const saved = await api.updateAudioTranscript(this.data.letterId, item.materialId, item.text.trim());
+        const savedTranscript = saved.audioTranscripts?.find((entry) => entry.materialId === item.materialId);
+        const savedText = savedTranscript?.text || item.text.trim();
+        const audioTranscripts = this.data.audioTranscripts.map((entry) => entry.materialId === item.materialId
+          ? { ...entry, text: savedText, savedText, confirmed: true }
+          : entry);
+        this.setData({
+          audioTranscripts,
+          audioTranscriptRevisionPending: Boolean(saved.audioTranscriptRevisionPending),
+          audioTranscriptUnsaved: audioTranscripts.some((entry) => entry.text !== entry.savedText),
+        });
+      }
+      transcriptSaveCompleted = true;
+      this.setData({ generationPending: true });
+      const letter = await api.generateLetter(this.data.letterId);
+      this.applyLetter(letter, this.data.sourceMaterials);
+      clearPendingGeneration(this.data.letterId);
+      wx.showToast({ title: "已按核对后的文字生成", icon: "success" });
+    } catch (error) {
+      const message = (error as Error).message || "暂时无法处理语音文字";
+      const recovery = this.data.audioTranscriptRevisionPending || transcriptSaveCompleted
+        ? "已保存的语音文字会保留。请继续保存尚未完成的修改，或点击“重新生成家书”。"
+        : "语音文字尚未保存，请重试。";
+      this.setData({ transcriptError: `${message}。${recovery}` });
+      wx.showToast({ title: message, icon: "none" });
+    } finally {
+      this.setData({ transcriptSaving: false, generationPending: false });
     }
   },
 
@@ -245,6 +329,18 @@ Page({
     });
   },
 
+  confirmParagraphSources(event: { currentTarget: { dataset: { index: number } } }) {
+    const paragraph = this.data.draft.paragraphs[Number(event.currentTarget.dataset.index)];
+    if (!paragraph?.sourceRefs.length) {
+      wx.showToast({ title: "请先选择支持这段内容的素材", icon: "none" });
+      return;
+    }
+    this.updateParagraphSources({
+      currentTarget: event.currentTarget,
+      detail: { value: paragraph.sourceRefs },
+    });
+  },
+
   markParagraphUserSupplied(event: { currentTarget: { dataset: { index: number } } }) {
     const index = Number(event.currentTarget.dataset.index);
     const paragraph = this.data.draft.paragraphs[index];
@@ -265,6 +361,10 @@ Page({
   },
 
   validateDraft(requireResolvedSources = false): boolean {
+    if (requireResolvedSources && (this.data.audioTranscriptRevisionPending || this.data.audioTranscriptUnsaved)) {
+      wx.showToast({ title: "请先保存语音文字并重新生成家书", icon: "none" });
+      return false;
+    }
     const hasEmptyParagraph = this.data.draft.paragraphs.some(
       (paragraph) => !paragraph.text.trim(),
     );
@@ -277,13 +377,14 @@ Page({
       return false;
     }
     if (requireResolvedSources && draftNeedsSourceReview(this.data.draft.paragraphs)) {
-      wx.showToast({ title: "请先处理修改段落的内容依据", icon: "none" });
+      wx.showToast({ title: "请先核对待确认段落的内容依据", icon: "none" });
       return false;
     }
     return true;
   },
 
   async saveDraft(showSuccess = true): Promise<boolean> {
+    if (this.data.saving || this.data.generationPending || this.data.transcriptSaving) return false;
     if (!this.validateDraft()) return false;
     this.setData({ saving: true });
     try {
@@ -299,16 +400,22 @@ Page({
   },
 
   async regenerate() {
-    const confirmed = await confirmDialog("重新生成会覆盖当前修改，是否继续？");
-    if (!confirmed) return;
-    wx.showLoading({ title: "正在重新整理", mask: true });
-    this.setData({ generationPending: true, errorMessage: "" });
+    if (this.data.generationPending || this.data.saving || this.data.transcriptSaving) return;
+    if (this.data.audioTranscriptUnsaved) {
+      this.setData({ transcriptError: "语音文字有未保存的修改，请使用上方“保存并重新生成”。" });
+      return;
+    }
+    this.setData({ generationPending: true, generationError: "" });
     try {
-      await api.generateLetter(this.data.letterId);
-      await this.loadLetter();
+      const confirmed = await confirmDialog("重新生成会覆盖当前修改，是否继续？");
+      if (!confirmed) return;
+      wx.showLoading({ title: "正在重新整理", mask: true });
+      const letter = await api.generateLetter(this.data.letterId);
+      this.applyLetter(letter, this.data.sourceMaterials);
+      clearPendingGeneration(this.data.letterId);
     } catch (error) {
       const message = (error as Error).message || "暂时无法重新生成草稿";
-      this.setData({ errorMessage: message });
+      this.setData({ generationError: message });
       wx.showToast({ title: message, icon: "none" });
     } finally {
       wx.hideLoading();
@@ -317,6 +424,7 @@ Page({
   },
 
   async previewLetter() {
+    if (this.data.saving || this.data.generationPending || this.data.transcriptSaving) return;
     if (!this.validateDraft(true)) return;
     this.setData({ saving: true });
     try {
