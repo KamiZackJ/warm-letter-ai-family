@@ -54,11 +54,10 @@ paragraph count: 3
 
 - 探针结束后已删除服务器 `/tmp/warm-letter-case001-probe` 及临时编译文件。
 - `https://api.warmjiashu.xyz/health` 复核返回 200，服务仍为 `demo + WeChat + Qwen profile-match`。
-- 为完成本次探针，非生产服务暂时直接替换了 `apps/api/dist/ai.js`；服务器 Git 源码仍需在网络恢复后通过正常提交/部署流程同步 `56c587b`，避免源码与运行产物漂移。
+- 探针期间曾临时替换 `apps/api/dist/ai.js`；GitHub 推送恢复后，服务器已快进到 `29d5175`、重新构建并重启，源码与运行产物现已一致。
 
 ## 下一步
 
 1. 设计并测试逐句 claim/evidence 结构，或增加保守的本地事实门禁；不能只依赖文案提示。
 2. 用相同受控素材复测，要求“长会”等扩写消失后才记录为事实审校通过。
 3. 正常推送 GitHub 后重新部署完整提交，再进行一次微信体验版上传、真机生成和恢复流程测试。
-
