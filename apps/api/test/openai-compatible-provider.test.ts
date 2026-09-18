@@ -260,6 +260,101 @@ describe("OpenAICompatibleChatProvider", () => {
     expect(client.chat.completions.create).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["", " \n\t ", "{}", " { \n } "])(
+    "recovers one normally completed empty draft (%j) without repeating ASR or material preparation",
+    async (emptyContent) => {
+      const client = compatibleClient([audioId]);
+      const create = vi.mocked(client.chat.completions.create);
+      create.mockResolvedValueOnce(streamingChunks(["今天开了个会。"]) as never);
+      create.mockResolvedValueOnce({
+        choices: [{ finish_reason: "stop", message: { content: emptyContent } }],
+      } as never);
+      const reader = assetReader("audio/mp4");
+      const provider = qwenProvider(client, reader);
+      const onTranscript = vi.fn();
+
+      const draft = await provider.generateLetter({
+        ...inputWith([audioMaterial("audio/mp4", "近况.m4a")]),
+        onTranscript,
+      });
+
+      expect(draft.paragraphs[0]?.sourceRefs).toEqual([audioId]);
+      expect(create).toHaveBeenCalledTimes(4); // ASR, draft, one recovery, review.
+      expect(reader.read).toHaveBeenCalledTimes(1);
+      expect(onTranscript).toHaveBeenCalledTimes(1);
+      const draftRequest = create.mock.calls[1]![0];
+      const [recovery, options] = create.mock.calls[2]!;
+      expect(recovery).toMatchObject({ ...draftRequest, temperature: 0, messages: expect.any(Array) });
+      expect(recovery.messages.map((message) => message.role)).toEqual(["system", "user"]);
+      expect(recovery.messages.slice(1)).toEqual(draftRequest.messages.slice(1));
+      expect(recovery.messages[0]).toMatchObject({ role: "system", content: expect.stringContaining("四个字段") });
+      expect(recovery.messages[0]?.content).toContain(draftRequest.messages[0]?.content);
+      expect(options).toMatchObject({ maxRetries: 0, timeout: 30_000 });
+      expect(options?.signal).toBeInstanceOf(AbortSignal);
+      expect(JSON.stringify(create.mock.calls[3]![0].messages)).toContain("严格事实审校员");
+    },
+  );
+
+  it.each(["", "{}"])("allows at most one empty-draft recovery when the recovery is also %j", async (emptyContent) => {
+    const client = compatibleClient([textId]);
+    const create = vi.mocked(client.chat.completions.create);
+    create.mockResolvedValue({
+      choices: [{ finish_reason: "stop", message: { content: emptyContent } }],
+    } as never);
+    const provider = qwenProvider(client, assetReader("image/jpeg"));
+
+    await expect(provider.generateLetter(inputWith([textMaterial()]))).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { content: "{broken", finishReason: "stop", code: "AI_OUTPUT_INVALID" },
+    { content: '{"title":"only a title"}', finishReason: "stop", code: "AI_OUTPUT_INVALID" },
+    { content: "[]", finishReason: "stop", code: "AI_OUTPUT_INVALID" },
+    { content: "null", finishReason: "stop", code: "AI_OUTPUT_INVALID" },
+    { content: null, finishReason: "stop", code: "AI_OUTPUT_INVALID" },
+    { content: "", finishReason: "length", code: "AI_OUTPUT_TRUNCATED" },
+    { content: "{}", finishReason: "content_filter", code: "AI_OUTPUT_FILTERED" },
+    { content: "", finishReason: null, code: "AI_OUTPUT_INVALID" },
+    { content: "{}", finishReason: undefined, code: "AI_OUTPUT_INVALID" },
+    { content: "{}", finishReason: "tool_calls", code: "AI_OUTPUT_INVALID" },
+  ])("does not recover nonempty/invalid or interrupted drafts ($content, $finishReason)", async ({ content, finishReason, code }) => {
+    const client = compatibleClient([textId]);
+    const create = vi.mocked(client.chat.completions.create);
+    create.mockResolvedValueOnce({
+      choices: [{ finish_reason: finishReason, message: { content } }],
+    } as never);
+    const provider = qwenProvider(client, assetReader("image/jpeg"));
+
+    await expect(provider.generateLetter(inputWith([textMaterial()]))).rejects.toMatchObject({ code });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not recover an empty review response", async () => {
+    const client = compatibleClient([textId]);
+    const create = vi.mocked(client.chat.completions.create);
+    create.mockResolvedValueOnce({
+      choices: [{ finish_reason: "stop", message: { content: validOutput([textId]) } }],
+    } as never).mockResolvedValueOnce({
+      choices: [{ finish_reason: "stop", message: { content: "{}" } }],
+    } as never);
+    const provider = qwenProvider(client, assetReader("image/jpeg"));
+
+    await expect(provider.generateLetter(inputWith([textMaterial()]))).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("still rejects invalid source references after normal review without an empty recovery", async () => {
+    const client = compatibleClient(["not-a-selected-material"]);
+    const provider = qwenProvider(client, assetReader("image/jpeg"));
+
+    await expect(provider.generateLetter(inputWith([textMaterial()]))).rejects.toMatchObject({ code: "AI_OUTPUT_INVALID" });
+    expect(client.chat.completions.create).toHaveBeenCalledTimes(2);
+    for (const [, options] of vi.mocked(client.chat.completions.create).mock.calls) {
+      expect(options).toBeUndefined();
+    }
+  });
+
   it("keeps short-letter completions bounded on both the draft and review calls", async () => {
     const client = compatibleClient([textId]);
     const provider = new OpenAICompatibleChatProvider({

@@ -11,7 +11,10 @@ import OpenAI, {
 } from "openai";
 import { LetterDraftSchema } from "@warm-letter/contracts";
 import { zodTextFormat } from "openai/helpers/zod";
-import type { ChatCompletionContentPart } from "openai/resources/chat/completions/completions";
+import type {
+  ChatCompletionContentPart,
+  ChatCompletionCreateParamsNonStreaming,
+} from "openai/resources/chat/completions/completions";
 import type { ResponseInputContent } from "openai/resources/responses/responses";
 import { z } from "zod";
 import type { AudioTranscript, LetterDraft, LetterSettings, Material } from "./domain.js";
@@ -981,7 +984,7 @@ export class OpenAICompatibleChatProvider implements AIProvider {
         }
         return parseJsonLetterOutput(content);
       };
-      const response = await this.client.chat.completions.create({
+      const draftRequest: ChatCompletionCreateParamsNonStreaming = {
         model: this.model,
         temperature: 0.72,
         max_tokens: maxTokensForLetterLength(input.settings.length),
@@ -1020,7 +1023,40 @@ export class OpenAICompatibleChatProvider implements AIProvider {
             ],
           },
         ],
-      });
+      };
+      let response = await this.client.chat.completions.create(draftRequest);
+      const firstChoice = response.choices[0];
+      const firstContent = firstChoice?.message.content;
+      let completedEmptyDraft = false;
+      // Retry only a normally completed, demonstrably empty draft. Do not turn
+      // interrupted or malformed responses into a general retry loop.
+      if (firstChoice?.finish_reason === "stop" && typeof firstContent === "string") {
+        if (!firstContent.trim()) {
+          completedEmptyDraft = true;
+        } else {
+          try {
+            const parsed: unknown = JSON.parse(firstContent);
+            completedEmptyDraft = parsed !== null && typeof parsed === "object" &&
+              !Array.isArray(parsed) && Object.keys(parsed).length === 0;
+          } catch {
+            // Nonempty invalid JSON is handled by the ordinary validator below.
+          }
+        }
+      }
+      if (completedEmptyDraft) {
+        response = await this.client.chat.completions.create({
+          ...draftRequest,
+          temperature: 0,
+          messages: draftRequest.messages.map((message, index) =>
+            index === 0 && message.role === "system" && typeof message.content === "string"
+              ? {
+                  ...message,
+                  content: `${message.content}\n上次未返回家书内容。请根据相同素材输出完整 JSON，必须包含 title、greeting、paragraphs（每段含 text、sourceRefs）、closing 四个字段，不得输出空对象。`,
+                }
+              : message,
+          ),
+        }, { maxRetries: 0, timeout: 30_000, signal: AbortSignal.timeout(30_000) });
+      }
       const initialDraft = parseCompletedOutput(
         response.choices[0]?.message.content,
         response.choices[0]?.finish_reason,
