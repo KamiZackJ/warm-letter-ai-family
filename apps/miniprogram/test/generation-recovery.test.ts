@@ -147,10 +147,42 @@ describe("real generation recovery", () => {
     const result = realApi.generateLetter(letterId);
     await expect(result).rejects.toBeInstanceOf(GenerationJobFailedError);
     await expect(result).rejects.toMatchObject({
-      message: "家书生成失败",
+      message: "AI 处理超时，本次已停止，请重试生成",
       code: "AI_PROVIDER_TIMEOUT",
       retryable: true,
     });
     expect(storage.get(jobsKey)).toEqual({});
+  });
+
+  it("starts one fresh job for the same letter only when the sender retries after a provider timeout", async () => {
+    const requestKeys: string[] = [];
+    requestMock.mockImplementation(async (path: string, options?: { headers?: Record<string, string> }) => {
+      if (path === `/letters/${letterId}/generate`) {
+        requestKeys.push(options?.headers?.["idempotency-key"] ?? "");
+        return { job: { id: requestKeys.length === 1 ? "job-timeout" : "job-retry" } };
+      }
+      if (path === "/jobs/job-timeout") {
+        return { job: { status: "failed", error: { code: "AI_PROVIDER_TIMEOUT", retryable: true } } };
+      }
+      if (path === "/jobs/job-retry") return { job: { status: "succeeded" } };
+      if (path === `/letters/${letterId}`) return { letter: serverLetter };
+      if (path === `/letters/${letterId}/replies`) return { replies: [] };
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    await expect(realApi.generateLetter(letterId)).rejects.toMatchObject({
+      code: "AI_PROVIDER_TIMEOUT",
+      retryable: true,
+    });
+    expect(requestKeys).toHaveLength(1);
+    expect(storage.get(jobsKey)).toEqual({});
+    expect(storage.get(requestKeysKey)).toEqual({});
+
+    await expect(realApi.generateLetter(letterId)).resolves.toMatchObject({ id: letterId });
+    expect(requestKeys).toHaveLength(2);
+    expect(requestKeys.every((key) => key.startsWith("generation_"))).toBe(true);
+    expect(requestKeys[1]).not.toBe(requestKeys[0]);
+    expect(storage.get(jobsKey)).toEqual({});
+    expect(storage.get(requestKeysKey)).toEqual({});
   });
 });

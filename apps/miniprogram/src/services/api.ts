@@ -631,7 +631,9 @@ export const realApi = {
         saveGenerationJob(id);
         saveGenerationRequestKey(id);
         throw new GenerationJobFailedError(
-          job.error?.message || "家书生成失败",
+          job.error?.code === "AI_PROVIDER_TIMEOUT"
+            ? "AI 处理超时，本次已停止，请重试生成"
+            : job.error?.message || "家书生成失败",
           job.error?.code,
           job.error?.retryable,
         );

@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { GenerationPollingTimeoutError } from "../src/services/generation-polling";
+import { GenerationJobFailedError, GenerationPollingTimeoutError } from "../src/services/generation-polling";
 
 const mocks = vi.hoisted(() => ({
   createLetter: vi.fn(),
@@ -90,6 +90,34 @@ beforeEach(() => {
 });
 
 describe("intent generation waiting experience", () => {
+  it("keeps a failed provider timeout available for manual retry without treating it as a background task", async () => {
+    const message = "AI 处理超时，本次已停止，请重试生成";
+    mocks.generateLetter.mockRejectedValueOnce(
+      new GenerationJobFailedError(message, "AI_PROVIDER_TIMEOUT", true),
+    );
+    const context = createContext();
+
+    await context.generate();
+
+    expect(context.data.generating).toBe(false);
+    expect(context.data.generationTimedOut).toBe(false);
+    expect(mocks.showToast).toHaveBeenCalledWith({ title: message, icon: "none" });
+    expect(mocks.redirectTo).not.toHaveBeenCalled();
+    expect(mocks.clearPendingGeneration).not.toHaveBeenCalled();
+    expect(mocks.generateLetter).toHaveBeenCalledTimes(1);
+
+    expect(mocks.savePendingGeneration).toHaveBeenCalledTimes(1);
+    const [pending] = mocks.savePendingGeneration.mock.calls[0]!;
+    mocks.getPendingGeneration.mockReturnValue(pending);
+    mocks.generateLetter.mockResolvedValueOnce({ id: "letter-1" });
+    await context.generate();
+
+    expect(mocks.createLetter).toHaveBeenCalledTimes(1);
+    expect(mocks.generateLetter).toHaveBeenCalledTimes(2);
+    expect(mocks.generateLetter).toHaveBeenLastCalledWith("letter-1");
+    expect(mocks.redirectTo).toHaveBeenCalledWith({ url: "/pages/editor/index?id=letter-1" });
+  });
+
   it("keeps a timed-out job in the background instead of reopening the editor", async () => {
     const context = createContext();
 

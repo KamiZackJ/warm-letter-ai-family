@@ -159,6 +159,38 @@ describe("generation job failure HTTP responses", () => {
     expect(replayResponse.body).not.toContain(internalMessage);
   });
 
+  it("keeps a timed-out letter and its materials available for an explicit new generation attempt", async () => {
+    const successfulProvider = new FakeAIProvider();
+    const generateLetter = vi.fn<AIProvider["generateLetter"]>()
+      .mockRejectedValueOnce(new AIProviderError("AI_PROVIDER_TIMEOUT", "internal ASR timeout", true))
+      .mockImplementation((input) => successfulProvider.generateLetter(input));
+    app = buildApp({
+      deploymentMode: "test",
+      aiProvider: { name: "timeout-once-provider", generateLetter },
+    });
+    const { token, letterId } = await createReadyLetter(app);
+    const original = json<{ letter: { materialIds: string[] } }>(await app.inject({
+      method: "GET", url: `/v1/letters/${letterId}`, headers: auth(token),
+    })).letter;
+
+    const failedJobId = await startGeneration(app, token, letterId, "generation_timeout_first_attempt");
+    expect((await waitForTerminalJob(app, token, failedJobId)).job).toMatchObject({
+      status: "failed", error: { code: "AI_PROVIDER_TIMEOUT", retryable: true },
+    });
+    expect(generateLetter).toHaveBeenCalledTimes(1);
+    await expectLetterState(app, token, letterId, "MATERIALS_READY");
+
+    const retryJobId = await startGeneration(app, token, letterId, "generation_timeout_manual_retry");
+    expect(retryJobId).not.toBe(failedJobId);
+    expect((await waitForTerminalJob(app, token, retryJobId)).job.status).toBe("succeeded");
+    const recovered = json<{ letter: { id: string; state: string; materialIds: string[] } }>(await app.inject({
+      method: "GET", url: `/v1/letters/${letterId}`, headers: auth(token),
+    })).letter;
+    expect(recovered).toMatchObject({ id: letterId, state: "EDITING", materialIds: original.materialIds });
+    expect(generateLetter).toHaveBeenCalledTimes(2);
+    expect((await waitForTerminalJob(app, token, failedJobId)).job.status).toBe("failed");
+  });
+
   it("exposes invalid output as non-retryable without leaking details and restores editing", async () => {
     const internalMessage =
       "provider-internal-validation zod_path=paragraphs.0.sourceRefs database_row=secret";
