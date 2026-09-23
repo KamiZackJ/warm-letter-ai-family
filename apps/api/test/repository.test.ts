@@ -6,9 +6,14 @@ import { DatabaseSync } from "node:sqlite";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { createHash } from "node:crypto";
 import type { GenerationJob, Letter, Material, Reply, User } from "../src/domain.js";
 import { MemoryRepository, type Repository } from "../src/repository.js";
 import { SqliteRepository } from "../src/sqlite-repository.js";
+import { ProductionSafety } from "../src/production-safety.js";
+import { WarmLetterService } from "../src/service.js";
+import { FakeAIProvider } from "../src/ai.js";
+import { WechatModerationCallbackVerifier } from "../src/wechat-moderation-callback.js";
 
 const now = "2026-09-23T09:00:00.000Z";
 const user: User = { id: "u1", openId: "openid-1", displayName: "小暖", createdAt: now };
@@ -242,6 +247,38 @@ describe.each(["memory", "sqlite"] as const)("%s repository contract", (kind) =>
 });
 
 describe("SQLite durability", () => {
+  it("retains safe provider-error diagnostics across restart without retaining the callback payload", () => {
+    const filename = temporaryDatabase();
+    const first = sqlite(filename);
+    seed(first);
+    first.saveMaterial({ ...material, type: "photo", objectKey: "synthetic/photo.jpg", contentType: "image/jpeg" });
+    first.saveMediaSafetyCheck({ traceId: "error-trace", materialId: material.id, userId: user.id, status: "pending", createdAt: now, updatedAt: now });
+    const service = new WarmLetterService(first, new FakeAIProvider());
+    const safety = new ProductionSafety({ repository: first, service,
+      provider: { name: "synthetic", checkText: async () => ({ decision: "allow", traceId: "text" }), submitMedia: async () => ({ decision: "pending", traceId: "error-trace" }) },
+      publicBaseUrl: "https://synthetic.example", signingKeys: [Buffer.alloc(32, 1)], now: () => new Date(now) });
+    const token = "syntheticCallbackToken";
+    const timestamp = String(Date.parse(now) / 1000);
+    const nonce = "synthetic-nonce";
+    const verifier = new WechatModerationCallbackVerifier({ token, appId: "synthetic-app", allowPlaintext: true, now: () => Date.parse(now) });
+    const parsed = verifier.decodeMediaCheckCallback({ timestamp, nonce, signature: createHash("sha1").update([token, timestamp, nonce].sort().join("")).digest("hex") }, {
+      MsgType: "event", Event: "wxa_media_check", appid: "synthetic-app", version: 2, trace_id: "error-trace", errcode: -1008,
+      errmsg: "PRIVATE_RAW_ERROR", openid: "PRIVATE_OPENID", media_url: "https://private.invalid/?access_token=PRIVATE_CREDENTIAL",
+    });
+    safety.acceptCallback(parsed!);
+    expect(() => safety.assertMediaPassed(letter)).toThrow("安全检查");
+    first.close();
+    const reopened = sqlite(filename);
+    expect(reopened.getLatestMediaSafetyCheck(material.id)).toMatchObject({
+      status: "failed", diagnostic: { reason: "provider", wechatErrorCode: -1008 },
+    });
+    const inspector = new DatabaseSync(filename, { readOnly: true });
+    try {
+      const data = String(inspector.prepare("SELECT data FROM media_safety_checks WHERE trace_id = ?").get("error-trace")?.data);
+      expect(data).not.toMatch(/PRIVATE|openid|media_url|errmsg|access_token/);
+    } finally { inspector.close(); }
+  });
+
   it("reopens complete private letters, source evidence, share hashes, request keys and cleanup outbox", () => {
     const filename = temporaryDatabase();
     const first = sqlite(filename);

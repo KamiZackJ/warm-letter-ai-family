@@ -55,10 +55,20 @@ describe("authenticated WeChat media callbacks", () => {
 
   it("fails closed for signed provider errors, and ignores unrelated authenticated events", () => {
     const verifier = new WechatModerationCallbackVerifier(options);
-    const unavailable = envelope(JSON.stringify({ ...event, errcode: -1008 }));
-    expect(verifier.decodeMediaCheckCallback(unavailable.query, unavailable.body)).toEqual({ traceId: "trace-id", decision: "unavailable", reason: "provider" });
+    const unavailable = envelope(JSON.stringify({ ...event, errcode: -1008,
+      errmsg: "sensitive raw upstream message", openid: "private-openid", media_url: "https://private.invalid/file?signature=secret" }));
+    expect(verifier.decodeMediaCheckCallback(unavailable.query, unavailable.body)).toEqual({ traceId: "trace-id", decision: "unavailable", reason: "provider", wechatErrorCode: -1008 });
     const unrelated = envelope(JSON.stringify({ Event: "debug_demo" }));
     expect(verifier.decodeMediaCheckCallback(unrelated.query, unrelated.body)).toBeNull();
+  });
+
+  it("retains numeric XML error codes but rejects unsafe numeric callback codes", () => {
+    const verifier = new WechatModerationCallbackVerifier(options);
+    const xml = `<xml><MsgType>event</MsgType><Event>wxa_media_check</Event><appid>${appId}</appid><version>2</version><trace_id>xml-trace</trace_id><errcode>40001</errcode><errmsg>must not persist</errmsg></xml>`;
+    const signed = envelope(xml);
+    expect(verifier.decodeMediaCheckCallback(signed.query, signed.body)).toEqual({ traceId: "xml-trace", decision: "unavailable", reason: "provider", wechatErrorCode: 40001 });
+    const unsafe = envelope(JSON.stringify({ ...event, errcode: "9007199254740993" }));
+    expect(() => verifier.decodeMediaCheckCallback(unsafe.query, unsafe.body)).toThrow("微信回调校验失败");
   });
 
   it("rejects stale, absent, forged, wrong-app and mode-downgraded signatures", () => {

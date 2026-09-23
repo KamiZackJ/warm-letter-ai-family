@@ -26,6 +26,11 @@ export interface MediaSafetyCheck {
   status: "pending" | "pass" | "reject" | "failed";
   createdAt: string;
   updatedAt: string;
+  /** Private, bounded diagnosis. Never store provider messages, media URLs or raw callbacks. */
+  diagnostic?: {
+    reason: "provider" | "risky" | "review";
+    wechatErrorCode?: number;
+  };
 }
 
 export interface AuthSession {

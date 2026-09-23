@@ -3,8 +3,9 @@ import type { ContentSafetyProvider, MediaSafetyProvider } from "./content-safet
 import type { Letter, Material } from "./domain.js";
 import { ApiError } from "./errors.js";
 import { OperationDeadline } from "./deadline.js";
-import type { Repository } from "./repository.js";
+import type { MediaSafetyCheck, Repository } from "./repository.js";
 import type { WarmLetterService } from "./service.js";
+import type { MediaCheckCallback } from "./wechat-moderation-callback.js";
 
 /** Private media fetch credentials are independent of upload and public-share tokens. */
 export class ProductionSafety {
@@ -90,15 +91,23 @@ export class ProductionSafety {
     this.submissionRetryAfter.delete(material.id);
   }
 
-  acceptCallback(result: {traceId: string; decision: "allow" | "reject" | "unavailable"}): void {
+  acceptCallback(result: MediaCheckCallback): void {
     const repository = this.options.repository;
     const check = repository.getMediaSafetyCheck(result.traceId);
     // A callback can race the submit response. Ask WeChat to retry rather than discard it.
     if (!check) throw new ApiError(503, "SAFETY_RECEIPT_PENDING", "检查记录尚未就绪");
     if (check.status !== "pending" || repository.getLatestMediaSafetyCheck(check.materialId)?.traceId !== result.traceId ||
       this.now().getTime() - Date.parse(check.createdAt) >= 35 * 60_000) return;
+    let diagnostic: MediaSafetyCheck["diagnostic"];
+    if (result.decision === "unavailable") {
+      diagnostic = { reason: "provider" };
+      if (Number.isSafeInteger(result.wechatErrorCode)) diagnostic.wechatErrorCode = result.wechatErrorCode;
+    } else if (result.decision === "reject" && (result.reason === "risky" || result.reason === "review")) {
+      diagnostic = { reason: result.reason };
+    }
     repository.saveMediaSafetyCheck({...check,
       status: result.decision === "allow" ? "pass" : result.decision === "reject" ? "reject" : "failed",
+      diagnostic,
       updatedAt: this.now().toISOString()});
     if (result.decision !== "allow") {
       for (const letter of repository.listLetters(check.userId)) {

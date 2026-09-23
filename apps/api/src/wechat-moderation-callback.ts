@@ -25,6 +25,8 @@ export type MediaCheckCallback = {
   traceId: string;
   decision: "allow" | "reject" | "unavailable";
   reason?: "risky" | "review" | "provider";
+  /** Numeric provider status only; never preserve errmsg or the original callback. */
+  wechatErrorCode?: number;
 };
 
 function rejected(): never {
@@ -162,8 +164,8 @@ export class WechatModerationCallbackVerifier {
     const traceId = scalar(message.trace_id);
     if (!/^[A-Za-z0-9_-]{1,128}$/u.test(traceId)) return rejected();
     const errcode = scalar(message.errcode);
-    if (!/^-?\d+$/u.test(errcode)) return rejected();
-    if (errcode !== "0") return { traceId, decision: "unavailable", reason: "provider" };
+    if (!/^-?\d+$/u.test(errcode) || !Number.isSafeInteger(Number(errcode))) return rejected();
+    if (errcode !== "0") return { traceId, decision: "unavailable", reason: "provider", wechatErrorCode: Number(errcode) };
     if (!isObject(message.result)) return rejected();
     const suggestion = message.result.suggest;
     if (suggestion === "pass") return { traceId, decision: "allow" };

@@ -34,8 +34,10 @@ describe("durable media safety state transitions", () => {
   it("permits a failed download to be retried after a persisted cooldown, not immediately", async () => {
     const { safety, material, repository, submitMedia, advance } = setup();
     await safety.submitMaterial(material);
-    safety.acceptCallback({ traceId: "trace-1", decision: "unavailable" });
-    expect(repository.getLatestMediaSafetyCheck(material.id)?.status).toBe("failed");
+    safety.acceptCallback({ traceId: "trace-1", decision: "unavailable", reason: "provider", wechatErrorCode: -1008 });
+    expect(repository.getLatestMediaSafetyCheck(material.id)).toMatchObject({
+      status: "failed", diagnostic: { reason: "provider", wechatErrorCode: -1008 },
+    });
     await expect(safety.submitMaterial(material)).rejects.toMatchObject({ statusCode: 503 });
     expect(submitMedia).toHaveBeenCalledOnce();
     advance(60_000);
@@ -43,17 +45,37 @@ describe("durable media safety state transitions", () => {
     await safety.submitMaterial(material);
     expect(submitMedia).toHaveBeenCalledTimes(2);
     expect(repository.getLatestMediaSafetyCheck(material.id)).toMatchObject({ traceId: "trace-2", status: "pending" });
+    expect(repository.getLatestMediaSafetyCheck(material.id)?.diagnostic).toBeUndefined();
+    expect(repository.getMediaSafetyCheck("trace-1")?.diagnostic).toEqual({ reason: "provider", wechatErrorCode: -1008 });
   });
 
   it("does not retry risky content or accept late approval for a rejected record", async () => {
     const { safety, material, repository, submitMedia, advance } = setup();
     await safety.submitMaterial(material);
-    safety.acceptCallback({ traceId: "trace-1", decision: "reject" });
+    safety.acceptCallback({ traceId: "trace-1", decision: "reject", reason: "risky" });
     advance(3_600_000);
     await safety.submitMaterial(material);
     safety.acceptCallback({ traceId: "trace-1", decision: "allow" });
     expect(repository.getLatestMediaSafetyCheck(material.id)?.status).toBe("reject");
+    expect(repository.getLatestMediaSafetyCheck(material.id)?.diagnostic).toEqual({ reason: "risky" });
     expect(submitMedia).toHaveBeenCalledOnce();
+  });
+
+  it("persists only allowlisted diagnostic fields and keeps failed checks unpublishable", async () => {
+    const { safety, material, repository } = setup();
+    await safety.submitMaterial(material);
+    const callback = {
+      traceId: "trace-1", decision: "unavailable" as const,
+      reason: "https://private.invalid/?token=secret", wechatErrorCode: Number.NaN,
+      rawCallback: "private正文", openid: "private-openid", errmsg: "private provider text",
+    };
+    safety.acceptCallback(callback as unknown as Parameters<ProductionSafety["acceptCallback"]>[0]);
+    const check = repository.getLatestMediaSafetyCheck(material.id)!;
+    expect(check.diagnostic).toEqual({ reason: "provider" });
+    expect(JSON.stringify(check)).not.toMatch(/private|secret|NaN/);
+    const createdAt = new Date().toISOString();
+    expect(() => safety.assertMediaPassed({ id: "letter", userId: material.userId, recipient: "家人", materialIds: [material.id],
+      settings: { tone: "warm", length: "short" }, state: "EDITING", createdAt, updatedAt: createdAt })).toThrow("安全检查");
   });
 
   it("ignores expired and superseded callbacks, while a new check can complete", async () => {
