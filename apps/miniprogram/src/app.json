@@ -5,7 +5,9 @@
     "pages/intent/index",
     "pages/editor/index",
     "pages/preview/index",
-    "pages/reader/index"
+    "pages/reader/index",
+    "pages/privacy/index",
+    "pages/settings/index"
   ],
   "window": {
     "backgroundColor": "#F4F1EA",

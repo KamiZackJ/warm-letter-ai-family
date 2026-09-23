@@ -3,6 +3,7 @@ import { environmentView } from "../../config/env";
 import type { ReaderLetter, ReaderSource, Reply } from "../../types/domain";
 import { formatDate } from "../../utils/date";
 import { createId } from "../../utils/id";
+import { openPrivacyPage } from "../../services/privacy";
 import {
   getParagraphSourceAttribution,
   paragraphAttributionLabel,
@@ -178,6 +179,7 @@ function countReplyCharacters(value: string): number {
 }
 
 Page({
+  openPrivacy: openPrivacyPage,
   disposed: false,
   loadRequestId: 0,
   audioContext: null as ReaderAudioContext | null,

@@ -1,0 +1,30 @@
+<view class="page privacy-page">
+  <text class="page-title">你的近况，由你做主</text>
+  <text class="page-subtitle">更新日期：2026 年 9 月 23 日</text>
+  <view class="policy-section">
+    <text class="section-title">我们使用哪些信息</text>
+    <text>你主动选择的照片、截图、录音、文字，以及你填写的收件人称呼，用于整理家书。微信登录标识用于找回属于你的素材和家书、保护数据与回复安全。我们不读取微信好友名单，也不会自动读取相册或聊天记录。</text>
+  </view>
+  <view class="policy-section">
+    <text class="section-title">内容怎样处理</text>
+    <text>素材上传到暖笺服务器；照片、录音与文字按你的操作交由阿里云百炼处理，用于理解内容、整理家书或生成 AI 朗读。微信提供登录、隐私授权与内容安全检测服务。当前服务器位于中国香港，上传内容将传输至该服务器；请勿上传身份证、密码等敏感信息，上传他人信息前请取得同意。</text>
+  </view>
+  <view class="policy-section">
+    <text class="section-title">谁能看到家书</text>
+    <text>素材和草稿默认由你管理。确认并分享后，持有分享卡片或链接的人可以阅读家书、附带的图片和录音以及回复，也可能继续转发。请只分享给信任的人。撤销分享或删除家书后，原链接失效，但我们无法收回对方已经保存的截图、音频或文字。</text>
+  </view>
+  <view class="policy-section">
+    <text class="section-title">保存与删除</text>
+    <text>你的家书和素材保留至你主动删除相应内容或注销账号。可在素材页删除素材，在首页“隐私与数据管理”删除家书或注销账号。删除家书会撤销其分享；注销账号会清除家书、素材、本人回复和登录数据。本机生成的朗读文件也会清理。你的原始相册照片不受影响。删除后无法恢复，受限恢复备份最多保留 7 天后轮换清除。</text>
+  </view>
+  <view class="policy-section">
+    <text class="section-title">AI 需要你的核对</text>
+    <text>家书整理和可选朗读使用人工智能。图片理解与语音识别可能出错，AI 草稿不是事实证明。请在寄出前检查识别文字、人物称呼和事情经过；不要用它替代医疗、法律等专业建议。</text>
+  </view>
+  <view class="policy-section">
+    <text class="section-title">权限与反馈</text>
+    <text>相册、相机和麦克风仅在你选择照片或开始录音时使用；不同意时仍可阅读已有分享家书。你可以在微信小程序设置中调整权限。查阅、更正、删除与注销等问题可联系 1127563417@qq.com；也可从右上角菜单向微信反馈问题，请不要在公开反馈中发送家书或敏感资料。</text>
+    <button class="secondary-button" bindtap="openWechatPrivacy">查看微信隐私保护指引</button>
+  </view>
+  <text class="filing">皖ICP备2026032763号-1X</text>
+</view>

@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { GenerationRateLimitConfig } from "./generation-rate-limit.js";
 import type { PublicRateLimitConfig } from "./public-rate-limit.js";
 
@@ -18,6 +18,7 @@ export interface ApiRuntimeConfig {
   corsOrigins: string[];
   publicBaseUrl: string;
   uploadDirectory: string;
+  databasePath?: string;
   maxMediaUploadBytes?: number;
   shareTokenTtlMs: number;
   mediaTokenTtlMs: number;
@@ -290,6 +291,7 @@ export function assertApiDeploymentSupported(
   deploymentMode: DeploymentMode,
   aiProviderMode: AIProviderMode | "custom",
   authProviderMode: AuthProviderMode = "development",
+  capabilities?: { repository: string; durableStorage: boolean; contentSafety: boolean; callback: boolean; authenticationReady: boolean; stableSigningKeys: boolean },
 ): void {
   if (
     deploymentMode === "competition" &&
@@ -302,16 +304,14 @@ export function assertApiDeploymentSupported(
   }
   if (deploymentMode !== "production") return;
 
-  const blockers = ["MemoryRepository", "FileSystemObjectStorage", "DeterministicReplySafetyPolicy"];
-  blockers.unshift(
-    authProviderMode === "development"
-      ? "development wx-login authentication"
-      : "Wechat code2Session authentication adapter",
-  );
-  if (aiProviderMode === "fake") blockers.push("FakeAIProvider");
-  throw new Error(
-    `DEPLOYMENT_MODE=production is unavailable while these adapters are active: ${blockers.join(", ")}`,
-  );
+  const blockers: string[] = [];
+  if (authProviderMode !== "wechat" || !capabilities?.authenticationReady) blockers.push("verified Wechat authentication");
+  if (aiProviderMode !== "openai" && aiProviderMode !== "openai-compatible") blockers.push("real multimodal AI provider");
+  if (capabilities?.repository !== "sqlite") blockers.push("durable SQLite repository (MemoryRepository is not allowed)");
+  if (!capabilities?.durableStorage) blockers.push("durable single-host object storage");
+  if (!capabilities?.contentSafety || !capabilities?.callback) blockers.push("Wechat content safety with authenticated callbacks");
+  if (!capabilities?.stableSigningKeys) blockers.push("stable media signing keys");
+  if (blockers.length) throw new Error(`DEPLOYMENT_MODE=production requires: ${blockers.join(", ")}`);
 }
 
 export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
@@ -319,7 +319,19 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
   const nodeEnv = nodeEnvironmentFromEnv(env, deploymentMode);
   const aiProviderMode = aiProviderModeFromEnv(env);
   const authProviderMode = authProviderModeFromEnv(env);
-  assertApiDeploymentSupported(deploymentMode, aiProviderMode, authProviderMode);
+  const production = deploymentMode === "production";
+  const databasePath = env.DATABASE_PATH?.trim();
+  if (production) {
+    if (!databasePath || !isAbsolute(databasePath) || databasePath === ":memory:") throw new Error("production requires an absolute durable DATABASE_PATH");
+    if (!isAbsolute(requiredEnv(env, "UPLOAD_DIR"))) throw new Error("production requires an absolute durable UPLOAD_DIR");
+    if (env.PRODUCTION_SINGLE_INSTANCE !== "true") throw new Error("production requires PRODUCTION_SINGLE_INSTANCE=true");
+    if (!/^[A-Za-z0-9]{3,32}$/.test(requiredEnv(env, "WECHAT_MESSAGE_TOKEN"))) throw new Error("WECHAT_MESSAGE_TOKEN must contain 3-32 alphanumeric characters");
+    if (!/^[A-Za-z0-9+/]{43}$/.test(requiredEnv(env, "WECHAT_ENCODING_AES_KEY"))) throw new Error("WECHAT_ENCODING_AES_KEY must be a 43-character encoding key");
+  }
+  assertApiDeploymentSupported(deploymentMode, aiProviderMode, authProviderMode, production ? {
+    repository: "sqlite", durableStorage: true, contentSafety: true, callback: true,
+    authenticationReady: authProviderMode === "wechat", stableSigningKeys: Boolean(mediaSigningKeysFromEnv(env, deploymentMode)),
+  } : undefined);
 
   if (aiProviderMode === "openai") {
     requiredEnv(env, "OPENAI_API_KEY");
@@ -386,7 +398,7 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
       25 * 1024 * 1024,
     );
     integerFromEnv(env, "OPENAI_COMPATIBLE_MAX_TRANSCRIPT_CHARACTERS", 12_000, 1, 50_000);
-    if (deploymentMode === "competition") {
+    if (deploymentMode === "competition" || production) {
       const verifiedQwenConfiguration =
         verificationProfile === "dashscope-qwen-2026-09-16" &&
         baseUrl.replace(/\/+$/, "") ===
@@ -400,7 +412,7 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
         storeMode === "omit";
       if (!verifiedQwenConfiguration) {
         throw new Error(
-          "competition mode requires the probed dashscope-qwen-2026-09-16 profile",
+          `${deploymentMode} mode requires the probed dashscope-qwen-2026-09-16 profile`,
         );
       }
     }
@@ -437,7 +449,8 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
     corsOrigins,
     publicBaseUrl,
     uploadDirectory,
-    maxMediaUploadBytes: optionalIntegerFromEnv(env, "MAX_MEDIA_UPLOAD_BYTES"),
+    databasePath: databasePath ? resolve(databasePath) : undefined,
+    maxMediaUploadBytes: production ? Math.min(optionalIntegerFromEnv(env, "MAX_MEDIA_UPLOAD_BYTES") ?? 10 * 1024 * 1024, 10 * 1024 * 1024) : optionalIntegerFromEnv(env, "MAX_MEDIA_UPLOAD_BYTES"),
     shareTokenTtlMs,
     mediaTokenTtlMs,
     mediaSigningKeys,

@@ -1,0 +1,24 @@
+<view class="page settings-page">
+  <text class="page-title">隐私与数据管理</text>
+  <button class="secondary-button privacy-link" bindtap="openPrivacy">隐私与使用说明</button>
+  <view wx:if="{{error}}" class="message error" aria-role="alert">{{error}}</view>
+  <view wx:if="{{notice}}" class="message" aria-live="polite">{{notice}}</view>
+  <view wx:if="{{!accountDeleted}}" class="section">
+    <text class="section-title">我的全部家书</text>
+    <text class="section-help">删除后无法恢复，已经寄出的分享链接也会失效。对方已经保存的内容无法收回。</text>
+    <text wx:if="{{loading}}" class="section-help" aria-live="polite">正在读取家书…</text>
+    <text wx:if="{{!loading && !error && letters.length === 0}}" class="section-help">还没有保存的家书。</text>
+    <view wx:for="{{letters}}" wx:key="id" class="data-row">
+      <text class="data-title">{{item.title}}</text>
+      <button class="danger-button" disabled="{{busy}}" data-id="{{item.id}}" aria-label="删除家书：{{item.title}}" bindtap="deleteLetter">删除</button>
+    </view>
+    <button wx:if="{{error}}" class="secondary-button" disabled="{{busy || loading}}" bindtap="loadLetters">重新读取家书</button>
+  </view>
+  <view wx:if="{{!accountDeleted}}" class="section account-section">
+    <text class="section-title">注销账号</text>
+    <text class="section-help">清除全部家书、素材、回复与账号数据，并撤销分享。确认后无法恢复。</text>
+    <button class="danger-button" loading="{{busy}}" disabled="{{busy}}" bindtap="deleteAccount">注销并删除全部数据</button>
+  </view>
+  <button wx:if="{{localCleanupNeeded}}" class="secondary-button" loading="{{busy}}" disabled="{{busy}}" bindtap="clearLocalCache">清理剩余本机缓存</button>
+  <text class="version">暖笺 1.0.0 · 皖ICP备2026032763号-1X</text>
+</view>

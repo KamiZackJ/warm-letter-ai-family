@@ -171,6 +171,10 @@ Page({
     this.startMaterialFlow(false);
   },
 
+  openSettings() {
+    wx.navigateTo({ url: "/pages/settings/index" });
+  },
+
   startDemo() {
     if (!environment.demoEnabled) {
       wx.showToast({ title: "当前环境不提供演示入口", icon: "none" });

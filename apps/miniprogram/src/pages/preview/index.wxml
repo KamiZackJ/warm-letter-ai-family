@@ -77,6 +77,7 @@
       <text class="band-heading">寄给微信好友</text>
       <block wx:if="{{!shareReady}}">
         <text class="band-copy">先确认内容。确认后会出现“选择微信好友寄出”。</text>
+        <text wx:if="{{confirmError}}" class="speech-error" aria-role="alert" aria-live="assertive">{{confirmError}}</text>
         <button class="primary-button confirm-button" loading="{{confirming}}" disabled="{{confirming || regenerating || speechLoading || voiceChangePending}}" bindtap="confirmForShare">{{confirming ? '正在确认…' : '确认内容，准备寄出'}}</button>
       </block>
       <block wx:else>

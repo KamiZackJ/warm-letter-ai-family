@@ -21,6 +21,21 @@ export class HttpRequestError extends Error {
   }
 }
 
+export function userFacingApiError(code: string | undefined, fallback?: string): string {
+  switch (code) {
+    case "CONTENT_SAFETY_PENDING":
+      return "图片或录音仍在安全检查中，家书尚未寄出。草稿已保存，请稍后回来确认；检查可能需要约 30 分钟。";
+    case "CONTENT_SAFETY_REJECTED":
+      return "部分内容未通过安全检查，家书尚未寄出。请核对文字，或删除相关素材后重新整理。";
+    case "CONTENT_SAFETY_UNAVAILABLE":
+      return "安全检查暂时不可用，尚未完成本次操作。请稍后重试。";
+    case "WECHAT_LOGIN_REQUIRED":
+      return "微信登录已失效，请重新登录后再试。";
+    default:
+      return fallback || "服务暂时不可用";
+  }
+}
+
 function accessTokenHeader(): Record<string, string> {
   const accessToken = wx.getStorageSync(storageKey("access_token"));
   return { authorization: accessToken ? `Bearer ${accessToken}` : "" };
@@ -110,7 +125,7 @@ async function executeRequest<T>(options: {
     error?: { code?: string; message?: string; retryable?: boolean };
   };
   throw new HttpRequestError(
-    payload?.error?.message || payload?.message || "服务暂时不可用",
+    userFacingApiError(payload?.error?.code, payload?.error?.message || payload?.message),
     response.statusCode,
     payload?.error?.code,
     payload?.error?.retryable,
@@ -195,7 +210,7 @@ export async function requestBinary(
   }
   const payload = decodeBinaryError(response.data);
   throw new HttpRequestError(
-    payload.error?.message || payload.message || "服务暂时不可用",
+    userFacingApiError(payload.error?.code, payload.error?.message || payload.message),
     response.statusCode,
     payload.error?.code,
     payload.error?.retryable,

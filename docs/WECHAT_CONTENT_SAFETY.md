@@ -1,0 +1,83 @@
+# 微信内容安全接入与发布边界
+
+核对日期：2026-09-23。以下模块的自动化验证使用合成数据和本地 HTTP 服务；不代表账号权限、真实微信回调链路或正式审核已验证。
+
+## 文本安全
+
+`createContentSafetyProviderFromEnv(env)` 创建服务端 `WechatContentSafetyProvider`，只读取服务端 `WECHAT_APP_ID`、`WECHAT_APP_SECRET`。稳定令牌通过官方 `stable_token` 获取并缓存，合并并发刷新；普通刷新不会主动使其他请求的令牌失效。只有明确的失效令牌错误才重新获取并重试一次，配额错误和风险结果不重试。
+
+```ts
+await requireTextSafety(provider, {
+  content: finalText,
+  openId: authenticatedUser.openId,
+  scene: 4, // 家书为社交日志；回复用 2（评论）。
+});
+```
+
+文本接口固定使用 version=2，一次最多 2500 个 Unicode 字符；不截断未审内容。只接受完整、有效的 `result.suggest=pass`。`review` 和 `risky` 均阻断发送；只有请求受理标识、异常 JSON、超时、上游失败或配额用尽不能放行。不要把模型自己的“安全”判断代替此结果。
+
+用户 OpenID 必须属于此小程序，且用户近两小时内访问过小程序。`61010` 等身份问题转为 `WECHAT_LOGIN_REQUIRED`，需要客户端重新登录后重试。阅读可匿名，发布回复需要服务端鉴权后取得 OpenID，不能相信客户端提交的 OpenID。
+
+默认 `WECHAT_TOKEN_TIMEOUT_MS=5000`，`CONTENT_SAFETY_TIMEOUT_MS=15000`，范围 500–60000 毫秒。内容审核的总时限包含令牌等待、第一次请求、可选重试和完整响应体。响应体最多 128 KiB，禁止 HTTP 重定向；取消或回收失败不拖延返回，也不记录上游原始错误、用户正文或凭据。
+
+对家书生成输入、生成结果、最终编辑结果和回复分别设置审核点。提交审核后如果正文、称呼、署名或来源改变，不能复用旧结果；发布前检查当前内容与已审核版本的一致性。超过单次上限时应限制输入或按业务独立字段审核，不能悄悄截断。
+
+## 媒体审核
+
+```ts
+const receipt = await provider.submitMedia({
+  mediaUrl: temporaryReviewUrl,
+  mediaType: "image", // 或 audio
+  openId: authenticatedUser.openId,
+  scene: 4,
+});
+```
+
+`submitMedia` **只返回 pending 或 unavailable，不返回 allow**。必须将 `traceId`、素材标识、文件内容版本或摘要、所有者、提交时间和截止时间持久化，待收到已验签的最终回调后才能放行该素材。官方回调不提供 `media_type`，通过 `trace_id` 查询原始任务，不猜测媒体类型。重启、超时、下载失败和未知 trace ID 均不能变成审核通过。
+
+官方当前格式和大小限制：
+
+- 图片：jpg、jpeg、png、bmp、gif；gif 只取首帧，不等于逐帧审核。
+- 音频：mp3、aac、ac3、wma、flac、vorbis、opus、wav。
+- 单个文件不超过 10M。文档未承诺 m4a 容器、HEIC/HEIF、WebP、视频或其他格式，也未给出音频时长上限；不要用文件扩展名“看起来相近”推断兼容。
+- URL 必须能被微信检测服务器下载。使用用途独立、有限期、绑定文件版本的审核地址，不公开整个素材目录；审核前验证实际媒体类型与大小。URL 有效期需覆盖下载等待，回调最长可能在 30 分钟内到达。
+
+本实现将 m4a/MP4 与 Ogg 在服务端完整转换为 MP3 再保存为实际分享素材，审核和播放使用同一文件；把 m4a 直接重命名为 aac 不改变容器格式。`prepareMediaForSafety` 仅允许 JPG/PNG/BMP 静态图与当前支持的音频，拒绝 WebP/GIF/HEIC。m4a 输入可能在文件末尾保存索引，使用唯一、受限权限的临时文件提供可定位输入，成功或失败均清理。Windows 调试必须设置 D 盘临时目录，服务器使用私有数据目录。
+
+`normalizeSafetyMaterial` 同时覆盖新上传和旧版本已标记 READY 的素材。上传完成、首次发布和重新分享前均执行；同一仓库与素材的并发请求合并。它读取真实存储内容，转换后通过同步事务比较原 objectKey、类型和状态，仅在素材仍是同一版本时替换，原文件进入持久删除队列，并清除该素材的旧审核记录。删除、覆盖、写入超时或失去比较更新竞争时，新文件只进入删除队列，不恢复被删除的数据；迟到写入会再次登记清理。
+
+发布检查在同一家书快照内进行素材规范化、媒体提交与文本检查，并共享 60 秒总时限；中途修改正文或素材列表会要求重新确认。超时只保留草稿，迟到的规范化结果不能继续触发后续审核或发布。规范化替换文件期间迟到的旧媒体受理响应也不能写回该素材的审核记录。
+
+转码限制为最多两个并行子进程、输入 25 MiB、输出 10 MiB、完整操作 15 秒。固定本地 demuxer、禁用网络协议、禁止 shell、单线程；输出超大或超时就终止进程并丢弃部分结果，不截断后放行。`max_alloc` 限制单项分配，不是操作系统级进程总内存隔离；正式服务另由进程/容器资源上限约束。
+
+媒体协调器持久记录 `pending/pass/reject/failed`；最终回调只更新最新、35 分钟内、尚未完成的任务，旧回调、迟到回调和重复回调不能取得发布权限。`failed`（例如微信下载失败）一分钟后允许重试，`reject` 不自动重审。未返回 trace ID 的受理失败也有本进程一分钟冷却。异步回调早于提交响应持久化时返回可重试失败，让平台重推。
+
+范围：微信媒体异步审核针对上传的用户素材。AI 朗读在合成前审核文字输入；除非业务额外接入朗读成品的媒体任务，不能将此描述为“生成的音频波形也通过了微信媒体审核”。
+
+## 消息推送与回调
+
+在小程序后台“开发管理 → 消息推送配置”设置服务器 URL、Token、EncodingAESKey，选择 **安全模式** 和 JSON（模块也兼容标准 XML）。服务端分别配置 `WECHAT_MESSAGE_TOKEN`、`WECHAT_ENCODING_AES_KEY`，不要提交到仓库。
+
+```ts
+const verifier = new WechatModerationCallbackVerifier({
+  token: messageToken,
+  appId,
+  encodingAesKey,
+});
+// GET: 回复 verifier.verifyHandshake(query) 原样返回的 echostr。
+// POST:
+const event = verifier.decodeMediaCheckCallback(query, body);
+// null 表示其他已认证事件，可以回复 success，但不能修改审核记录。
+// allow/reject/unavailable 仅更新同一 traceId 对应的任务；处理必须幂等。
+```
+
+GET 握手按官方文档校验 `signature`；安全模式 POST 校验包含密文的 `msg_signature`，不使用普通 `signature` 代替。模块验证 ±5 分钟时间窗、AES-256-CBC、32 字节 PKCS#7 填充、解密后的 AppID、事件类型和版本。XML 解析拒绝 DTD、外部实体、属性、超限嵌套和歧义关键字段。安全模式可兼容微信官方公开的加密样例，已有固定向量测试。
+
+默认拒绝明文 POST。仅显式传 `allowPlaintext:true` 可兼容旧标准：其 SHA1 签名只覆盖 URL 参数，不保护正文完整性，正式环境应保持 AES 安全模式。回调路由不要记录查询参数、密文或解密正文；未知/过期/重复事件不会取得其他内容的发布权限。
+
+## 官方依据
+
+- [文本内容安全识别](https://developers.weixin.qq.com/miniprogram/dev/server/API/sec-center/sec-check/api_msgseccheck.html)：含 2500 字限制、近两小时访问要求、scene 和结果字段。未上架小程序文本调用上限为 100 次/天，联调需要控制次数。
+- [多媒体内容安全识别](https://developers.weixin.qq.com/miniprogram/dev/server/API/sec-center/sec-check/api_mediacheckasync.html)：支持格式、10M、30 分钟异步推送、回调结构。
+- [稳定版接口调用凭据](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-access-token/api_getstableaccesstoken.html)：7200 秒内有效期、普通刷新、强制刷新限制。
+- [消息推送](https://developers.weixin.qq.com/miniprogram/dev/framework/server-ability/message-push)：安全模式配置、签名、AES 协议和官方测试向量。

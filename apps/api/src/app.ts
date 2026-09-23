@@ -14,7 +14,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { FakeAIProvider, type AIProvider } from "./ai.js";
-import type { GenerationJob, Letter, Material } from "./domain.js";
+import type { GenerationJob, Letter, Material, Reply } from "./domain.js";
 import { ApiError } from "./errors.js";
 import {
   GenerationRateLimiter,
@@ -30,7 +30,11 @@ import {
   ObjectAlreadyExistsError,
   type ObjectStorage,
 } from "./object-storage.js";
-import { MemoryRepository } from "./repository.js";
+import { MemoryRepository, type Repository } from "./repository.js";
+import type { ContentSafetyProvider, MediaSafetyProvider } from "./content-safety.js";
+import { ProductionSafety } from "./production-safety.js";
+import { normalizeSafetyMaterial } from "./safety-materials.js";
+import { WechatModerationCallbackVerifier } from "./wechat-moderation-callback.js";
 import {
   PublicRateLimiter,
   type PublicRateLimitConfig,
@@ -97,7 +101,11 @@ export interface BuildAppOptions {
   deploymentMode: DeploymentMode;
   authProviderMode?: AuthProviderMode;
   wechatAuthProvider?: WechatAuthProvider;
-  repository?: MemoryRepository;
+  repository?: Repository;
+  contentSafetyProvider?: ContentSafetyProvider & MediaSafetyProvider;
+  moderationCallback?: WechatModerationCallbackVerifier;
+  durableStorage?: boolean;
+  mediaTemporaryDirectory?: string;
   aiProvider?: AIProvider;
   speechProvider?: SpeechProvider;
   logger?: boolean;
@@ -182,6 +190,11 @@ function ownerLetterDto(letter: Letter): Omit<Letter, "narration"> {
   return dto;
 }
 
+function replyDto(reply: Reply): Omit<Reply, "authorUserId"> {
+  const {authorUserId: _privateAuthor, ...dto} = reply;
+  return dto;
+}
+
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const aiProvider = options.aiProvider ?? new FakeAIProvider();
   const speechProvider = options.speechProvider;
@@ -194,7 +207,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   };
   const aiInputVerification = aiProvider.inputCapabilityVerification ?? "unknown";
   if (
-    options.deploymentMode === "competition" &&
+    (options.deploymentMode === "competition" || options.deploymentMode === "production") &&
     aiProviderMode === "openai-compatible" &&
     (aiInputVerification !== "profile-match" ||
       aiInputCapabilities.image !== "native" ||
@@ -204,7 +217,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       "competition mode requires a probed OpenAI-compatible profile with image and audio capabilities",
     );
   }
-  assertApiDeploymentSupported(options.deploymentMode, aiProviderMode, authProviderMode);
+  assertApiDeploymentSupported(options.deploymentMode, aiProviderMode, authProviderMode, {
+    repository: options.repository?.kind ?? "memory",
+    durableStorage: options.durableStorage === true && options.objectStorage instanceof FileSystemObjectStorage,
+    contentSafety: options.contentSafetyProvider?.name === "wechat-msg-sec-check-v2",
+    callback: Boolean(options.moderationCallback), authenticationReady: Boolean(options.wechatAuthProvider),
+    stableSigningKeys: Boolean(options.mediaSigningKeys?.length),
+  });
   const authenticationReady =
     authProviderMode === "wechat"
       ? Boolean(options.wechatAuthProvider)
@@ -254,6 +273,8 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       mediaTokenTtlMs: options.mediaTokenTtlMs,
       mediaSigningKeys: options.mediaSigningKeys,
       replySafetyPolicy: options.replySafetyPolicy,
+      contentSafetyProvider: options.contentSafetyProvider,
+      allowDevelopmentAuth: authProviderMode === "development" && (options.deploymentMode === "demo" || options.deploymentMode === "test"),
       replySafetyTimeoutMs: options.replySafetyTimeoutMs,
       now: options.now,
     },
@@ -262,6 +283,24 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     options.publicRateLimits,
     () => (options.now?.() ?? new Date()).getTime(),
   );
+  const safetyMaterialOptions = {
+    temporaryDirectory: options.mediaTemporaryDirectory ?? resolve(options.uploadDirectory ?? ".", ".safety-tmp"),
+  };
+  const safety = options.contentSafetyProvider ? new ProductionSafety({
+    repository: service.repository, service, provider: options.contentSafetyProvider,
+    publicBaseUrl, signingKeys: options.mediaSigningKeys ?? [], now: options.now,
+    normalizeMaterial: (material) => normalizeSafetyMaterial(service.repository, objectStorage, material, safetyMaterialOptions),
+  }) : undefined;
+
+  async function cleanupObjects(): Promise<void> {
+    for (const key of service.repository.listObjectDeletions()) {
+      try { await objectStorage.delete(key); service.repository.completeObjectDeletion(key); }
+      catch { app.log.warn("Object deletion pending; cleanup will retry"); }
+    }
+  }
+  const cleanupTimer = setInterval(() => { void cleanupObjects(); }, 30_000);
+  cleanupTimer.unref();
+  app.addHook("onClose", async () => { clearInterval(cleanupTimer); await cleanupObjects(); });
   const generationRateLimiter = new GenerationRateLimiter(
     options.generationRateLimits,
     () => (options.now?.() ?? new Date()).getTime(),
@@ -356,7 +395,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     status: "ok",
     service: "warm-letter-api",
     deploymentMode: options.deploymentMode,
-    nonProduction: true,
+    nonProduction: options.deploymentMode !== "production",
     capabilities: {
       ai: aiProviderMode,
       aiInputs: {
@@ -365,12 +404,31 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       },
       authentication: authProviderMode,
       authenticationReady,
-      repository: "memory",
+      repository: service.repository.kind,
       objectStorage: "local-filesystem",
-      replySafety: "deterministic",
+      replySafety: options.contentSafetyProvider ? "wechat" : "deterministic",
+      contentSafety: options.contentSafetyProvider ? "wechat-text-and-media" : "disabled",
       speech: speechProvider?.name ?? "disabled",
     },
   }));
+
+  if (safety && options.moderationCallback) {
+    const verifier = options.moderationCallback;
+    app.addContentTypeParser(["text/xml", "application/xml"], {parseAs: "string", bodyLimit: 128 * 1024}, (_request, body, done) => done(null, body));
+    app.get("/v1/wechat/messages", async (request, reply) => reply.type("text/plain").send(verifier.verifyHandshake(request.query as Record<string, string>)));
+    app.post("/v1/wechat/messages", {bodyLimit: 128 * 1024}, async (request, reply) => {
+      const result = verifier.decodeMediaCheckCallback(request.query as Record<string, string>, request.body as string | Record<string, unknown>);
+      if (result) safety.acceptCallback(result);
+      return reply.type("text/plain").send("success");
+    });
+    app.get("/v1/safety/media/:id", async (request, reply) => {
+      const {id} = request.params as {id: string};
+      const material = safety.verifyMedia(id, request.query as Record<string, unknown>);
+      const stored = await objectStorage.read(material.objectKey!);
+      if (!stored) throw new ApiError(404, "NOT_FOUND", "素材不存在");
+      return reply.type(stored.contentType).header("cache-control", "no-store").header("x-content-type-options", "nosniff").send(stored.bytes);
+    });
+  }
 
   app.post("/v1/auth/wx-login", async (request, reply) => {
     if (authProviderMode === "wechat") {
@@ -435,6 +493,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       name,
       stringValue(body.contentType, "contentType", false),
     );
+    if (safety && policy.contentType === "image/webp") throw new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "请使用 JPG 或 PNG 格式的图片");
     const objectKey = `${user.id}/${crypto.randomUUID()}${policy.extension}`;
     const { material, replayed } = service.registerMaterial(
       user.id,
@@ -518,6 +577,12 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       }
       throw error;
     }
+    const uploadedMaterial = service.repository.getMaterial(id);
+    if (!uploadedMaterial || uploadedMaterial.status === "DELETED" || !service.repository.getUser(material.userId)) {
+      service.repository.scheduleObjectDeletion(material.objectKey);
+      await cleanupObjects();
+      throw new ApiError(404, "MATERIAL_NOT_FOUND", "素材已删除");
+    }
     return reply.status(204).send();
   });
 
@@ -525,8 +590,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const user = service.authenticate(tokenFrom(request));
     const body = record(request.body);
     const materialId = stringValue(body.materialId, "materialId")!;
-    const material = requireOwnedMaterial(service, user.id, materialId);
+    let material = requireOwnedMaterial(service, user.id, materialId);
     if (material.status === "READY") {
+      if (safety) material = await normalizeSafetyMaterial(service.repository, objectStorage, material, safetyMaterialOptions);
+      await safety?.submitMaterial(material);
       return { material };
     }
     if (material.status !== "UPLOADING") {
@@ -544,8 +611,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     }
     const policy = resolveMediaUploadPolicy(material.type, material.name, material.contentType);
     validateMediaBytes(storedObject.bytes, policy, maxMediaUploadBytes);
+    if (safety) {
+      material = await normalizeSafetyMaterial(service.repository, objectStorage, material, safetyMaterialOptions);
+    }
     const textContent = stringValue(body.textContent, "textContent", false);
-    return { material: service.completeMaterial(user.id, materialId, { textContent }) };
+    const completed = service.completeMaterial(user.id, materialId, { textContent });
+    await safety?.submitMaterial(completed);
+    return { material: completed };
   });
 
   app.get("/v1/materials/:id/content", async (request, reply) => {
@@ -569,11 +641,25 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.delete("/v1/materials/:id", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
-    const material = requireOwnedMaterial(service, user.id, id);
-    if (material.objectKey) {
-      await objectStorage.delete(material.objectKey);
-    }
     service.deleteMaterial(user.id, id);
+    await cleanupObjects();
+    return reply.status(204).send();
+  });
+
+  app.get("/v1/letters", async (request) => {
+    const user = service.authenticate(tokenFrom(request));
+    return {letters: service.listLetters(user.id).map(ownerLetterDto)};
+  });
+  app.delete("/v1/letters/:id", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    service.deleteLetter(user.id, (request.params as {id: string}).id);
+    await cleanupObjects();
+    return reply.status(204).send();
+  });
+  app.delete("/v1/account", async (request, reply) => {
+    const user = service.authenticate(tokenFrom(request));
+    service.deleteAccount(user.id);
+    await cleanupObjects();
     return reply.status(204).send();
   });
 
@@ -626,7 +712,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       }
       enforceSpeechRateLimit(request, reply, user.id);
       try {
+        await service.checkText(user.id, text);
         const audio = await speechProvider.synthesize({ text, voiceId, tone });
+        service.getLetter(user.id, id);
         if (persist) {
           const extension = audio.contentType === "audio/wav" ? ".wav" : ".mp3";
           const objectKey = `${user.id}/narrations/${id}/${randomUUID()}${extension}`;
@@ -645,11 +733,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
             });
             previousObjectKey = attached.previousObjectKey;
           } catch (error) {
-            await objectStorage.delete(objectKey).catch(() => undefined);
+            service.repository.scheduleObjectDeletion(objectKey);
+            await cleanupObjects();
             throw error;
           }
           if (previousObjectKey && previousObjectKey !== objectKey) {
-            await objectStorage.delete(previousObjectKey).catch(() => undefined);
+            service.repository.scheduleObjectDeletion(previousObjectKey);
+            await cleanupObjects();
           }
         }
         return reply
@@ -705,6 +795,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.post("/v1/letters/:id/confirm", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
+    await safety?.requirePublishable(user.id, id);
     const published = service.confirmAndPublish(user.id, id);
     reply.header("cache-control", "no-store");
     return {
@@ -717,6 +808,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.post("/v1/letters/:id/share/reissue", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
+    await safety?.requirePublishable(user.id, id);
     const published = service.reissueShare(user.id, id);
     reply.header("cache-control", "no-store");
     return {
@@ -745,6 +837,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     return {
       reader: {
         ...reader,
+        replies: reader.replies.map(replyDto),
         narration: reader.narration
           ? {
               ...reader.narration,
@@ -823,6 +916,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const shareToken = queryTokenFrom(request, "token");
+      const replyAuthor = options.deploymentMode === "production" ? service.authenticate(tokenFrom(request)) : undefined;
       let text: string;
       let authorName: string | undefined;
       let idempotencyKey: string | undefined;
@@ -843,12 +937,13 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
             text,
             authorName,
             idempotencyKey,
+            replyAuthor?.id,
           );
           if (replayedReply) {
             return reply
               .header("cache-control", "no-store")
               .status(201)
-              .send({ reply: replayedReply });
+              .send({ reply: replyDto(replayedReply) });
           }
         } catch (error) {
           if (error instanceof ApiError && error.code === "IDEMPOTENCY_KEY_REUSED") {
@@ -865,18 +960,19 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
         text,
         authorName,
         idempotencyKey,
+        replyAuthor?.id,
       );
       return reply
         .header("cache-control", "no-store")
         .status(201)
-        .send({ reply: createdReply });
+        .send({ reply: replyDto(createdReply) });
     },
   );
 
   app.get("/v1/letters/:id/replies", async (request) => {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
-    return { replies: service.listReplies(user.id, id) };
+    return { replies: service.listReplies(user.id, id).map(replyDto) };
   });
 
   return app;

@@ -23,6 +23,8 @@ import {
 } from "./generation-polling";
 import { HttpRequestError, request, requestBinary, uploadBinary } from "./http-client";
 import { runCallbackTask } from "./async-task";
+import { ensurePrivacyConsent } from "./privacy";
+import { clearWarmLetterStorage, removeLetterLocally, removeNarrationFiles } from "../utils/data-deletion";
 
 type ServerMaterial = {
   id: string;
@@ -113,6 +115,8 @@ const REAL_SHARE_TOKENS_KEY = storageKey("real_share_tokens");
 const REAL_GENERATION_JOBS_KEY = storageKey("real_generation_jobs");
 const REAL_GENERATION_REQUEST_KEYS_KEY = storageKey("real_generation_request_keys");
 const ACCESS_TOKEN_KEY = storageKey("access_token");
+const ACCOUNT_DELETED_KEY = storageKey("account_deleted");
+const deletedLetterIds = new Set<string>();
 
 function readRecord<T>(key: string): Record<string, T> {
   const value = wx.getStorageSync(key);
@@ -126,15 +130,8 @@ function readIds(): string[] {
   return Array.isArray(value) ? (value as string[]) : [];
 }
 
-function isStaleLetterIdError(error: unknown): boolean {
-  return (
-    error instanceof HttpRequestError &&
-    error.statusCode === 404 &&
-    error.code === "LETTER_NOT_FOUND"
-  );
-}
-
 function saveGenerationJob(letterId: string, jobId?: string): void {
+  if (deletedLetterIds.has(letterId)) return;
   const jobs = readRecord<string>(REAL_GENERATION_JOBS_KEY);
   if (jobId) jobs[letterId] = jobId;
   else delete jobs[letterId];
@@ -142,6 +139,7 @@ function saveGenerationJob(letterId: string, jobId?: string): void {
 }
 
 function saveGenerationRequestKey(letterId: string, requestKey?: string): void {
+  if (deletedLetterIds.has(letterId)) return;
   const requestKeys = readRecord<string>(REAL_GENERATION_REQUEST_KEYS_KEY);
   if (requestKey) requestKeys[letterId] = requestKey;
   else delete requestKeys[letterId];
@@ -309,8 +307,12 @@ function mapLetter(serverLetter: ServerLetter, replies: ServerReply[] = []): Let
 }
 
 let loginInFlight: Promise<void> | null = null;
+let accountDataEpoch = 0;
 
 async function loginWithWeChat(): Promise<void> {
+  const epoch = accountDataEpoch;
+  await ensurePrivacyConsent();
+  if (epoch !== accountDataEpoch) throw new Error("账号数据已清除，请重新打开首页");
   const loginResult = await runCallbackTask<{ code: string }>(({ success, fail }) => {
     wx.login({ timeout: 12_000, success, fail: () => fail(new Error("微信登录失败，请重试")) });
   }, {
@@ -318,6 +320,7 @@ async function loginWithWeChat(): Promise<void> {
     timeoutError: () => new HttpRequestError("微信登录超时，请重试", 0, "LOGIN_TIMEOUT", true),
   });
   const code = loginResult.code?.trim();
+  if (epoch !== accountDataEpoch) throw new Error("账号数据已清除，请重新打开首页");
   if (!code && environment.deploymentMode !== "demo" && environment.deploymentMode !== "test") {
     throw new Error("微信登录未完成，请重试");
   }
@@ -325,7 +328,9 @@ async function loginWithWeChat(): Promise<void> {
     method: "POST",
     data: { code: code || "local-demo" },
   });
+  if (epoch !== accountDataEpoch) throw new Error("账号数据已清除，请重新打开首页");
   wx.setStorageSync(ACCESS_TOKEN_KEY, response.token);
+  if (wx.getStorageSync(ACCOUNT_DELETED_KEY) === true) wx.removeStorageSync(ACCOUNT_DELETED_KEY);
 }
 
 async function ensureLogin(): Promise<void> {
@@ -342,7 +347,7 @@ function isUnauthorized(error: unknown): boolean {
   return (
     error instanceof HttpRequestError &&
     error.statusCode === 401 &&
-    error.code === "UNAUTHORIZED"
+    (error.code === "UNAUTHORIZED" || error.code === "WECHAT_LOGIN_REQUIRED")
   );
 }
 
@@ -353,10 +358,17 @@ function clearAccessTokenIfCurrent(accessToken: unknown): void {
 }
 
 async function authorized<T>(operation: () => Promise<T>): Promise<T> {
+  const epoch = accountDataEpoch;
+  const checkedOperation = async () => {
+    if (epoch !== accountDataEpoch) throw new Error("账号数据已清除，请重新打开首页");
+    const result = await operation();
+    if (epoch !== accountDataEpoch) throw new Error("账号数据已清除，请重新打开首页");
+    return result;
+  };
   await ensureLogin();
   const attemptedToken = wx.getStorageSync(ACCESS_TOKEN_KEY);
   try {
-    return await operation();
+    return await checkedOperation();
   } catch (error) {
     if (!isUnauthorized(error)) throw error;
 
@@ -365,7 +377,7 @@ async function authorized<T>(operation: () => Promise<T>): Promise<T> {
     await ensureLogin();
     const retryToken = wx.getStorageSync(ACCESS_TOKEN_KEY);
     try {
-      return await operation();
+      return await checkedOperation();
     } catch (retryError) {
       if (isUnauthorized(retryError)) {
         clearAccessTokenIfCurrent(retryToken);
@@ -412,6 +424,7 @@ export const realApi = {
   },
 
   async saveMaterial(material: Material): Promise<Material> {
+    await ensurePrivacyConsent();
     if (material.type !== "text") {
       const upload = mediaUploadDescriptor(material);
       const presigned = await authorized(() =>
@@ -487,28 +500,17 @@ export const realApi = {
   },
 
   async listLetters(): Promise<LetterSummary[]> {
-    const ids = readIds();
-    const letters = await Promise.all(
-      ids.map(async (id) => {
-        try {
-          return mapLetter(await getServerLetter(id));
-        } catch (error) {
-          if (isStaleLetterIdError(error)) return null;
-          throw error;
-        }
-      }),
-    );
-    if (letters.some((letter) => letter === null)) {
-      const staleIds = new Set(
-        ids.filter((_, index) => letters[index] === null),
-      );
-      wx.setStorageSync(
-        REAL_LETTER_IDS_KEY,
-        readIds().filter((id) => !staleIds.has(id)),
-      );
-    }
+    // Returning to the home page after erasure must not silently recreate an account.
+    if (wx.getStorageSync(ACCOUNT_DELETED_KEY) === true) return [];
+    const startingIds = new Set(readIds());
+    const response = await authorized(() => request<{ letters: ServerLetter[] }>("/letters"));
+    const letters = response.letters.map((letter) => mapLetter(letter));
+    // Preserve a local create committed while the server listing was in flight.
+    wx.setStorageSync(REAL_LETTER_IDS_KEY, Array.from(new Set([
+      ...readIds().filter((id) => !startingIds.has(id)),
+      ...letters.map((letter) => letter.id),
+    ])));
     return letters
-      .filter((letter): letter is Letter => Boolean(letter))
       .map((letter) => ({
         id: letter.id,
         status: letter.status,
@@ -518,6 +520,28 @@ export const realApi = {
         title: letter.draft?.title || `写给${letter.intent.recipient}的一封信`,
       }))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  },
+
+  async deleteLetter(id: string): Promise<{ localCleanupComplete: boolean }> {
+    await authorized(() => request<void>(`/letters/${encodeURIComponent(id)}`, { method: "DELETE" }));
+    deletedLetterIds.add(id);
+    try {
+      removeLetterLocally(id);
+      await removeNarrationFiles(id);
+      return { localCleanupComplete: true };
+    } catch { return { localCleanupComplete: false }; }
+  },
+
+  async deleteAccount(): Promise<{ localCleanupComplete: boolean }> {
+    await authorized(() => request<void>("/account", { method: "DELETE" }));
+    accountDataEpoch += 1;
+    loginInFlight = null;
+    try {
+      clearWarmLetterStorage();
+      wx.setStorageSync(ACCOUNT_DELETED_KEY, true);
+      await removeNarrationFiles();
+      return { localCleanupComplete: true };
+    } catch { return { localCleanupComplete: false }; }
   },
 
   async createLetter(input: CreateLetterInput): Promise<Letter> {
@@ -671,6 +695,7 @@ export const realApi = {
     voiceId: string,
     tone: CreateLetterInput["intent"]["tone"],
   ): Promise<GeneratedNarration> {
+    const epoch = accountDataEpoch;
     const text = letterDraftSpeechText(draft);
     if (text.length > 4_000) {
       throw new Error("家书超过 4000 字，暂时无法生成整封朗读，请先精简文字");
@@ -687,7 +712,12 @@ export const realApi = {
         },
       }),
     );
-    return await writeNarrationFile(id, response.data, response.contentType);
+    const narration = await writeNarrationFile(id, response.data, response.contentType);
+    if (epoch !== accountDataEpoch || deletedLetterIds.has(id)) {
+      try { wx.getFileSystemManager().unlink({ filePath: narration.filePath, fail: () => undefined }); } catch { /* Best effort. */ }
+      throw new Error("家书数据已删除，朗读已停止");
+    }
+    return narration;
   },
 
   async updateDraft(id: string, draft: LetterDraft): Promise<Letter> {
@@ -722,6 +752,7 @@ export const realApi = {
       saveShareToken(id, response.shareToken);
       return { ...mapLetter(response.letter), shareToken: response.shareToken };
     } catch (error) {
+      if (error instanceof HttpRequestError && error.code?.startsWith("CONTENT_SAFETY_")) throw error;
       try {
         const current = await realApi.getLetter(id);
         if (current.status === "PUBLISHED" || current.status === "CONFIRMED") {
@@ -754,14 +785,15 @@ export const realApi = {
     requestKey?: string,
   ): Promise<Reply> {
     const token = requireShareToken(id, shareToken);
-    const response = await request<{ reply: ServerReply }>(
+    await ensurePrivacyConsent();
+    const response = await authorized(() => request<{ reply: ServerReply }>(
       `/letters/${id}/replies?token=${encodeURIComponent(token)}`,
       {
         method: "POST",
         headers: requestKey ? { "idempotency-key": requestKey } : undefined,
         data: { text, authorName: "家人" },
       },
-    );
+    ));
     return response.reply;
   },
 };

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { OpenAIResponsesProvider } from "../src/ai.js";
 import { buildApp } from "../src/app.js";
-import { loadApiRuntimeConfig } from "../src/runtime-config.js";
+import { assertApiDeploymentSupported, loadApiRuntimeConfig } from "../src/runtime-config.js";
+import { resolve } from "node:path";
 import { json } from "./helpers.js";
 
 const signingKey = Buffer.alloc(32, 7).toString("base64url");
@@ -331,12 +332,45 @@ describe("API runtime configuration", () => {
     ).toThrow("must not use localhost");
   });
 
-  it("blocks production while development adapters remain in the composition root", () => {
+  it("requires durable paths, explicit single-instance operation and secure moderation configuration", () => {
+    const valid = competitionEnvironment({
+      DEPLOYMENT_MODE: "production", AUTH_PROVIDER: "wechat",
+      DATABASE_PATH: resolve("durable-api-test.sqlite"), UPLOAD_DIR: resolve("durable-uploads"),
+      PRODUCTION_SINGLE_INSTANCE: "true", WECHAT_MESSAGE_TOKEN: "testMessageToken",
+      WECHAT_ENCODING_AES_KEY: Buffer.alloc(32, 8).toString("base64").slice(0, -1),
+    });
+    expect(loadApiRuntimeConfig(valid)).toMatchObject({ deploymentMode: "production", authProviderMode: "wechat" });
+    for (const [override, message] of [
+      [{ DATABASE_PATH: undefined }, "DATABASE_PATH"],
+      [{ DATABASE_PATH: ":memory:" }, "DATABASE_PATH"],
+      [{ DATABASE_PATH: "relative.sqlite" }, "DATABASE_PATH"],
+      [{ UPLOAD_DIR: "relative-uploads" }, "UPLOAD_DIR"],
+      [{ PRODUCTION_SINGLE_INSTANCE: "false" }, "PRODUCTION_SINGLE_INSTANCE"],
+      [{ WECHAT_MESSAGE_TOKEN: "bad token" }, "WECHAT_MESSAGE_TOKEN"],
+      [{ WECHAT_ENCODING_AES_KEY: "bad-key" }, "WECHAT_ENCODING_AES_KEY"],
+      [{ AUTH_PROVIDER: "development" }, "verified Wechat authentication"],
+      [{ AI_PROVIDER: "fake" }, "real multimodal AI provider"],
+      [{ MEDIA_SIGNING_KEYS: undefined }, "MEDIA_SIGNING_KEYS"],
+    ] as const) {
+      expect(() => loadApiRuntimeConfig({ ...valid, ...override })).toThrow(message);
+    }
+  });
+
+  it("blocks every missing production capability without accepting development adapters", () => {
+    const valid = { repository: "sqlite", durableStorage: true, contentSafety: true, callback: true, authenticationReady: true, stableSigningKeys: true };
+    expect(() => assertApiDeploymentSupported("production", "openai", "wechat", valid)).not.toThrow();
+    for (const [override, message] of [
+      [{ repository: "memory" }, "MemoryRepository"], [{ durableStorage: false }, "durable single-host"],
+      [{ contentSafety: false }, "Wechat content safety"], [{ callback: false }, "authenticated callbacks"],
+      [{ authenticationReady: false }, "verified Wechat authentication"], [{ stableSigningKeys: false }, "stable media signing keys"],
+    ] as const) {
+      expect(() => assertApiDeploymentSupported("production", "openai", "wechat", { ...valid, ...override })).toThrow(message);
+    }
     expect(() =>
       loadApiRuntimeConfig(
         competitionEnvironment({ DEPLOYMENT_MODE: "production" }),
       ),
-    ).toThrow(/MemoryRepository.*FileSystemObjectStorage/);
+    ).toThrow("DATABASE_PATH");
     expect(() =>
       loadApiRuntimeConfig(
         competitionEnvironment({
@@ -346,7 +380,7 @@ describe("API runtime configuration", () => {
           OPENAI_MODEL: undefined,
         }),
       ),
-    ).toThrow(/FakeAIProvider/);
+    ).toThrow("DATABASE_PATH");
   });
 });
 
@@ -389,6 +423,7 @@ describe("API deployment disclosure", () => {
         repository: "memory",
         objectStorage: "local-filesystem",
         replySafety: "deterministic",
+        contentSafety: "disabled",
         speech: "disabled",
       },
     });
@@ -431,7 +466,7 @@ describe("API deployment disclosure", () => {
 
   it("also blocks direct production app construction", () => {
     expect(() => buildApp({ deploymentMode: "production" })).toThrow(
-      /development wx-login authentication.*MemoryRepository/,
+      /verified Wechat authentication.*MemoryRepository/,
     );
   });
 });

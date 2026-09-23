@@ -112,10 +112,11 @@
       <text class="band-title">回一句话</text>
       <textarea class="reply-input" aria-label="回复内容" maxlength="{{replyLimit}}" disabled="{{sendingReply}}" placeholder="例如：看到了，放心吧。你也照顾好自己…" value="{{replyText}}" bindinput="updateReply" />
       <view class="reply-input-meta">
-        <text class="reply-helper">回复会显示在这封家书下方。</text>
+        <text class="reply-helper">发送时使用微信登录保护回复安全。回复会显示在家书下方，持有分享的人都能看到。</text>
         <text class="reply-count" aria-label="已输入 {{replyCount}} 字，共可输入 {{replyLimit}} 字">{{replyCount}} / {{replyLimit}}</text>
       </view>
       <button class="primary-button reply-button" loading="{{sendingReply}}" disabled="{{sendingReply}}" bindtap="sendReply">{{sendingReply ? '正在发送…' : '送出回复'}}</button>
+      <button class="quiet-button" bindtap="openPrivacy">隐私与使用说明</button>
 
       <view wx:if="{{replyError}}" class="reply-action-error" aria-role="alert" aria-live="assertive">
         <text class="reply-action-error-text">{{replyError}}</text>
@@ -124,7 +125,7 @@
 
       <view wx:if="{{replies.length > 0}}" class="reply-list">
         <view wx:for="{{replies}}" wx:key="id" class="reply-row">
-          <text class="reply-author-name">{{item.authorName}} · {{item.authorVerified ? '已验证' : '未验证身份'}}</text>
+          <text class="reply-author-name">{{item.authorName}} · {{item.authorVerified ? '已登录用户' : '访客'}}</text>
           <text class="reply-text">{{item.text}}</text>
           <text class="reply-date">{{item.dateLabel}}</text>
         </view>

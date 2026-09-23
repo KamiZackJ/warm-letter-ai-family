@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp, type BuildAppOptions } from "../src/app.js";
 import { FileSystemObjectStorage } from "../src/object-storage.js";
-import { MemoryRepository } from "../src/repository.js";
+import { MemoryRepository, type Repository } from "../src/repository.js";
 import type { ReplySafetyPolicy } from "../src/reply-safety.js";
 import { auth, json, login, waitForJob } from "./helpers.js";
 
@@ -134,7 +134,7 @@ async function publishFixture(
 
 describe("public share, media, and reply security", () => {
   let app: FastifyInstance;
-  let repository: MemoryRepository;
+  let repository: Repository;
   let objectStorage: FileSystemObjectStorage;
   let uploadDirectory: string;
 

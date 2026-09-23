@@ -44,6 +44,7 @@ Page({
     loadError: "",
     regenerating: false,
     confirming: false,
+    confirmError: "",
     shareReady: false,
     shareToken: "",
     speechCatalog: emptySpeechCatalog,
@@ -333,7 +334,7 @@ Page({
       wx.showToast({ title: "请先生成朗读，或选择暂不更换声音", icon: "none" });
       return;
     }
-    this.setData({ confirming: true });
+    this.setData({ confirming: true, confirmError: "" });
     try {
       const narrationNotice = this.data.persistedVoiceKnown
         ? `将使用已生成的“${this.data.generatedVoiceName}”朗读。`
@@ -355,7 +356,9 @@ Page({
       wx.showToast({ title: "可以选择好友了", icon: "success" });
     } catch (error) {
       if (!this.disposed) {
-        wx.showToast({ title: (error as Error).message || "确认失败，请重试", icon: "none" });
+        const message = (error as Error).message || "确认失败，请重试";
+        this.setData({ confirmError: message });
+        wx.showToast({ title: "尚未寄出，请查看提示", icon: "none" });
       }
     } finally {
       if (!this.disposed) this.setData({ confirming: false });

@@ -129,6 +129,8 @@ export interface GenerationJob {
 export interface Reply {
   id: string;
   letterId: string;
+  /** Private account link for deletion; never expose in the reader DTO. */
+  authorUserId?: string;
   text: string;
   authorName: string;
   authorVerified: boolean;

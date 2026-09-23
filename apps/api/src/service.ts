@@ -17,7 +17,9 @@ import {
   type User,
 } from "./domain.js";
 import { ApiError, assertFound } from "./errors.js";
-import { MemoryRepository } from "./repository.js";
+import type { Repository } from "./repository.js";
+import { requireTextSafety, type ContentSafetyProvider } from "./content-safety.js";
+import { OperationDeadline } from "./deadline.js";
 import {
   DeterministicReplySafetyPolicy,
   normalizeReplyAuthor,
@@ -113,6 +115,8 @@ export interface WarmLetterServiceOptions {
   authSessionTtlMs?: number;
   replySafetyPolicy?: ReplySafetyPolicy;
   replySafetyTimeoutMs?: number;
+  contentSafetyProvider?: ContentSafetyProvider;
+  allowDevelopmentAuth?: boolean;
   now?: () => Date;
 }
 
@@ -129,12 +133,13 @@ export class WarmLetterService {
   private readonly replySafetyTimeoutMs: number;
   private readonly mediaSigningKeys: readonly Buffer[];
   private readonly authSessionTtlMs: number;
-  private readonly authSessions = new Map<string, { userId: string; expiresAt: number }>();
+  private readonly contentSafetyProvider?: ContentSafetyProvider;
+  private readonly allowDevelopmentAuth: boolean;
   private readonly maxAuthSessions = 10_000;
   private readonly now: () => Date;
 
   constructor(
-    readonly repository: MemoryRepository,
+    readonly repository: Repository,
     private readonly aiProvider: AIProvider,
     options: WarmLetterServiceOptions = {},
   ) {
@@ -143,6 +148,8 @@ export class WarmLetterService {
     this.authSessionTtlMs = options.authSessionTtlMs ?? 30 * 24 * 60 * 60 * 1000;
     this.replySafetyPolicy = options.replySafetyPolicy ?? new DeterministicReplySafetyPolicy();
     this.replySafetyTimeoutMs = options.replySafetyTimeoutMs ?? 3_000;
+    this.contentSafetyProvider = options.contentSafetyProvider;
+    this.allowDevelopmentAuth = options.allowDevelopmentAuth ?? true;
     this.mediaSigningKeys = (options.mediaSigningKeys?.length
       ? options.mediaSigningKeys
       : [randomBytes(32)]
@@ -158,6 +165,7 @@ export class WarmLetterService {
   }
 
   login(code: string, displayName = "暖笺用户"): { user: User; token: string } {
+    if (!this.allowDevelopmentAuth) throw new ApiError(401, "UNAUTHORIZED", "请使用微信登录");
     const normalizedCode = code.trim() || "local-demo";
     const openId = `dev-${createHash("sha256").update(normalizedCode).digest("hex").slice(0, 16)}`;
     const user = this.findOrCreateUser(openId, displayName);
@@ -170,21 +178,20 @@ export class WarmLetterService {
     const user = this.findOrCreateUser(normalizedOpenId, displayName);
     this.removeExpiredAuthSessions();
     const token = `wx.${randomBytes(32).toString("base64url")}`;
-    this.authSessions.set(this.authSessionKey(token), {
+    this.repository.saveAuthSession({
+      tokenHash: this.authSessionKey(token),
       userId: user.id,
+      createdAt: this.now().getTime(),
       expiresAt: this.now().getTime() + this.authSessionTtlMs,
     });
-    while (this.authSessions.size > this.maxAuthSessions) {
-      const oldest = this.authSessions.keys().next().value;
-      if (!oldest) break;
-      this.authSessions.delete(oldest);
-    }
+    this.repository.pruneAuthSessions(this.now().getTime(), this.maxAuthSessions);
     return { user, token };
   }
 
   authenticate(token: string | undefined): User {
     if (!token) throw new ApiError(401, "UNAUTHORIZED", "请先完成微信登录");
     if (token.startsWith("dev.")) {
+      if (!this.allowDevelopmentAuth) throw new ApiError(401, "UNAUTHORIZED", "请使用微信登录");
       const user = this.repository.getUser(token.slice(4));
       if (!user) throw new ApiError(401, "UNAUTHORIZED", "登录状态无效");
       return user;
@@ -193,9 +200,9 @@ export class WarmLetterService {
       throw new ApiError(401, "UNAUTHORIZED", "请先完成微信登录");
     }
     const sessionKey = this.authSessionKey(token);
-    const session = this.authSessions.get(sessionKey);
+    const session = this.repository.getAuthSession(sessionKey);
     if (!session || session.expiresAt <= this.now().getTime()) {
-      this.authSessions.delete(sessionKey);
+      this.repository.deleteAuthSession(sessionKey);
       throw new ApiError(401, "UNAUTHORIZED", "登录状态已过期，请重新登录");
     }
     const user = this.repository.getUser(session.userId);
@@ -216,15 +223,13 @@ export class WarmLetterService {
       });
     } else if (displayName.trim() && user.displayName !== displayName.trim()) {
       user.displayName = displayName.trim();
+      this.repository.saveUser(user);
     }
     return user;
   }
 
   private removeExpiredAuthSessions(): void {
-    const now = this.now().getTime();
-    for (const [token, session] of this.authSessions) {
-      if (session.expiresAt <= now) this.authSessions.delete(token);
-    }
+    this.repository.pruneAuthSessions(this.now().getTime());
   }
 
   private authSessionKey(token: string): string {
@@ -317,7 +322,51 @@ export class WarmLetterService {
     }
     material.status = "DELETED";
     material.deletedAt = new Date().toISOString();
-    this.repository.saveMaterial(material);
+    this.repository.transaction(() => {
+      this.repository.saveMaterial(material);
+      if (material.objectKey) this.repository.scheduleObjectDeletion(material.objectKey);
+    });
+  }
+
+  listLetters(userId: string): Letter[] {
+    return this.repository.listLetters(userId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  deleteLetter(userId: string, letterId: string): void {
+    const letter = this.requireOwnedLetter(userId, letterId);
+    this.repository.transaction(() => {
+      if (letter.narration) this.repository.scheduleObjectDeletion(letter.narration.objectKey);
+      this.repository.deleteLetter(letter.id);
+    });
+  }
+
+  deleteAccount(userId: string): void {
+    this.repository.transaction(() => {
+      for (const material of this.repository.listMaterials(userId)) {
+        if (material.objectKey) this.repository.scheduleObjectDeletion(material.objectKey);
+      }
+      for (const letter of this.repository.listLetters(userId)) {
+        if (letter.narration) this.repository.scheduleObjectDeletion(letter.narration.objectKey);
+      }
+      this.repository.deleteUser(userId);
+    });
+  }
+
+  async checkText(userId: string, content: string, scene: 1 | 2 | 3 | 4 = 4): Promise<void> {
+    if (!this.contentSafetyProvider || !content.trim()) return;
+    const user = assertFound(this.repository.getUser(userId), "UNAUTHORIZED", "请重新登录");
+    const characters = Array.from(content.normalize("NFKC"));
+    if (characters.length > 10_000) throw new ApiError(400, "CONTENT_TOO_LONG", "一次最多检查 10000 个字符，请精简内容");
+    // Check every character; overlap keeps boundary-spanning phrases in context.
+    const deadline = new OperationDeadline(15_000, () => new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "内容安全检查超时，请稍后重试"));
+    try {
+      for (let offset = 0; offset < characters.length; offset += 2300) {
+        await deadline.wait(() => requireTextSafety(this.contentSafetyProvider!, {
+          content: characters.slice(offset, offset + 2500).join(""), openId: user.openId, scene,
+        }));
+      }
+    } finally { deadline.dispose(); }
+    if (!this.repository.getUser(userId)) throw new ApiError(401, "UNAUTHORIZED", "账号已删除，请重新登录");
   }
 
   createLetter(userId: string, input: CreateLetterInput): Letter {
@@ -479,10 +528,10 @@ export class WarmLetterService {
     const previousState = letter.state;
     this.transition(letter, "GENERATING");
     letter.updatedAt = new Date().toISOString();
-    this.repository.saveLetter(letter);
-
     const now = new Date().toISOString();
-    const job = this.repository.saveJob({
+    const job = this.repository.transaction(() => {
+      this.repository.saveLetter(letter);
+      return this.repository.saveJob({
       id: randomUUID(),
       userId,
       letterId,
@@ -493,6 +542,7 @@ export class WarmLetterService {
       maxAttempts: 1,
       createdAt: now,
       updatedAt: now,
+      });
     });
     setTimeout(() => void this.runGeneration(job.id, previousState), 0);
     return job;
@@ -515,6 +565,7 @@ export class WarmLetterService {
   }
 
   confirmAndPublish(userId: string, letterId: string): PublishedLetterResult {
+    return this.repository.transaction(() => {
     const letter = this.requireOwnedLetter(userId, letterId);
     if (letter.state !== "EDITING" || !letter.draft) {
       throw new ApiError(409, "LETTER_NOT_READY", "请先生成并确认家书草稿");
@@ -570,9 +621,11 @@ export class WarmLetterService {
       shareToken: share.token,
       shareExpiresAt: share.access.expiresAt,
     };
+    });
   }
 
   reissueShare(userId: string, letterId: string): PublishedLetterResult {
+    return this.repository.transaction(() => {
     const letter = this.requireOwnedLetter(userId, letterId);
     if (letter.state !== "PUBLISHED" || !letter.confirmedDraft || !letter.publishedAt) {
       throw new ApiError(409, "LETTER_NOT_PUBLISHED", "家书尚未确认发布");
@@ -587,6 +640,7 @@ export class WarmLetterService {
       shareToken: share.token,
       shareExpiresAt: share.access.expiresAt,
     };
+    });
   }
 
   revokeShare(userId: string, letterId: string): void {
@@ -725,12 +779,14 @@ export class WarmLetterService {
     text: string,
     authorName?: string,
     idempotencyKey?: string,
+    authorUserId?: string,
   ): Promise<Reply> {
     const { letter } = this.resolveShareAccess(letterId, shareToken);
     const requestFingerprint = replyRequestFingerprint(text, authorName);
     if (idempotencyKey) {
       const replay = this.repository.findReplyByIdempotencyKey(letter.id, idempotencyKey);
       if (replay) {
+        if (replay.reply.authorUserId !== authorUserId) throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该回复请求标识已用于其他账号");
         if (replay.requestFingerprint !== requestFingerprint) {
           throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该回复请求标识已用于其他内容");
         }
@@ -744,6 +800,7 @@ export class WarmLetterService {
       safeAuthorName = normalizeReplyAuthor(
         await this.validateReplySafety(normalizeReplyAuthor(authorName)),
       );
+      if (authorUserId) await this.checkText(authorUserId, `${safeAuthorName}\n${safeText}`, 2);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "回复安全检查暂时不可用，请稍后重试");
@@ -754,7 +811,8 @@ export class WarmLetterService {
       letterId,
       text: safeText,
       authorName: safeAuthorName,
-      authorVerified: false,
+      authorUserId,
+      authorVerified: Boolean(authorUserId),
       createdAt: this.now().toISOString(),
     } satisfies Reply;
     const result = this.repository.saveReplyIdempotentlyIfBelowLimit(
@@ -781,10 +839,12 @@ export class WarmLetterService {
     text: string,
     authorName: string | undefined,
     idempotencyKey: string,
+    authorUserId?: string,
   ): Reply | undefined {
     const { letter } = this.resolveShareAccess(letterId, shareToken);
     const replay = this.repository.findReplyByIdempotencyKey(letter.id, idempotencyKey);
     if (!replay) return undefined;
+    if (replay.reply.authorUserId !== authorUserId) throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该回复请求标识已用于其他账号");
     if (replay.requestFingerprint !== replyRequestFingerprint(text, authorName)) {
       throw new ApiError(409, "IDEMPOTENCY_KEY_REUSED", "该回复请求标识已用于其他内容");
     }
@@ -798,19 +858,25 @@ export class WarmLetterService {
 
   private async runGeneration(jobId: string, previousState: "MATERIALS_READY" | "EDITING"): Promise<void> {
     const job = this.repository.getJob(jobId);
-    if (!job) return;
+    if (!job || job.status !== "queued") return;
     const letter = this.repository.getLetter(job.letterId);
-    if (!letter) return;
+    if (!letter || letter.state !== "GENERATING") return;
+    const stillActive = () => this.repository.getJob(jobId)?.status === "running" &&
+      this.repository.getLetter(job.letterId)?.state === "GENERATING" &&
+      Boolean(this.repository.getUser(job.userId));
 
     job.status = "running";
     job.attempts = 1;
     job.updatedAt = new Date().toISOString();
     this.repository.saveJob(job);
-
+    const deadline = new OperationDeadline(165_000, () => new AIProviderError("AI_TIMEOUT", "生成超时，素材已保存，请稍后重试", true));
     try {
       const materials = letter.materialIds.map((id) => this.requireReadyMaterial(letter.userId, id));
+      await deadline.wait(() => this.checkText(letter.userId, [letter.recipient, letter.settings.focus,
+        ...(letter.settings.excludedTopics ?? []), ...materials.map((item) => item.textContent)].filter(Boolean).join("\n")));
+      if (!stillActive()) return;
       const previousSignature = letter.draft?.signature;
-      const generatedDraft = await this.aiProvider.generateLetter({
+      const generatedDraft = await deadline.wait(() => this.aiProvider.generateLetter({
         recipient: letter.recipient,
         settings: letter.settings,
         materials,
@@ -819,6 +885,7 @@ export class WarmLetterService {
           materials.some((material) => material.id === transcript.materialId && material.type === "audio"),
         ),
         onTranscript: (transcript) => {
+          if (!stillActive()) throw new ApiError(409, "GENERATION_CANCELLED", "家书已删除或生成已停止");
           const material = materials.find((item) => item.id === transcript.materialId);
           if (material?.type !== "audio" || !transcript.text.trim() || transcript.text.length > 50_000) {
             throw new AIProviderError("AI_OUTPUT_INVALID", "AI 返回了无效的语音转写", false);
@@ -832,7 +899,11 @@ export class WarmLetterService {
           ];
           this.repository.saveLetter(letter);
         },
-      });
+      }));
+      if (!stillActive()) return;
+      await deadline.wait(() => this.checkText(letter.userId, [generatedDraft.title, letterDraftSpeechText(generatedDraft)].join("\n")));
+      if (!stillActive()) return;
+      this.validateReadyMaterials(letter.userId, letter.materialIds);
       const unconfirmedAudioIds = new Set(
         (letter.audioTranscripts ?? []).filter((item) => !item.confirmed).map((item) => item.materialId),
       );
@@ -848,25 +919,27 @@ export class WarmLetterService {
       letter.audioTranscriptRevisionPending = false;
       this.transition(letter, "EDITING");
       letter.updatedAt = new Date().toISOString();
-      this.repository.saveLetter(letter);
       job.status = "succeeded";
     } catch (error) {
+      if (!stillActive()) return;
       const apiError = error instanceof ApiError ? error : undefined;
       const providerError = error instanceof AIProviderError ? error : undefined;
       this.transition(letter, previousState);
       letter.updatedAt = new Date().toISOString();
-      this.repository.saveLetter(letter);
       job.status = "failed";
       job.error = {
         code: providerError?.code ?? apiError?.code ?? "GENERATION_FAILED",
         message: providerError?.message ?? apiError?.message ?? "家书生成失败",
         retryable: providerError?.retryable ?? false,
       };
-    }
+    } finally { deadline.dispose(); }
     const finishedAt = new Date().toISOString();
     job.updatedAt = finishedAt;
     job.finishedAt = finishedAt;
-    this.repository.saveJob(job);
+    this.repository.transaction(() => {
+      this.repository.saveLetter(letter);
+      this.repository.saveJob(job);
+    });
   }
 
   private mergeDraft(letter: Letter, input: NonNullable<EditLetterInput["draft"]>): LetterDraft {

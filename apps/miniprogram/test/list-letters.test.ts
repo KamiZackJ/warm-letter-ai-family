@@ -88,32 +88,27 @@ describe("real letter listing", () => {
     });
   });
 
-  it("skips and removes only locally persisted IDs confirmed missing by the API", async () => {
+  it("restores letters from the server even when they were not created on this device", async () => {
     storage.set(letterIdsKey, ["letter-current", "letter-stale"]);
     requestMock.mockImplementation(async (path: string) => {
-      if (path === "/letters/letter-current") {
-        return { letter: serverLetter("letter-current") };
-      }
-      if (path === "/letters/letter-stale") {
-        throw new HttpRequestError("letter not found", 404, "LETTER_NOT_FOUND");
+      if (path === "/letters") {
+        return { letters: [serverLetter("letter-current"), serverLetter("another-device")] };
       }
       throw new Error(`Unexpected request: ${path}`);
     });
 
     await expect(realApi.listLetters()).resolves.toEqual([
       expect.objectContaining({ id: "letter-current" }),
+      expect.objectContaining({ id: "another-device" }),
     ]);
-    expect(storage.get(letterIdsKey)).toEqual(["letter-current"]);
+    expect(storage.get(letterIdsKey)).toEqual(["letter-current", "another-device"]);
   });
 
   it("preserves a letter created while stale ID cleanup is still pending", async () => {
-    const staleRequest = createDeferred<never>();
+    const staleRequest = createDeferred<{ letters: ReturnType<typeof serverLetter>[] }>();
     storage.set(letterIdsKey, ["letter-current", "letter-stale"]);
     requestMock.mockImplementation(async (path: string, options?: { method?: string }) => {
-      if (path === "/letters/letter-current") {
-        return { letter: serverLetter("letter-current") };
-      }
-      if (path === "/letters/letter-stale") {
+      if (path === "/letters" && options?.method !== "POST") {
         return staleRequest.promise;
       }
       if (path === "/letters" && options?.method === "POST") {
@@ -140,7 +135,7 @@ describe("real letter listing", () => {
       "letter-stale",
     ]);
 
-    staleRequest.reject(new HttpRequestError("letter not found", 404, "LETTER_NOT_FOUND"));
+    staleRequest.resolve({ letters: [serverLetter("letter-current")] });
     await expect(listing).resolves.toEqual([
       expect.objectContaining({ id: "letter-current" }),
     ]);
@@ -175,7 +170,7 @@ describe("real letter listing", () => {
     expect(storage.get(letterIdsKey)).toEqual(["letter-current"]);
   });
 
-  it("does not clean confirmed stale IDs when another letter request fails", async () => {
+  it("does not erase local indices when the server list fails", async () => {
     storage.set(letterIdsKey, ["letter-stale", "letter-unavailable"]);
     requestMock.mockImplementation(async (path: string) => {
       if (path === "/letters/letter-stale") {

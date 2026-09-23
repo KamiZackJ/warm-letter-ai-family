@@ -147,17 +147,23 @@ describe("resolveMiniProgramEnvironment", () => {
     },
   );
 
-  it("requires the release account environment for production", () => {
-    expect(() =>
+  it.each(["develop", "trial", "release"])("allows the production contract in %s for release verification", (accountEnvironment) => {
+    expect(
       resolveMiniProgramEnvironment({
         ...testProfile,
         deploymentMode: "production",
         apiMode: "real",
-        apiBaseUrl: "https://api.example.com/v1",
-        accountEnvironment: "develop",
+        apiBaseUrl: "https://api.warmjiashu.xyz/v1",
+        accountEnvironment,
         appId: "wx-production",
       }),
-    ).toThrow("production 环境必须使用微信 release 版本");
+    ).toMatchObject({ deploymentMode: "production", apiMode: "real", demoEnabled: false });
+  });
+
+  it("rejects another production host, private network address and path", () => {
+    for (const apiBaseUrl of ["https://api.example.com/v1", "https://192.168.1.1/v1", "https://api.warmjiashu.xyz/other"]) {
+      expect(() => resolveMiniProgramEnvironment({ ...testProfile, deploymentMode: "production", apiMode: "real", apiBaseUrl, accountEnvironment: "trial", appId: "wx-production" })).toThrow("暖笺正式 HTTPS API");
+    }
   });
 
   it("allows the non-production demo API in develop and trial, but never release", () => {
@@ -188,7 +194,7 @@ describe("resolveMiniProgramEnvironment", () => {
 
   it.each([
     ["competition", "trial", "https://evidence.example.com/v1", "wx-evidence"],
-    ["production", "release", "https://api.example.com/v1", "wx-production"],
+    ["production", "release", "https://api.warmjiashu.xyz/v1", "wx-production"],
   ] as const)(
     "accepts a valid real profile in %s",
     (deploymentMode, accountEnvironment, apiBaseUrl, appId) => {

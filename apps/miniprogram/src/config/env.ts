@@ -1,11 +1,11 @@
 import {
   resolveMiniProgramEnvironment,
+  MiniProgramConfigurationError,
   type AccountEnvironment,
   type MiniProgramEnvironmentInput,
 } from "./runtime-environment";
 
-const DEMO_API_BASE_URL = "https://api.warmjiashu.xyz/v1";
-const PRODUCTION_API_BASE_URL = "";
+const PRODUCTION_API_BASE_URL = "https://api.warmjiashu.xyz/v1";
 
 type AccountInfo = {
   miniProgram?: {
@@ -19,13 +19,16 @@ function readAccountInfo(): AccountInfo | null {
   try {
     return wx.getAccountInfoSync() as AccountInfo;
   } catch {
-    return null;
+    throw new MiniProgramConfigurationError("暂时无法读取小程序环境，请重新打开暖笺");
   }
 }
 
 function buildEnvironmentInput(): MiniProgramEnvironmentInput {
   const accountInfo = readAccountInfo();
   if (!accountInfo?.miniProgram) {
+    if (typeof wx !== "undefined" && typeof wx.getAccountInfoSync === "function") {
+      throw new MiniProgramConfigurationError("暂时无法读取小程序环境，请重新打开暖笺");
+    }
     return {
       deploymentMode: "test",
       apiMode: "mock",
@@ -38,30 +41,10 @@ function buildEnvironmentInput(): MiniProgramEnvironmentInput {
 
   const accountEnvironment = accountInfo.miniProgram.envVersion || "develop";
   const appId = accountInfo.miniProgram.appId || "";
-  if (accountEnvironment === "release") {
-    return {
-      deploymentMode: "production",
-      apiMode: "real",
-      apiBaseUrl: PRODUCTION_API_BASE_URL,
-      requestTimeoutMs: 12_000,
-      accountEnvironment,
-      appId,
-    };
-  }
-  if (accountEnvironment === "trial") {
-    return {
-      deploymentMode: "demo",
-      apiMode: "real",
-      apiBaseUrl: DEMO_API_BASE_URL,
-      requestTimeoutMs: 12_000,
-      accountEnvironment,
-      appId,
-    };
-  }
   return {
-    deploymentMode: "demo",
+    deploymentMode: "production",
     apiMode: "real",
-    apiBaseUrl: DEMO_API_BASE_URL,
+    apiBaseUrl: PRODUCTION_API_BASE_URL,
     requestTimeoutMs: 12_000,
     accountEnvironment,
     appId,

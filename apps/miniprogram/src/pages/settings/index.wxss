@@ -1,0 +1,12 @@
+.settings-page { padding-bottom: calc(48px + env(safe-area-inset-bottom)); }
+.privacy-link { margin-top: 24px; }
+.settings-page button { min-height: 48px; font-size: 18px; white-space: normal; overflow-wrap: anywhere; }
+.section-help { display: block; color: #535955; font-size: 18px; line-height: 1.65; margin: 12px 0 18px; }
+.data-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 18px 0; border-top: 1px solid #d8d5cd; }
+.data-title { flex: 1; min-width: 150px; font-size: 19px; line-height: 1.6; overflow-wrap: anywhere; }
+.data-row button { flex: 0 0 auto; min-width: 80px; }
+.account-section { margin: 36px 0; padding-top: 26px; border-top: 1px solid #d8d5cd; }
+.message { margin-top: 20px; padding: 16px; border: 1px solid #b9cbbf; color: #244f43; font-size: 18px; line-height: 1.65; overflow-wrap: anywhere; }
+.message.error { border-color: #d6b4ae; color: #8a3e34; }
+.version { display: block; margin-top: 32px; color: #535955; font-size: 14px; line-height: 1.7; }
+button:focus { outline: 2px solid #244f43; outline-offset: 3px; }

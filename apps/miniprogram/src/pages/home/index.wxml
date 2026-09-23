@@ -77,4 +77,5 @@
     <button class="guide-entry" disabled="{{startingFlow}}" bindtap="openGuide">使用指南</button>
     <template wx:if="{{guideVisible && guideStep === 2}}" is="guideBubble" data="{{guideStep, guideStepCount, guideContent}}" />
   </view>
+  <button class="guide-entry" bindtap="openSettings">隐私与数据管理</button>
 </view>

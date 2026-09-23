@@ -5,6 +5,7 @@ import { resolveDemoRequest } from "../../config/runtime-environment";
 import { prepareImageForUpload } from "../../utils/media-preparation";
 import type { Material, MaterialType } from "../../types/domain";
 import { createId } from "../../utils/id";
+import { ensurePrivacyConsent, openPrivacyPage } from "../../services/privacy";
 import {
   getCurrentMaterialSelection,
   updateCurrentMaterialIdsForSession,
@@ -133,6 +134,7 @@ function sameIds(left: string[], right: string[]): boolean {
 }
 
 Page({
+  openPrivacy: openPrivacyPage,
   disposed: false,
   loadRequestId: 0,
   materialSessionId: "",
@@ -278,6 +280,8 @@ Page({
     this.setData({ busyAction: "image", activeImageType: type });
     let result: { tempFiles: Array<{ tempFilePath: string }> } | undefined;
     try {
+      if (environment.apiMode === "real") await ensurePrivacyConsent();
+      if (this.disposed) return;
       result = await new Promise<{ tempFiles: Array<{ tempFilePath: string }> }>(
         (resolve, reject) => {
           wx.chooseMedia({
@@ -443,6 +447,21 @@ Page({
       this.data.recording ||
       this.data.stoppingRecord
     ) return;
+    if (environment.apiMode === "real") {
+      this.setData({ busyAction: "voice" });
+      void ensurePrivacyConsent().then(() => {
+        if (!this.disposed) this.startAuthorizedRecording();
+      }).catch((error: unknown) => {
+        if (!this.disposed) wx.showToast({ title: errorMessage(error, "录音授权未完成"), icon: "none" });
+      }).finally(() => {
+        if (!this.disposed) this.setData({ busyAction: "" });
+      });
+      return;
+    }
+    this.startAuthorizedRecording();
+  },
+
+  startAuthorizedRecording() {
     const pendingVoice = this.data.actionErrors.some(
       (item) => item.kind === "single" && item.singlePurpose === "voice",
     );

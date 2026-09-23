@@ -192,6 +192,19 @@ beforeEach(() => {
 });
 
 describe("letter preview and delivery page", () => {
+  it("keeps pending safety checks visible without enabling sharing and allows a later retry", async () => {
+    const message = "图片或录音仍在安全检查中，家书尚未寄出。草稿已保存，请稍后回来确认。";
+    mocks.confirmLetter.mockRejectedValueOnce(new Error(message));
+    const page = createContext({ letterId: "letter-1", letter: structuredClone(letter) });
+    await page.confirmForShare();
+    expect(page.data.confirming).toBe(false);
+    expect(page.data.shareReady).toBe(false);
+    expect(page.data.confirmError).toBe(message);
+    expect(mocks.showShareMenu).not.toHaveBeenCalled();
+    await page.confirmForShare();
+    expect(page.data.confirmError).toBe("");
+    expect(page.data.shareReady).toBe(true);
+  });
   it("exposes preview, rewrite, narration, and native WeChat friend sharing controls", () => {
     const template = fileSystem.readFileSync(
       `${miniprogramDirectory}/src/pages/preview/index.wxml`,

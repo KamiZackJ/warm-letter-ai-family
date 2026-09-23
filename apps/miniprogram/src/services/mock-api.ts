@@ -229,6 +229,20 @@ function assertDraftReadyForConfirmation(draft: LetterDraft): void {
 }
 
 export const mockApi = {
+  async deleteLetter(id: string): Promise<{ localCleanupComplete: boolean }> {
+    saveLetters(getLetters().filter((letter) => letter.id !== id));
+    mockNarrations.delete(id);
+    return { localCleanupComplete: true };
+  },
+
+  async deleteAccount(): Promise<{ localCleanupComplete: boolean }> {
+    saveLetters([]);
+    saveMaterials([]);
+    mockNarrations.clear();
+    replyRequestsByKey.clear();
+    return { localCleanupComplete: true };
+  },
+
   async listMaterials(): Promise<Material[]> {
     return wait(getMaterials());
   },

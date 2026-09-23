@@ -266,9 +266,6 @@ export function resolveMiniProgramEnvironment(
   if (deploymentMode === "competition" && accountEnvironment !== "trial") {
     throw new MiniProgramConfigurationError("competition 环境必须使用微信 trial 版本");
   }
-  if (deploymentMode === "production" && accountEnvironment !== "release") {
-    throw new MiniProgramConfigurationError("production 环境必须使用微信 release 版本");
-  }
   if (accountEnvironment === "release" && deploymentMode !== "production") {
     throw new MiniProgramConfigurationError("微信 release 版本只能运行 production 环境");
   }
@@ -291,6 +288,11 @@ export function resolveMiniProgramEnvironment(
     apiMode,
     accountEnvironment,
   );
+  // Development, trial and reviewed releases exercise the same production contract.
+  // Never permit a release candidate to send family materials to another endpoint.
+  if (deploymentMode === "production" && apiUrl.apiBaseUrl !== "https://api.warmjiashu.xyz/v1") {
+    throw new MiniProgramConfigurationError("production 环境必须使用暖笺正式 HTTPS API");
+  }
 
   return {
     deploymentMode,

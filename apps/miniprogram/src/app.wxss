@@ -273,3 +273,14 @@ button {
   line-height: 1.6;
   text-align: center;
 }
+
+.privacy-entry {
+  margin-top: 12px;
+  min-height: 48px;
+  padding: 12px;
+  background: transparent;
+  color: #244f43;
+  font-size: 18px;
+  line-height: 1.5;
+  text-decoration: underline;
+}
