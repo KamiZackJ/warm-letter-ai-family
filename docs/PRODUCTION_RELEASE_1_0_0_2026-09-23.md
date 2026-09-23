@@ -36,6 +36,14 @@
 6. 上传 1.0.0，核对包体和后台版本，再填真实功能、UGC/隐私与审核说明提交。现有备忘录类目不代表 AI 场景自动获准，审核要求以微信实际页面为准。
 7. 等代码审核通过后正式发布，并记录后台实际结果。如果审核要求补充材料，按结果整改，不宣称已经发布。
 
+## 隐私授权弹窗依据与验证边界
+
+2026-09-23 核对微信[《小程序隐私协议开发指南》第六节](https://developers.weixin.qq.com/miniprogram/dev/framework/user-privacy/PrivacyAuthorize.html)：官方提供“无需开发者适配开发，自动向 C 端用户展示”的隐私弹窗；隐私接口触发授权事件后，若开发者未响应，“微信将主动弹出官方弹窗”。[wx.requirePrivacyAuthorize 文档](https://developers.weixin.qq.com/miniprogram/dev/api/open-api/privacy/wx.requirePrivacyAuthorize.html)说明该 API 用于“模拟隐私接口调用，并触发隐私弹窗逻辑”。
+
+当前实现主动调用 `wx.requirePrivacyAuthorize`，不注册 `wx.onNeedPrivacyAuthorization`，使用上述官方弹窗；无需再添加自定义同意按钮。如果以后接管该事件，必须按[事件文档](https://developers.weixin.qq.com/miniprogram/dev/api/open-api/privacy/wx.onNeedPrivacyAuthorization.html)提供 `open-type="agreePrivacyAuthorization"` 按钮，并调用 `resolve({ event: 'agree', buttonId })` 或 `resolve({ event: 'disagree' })`，不能仅隐藏界面。
+
+单元测试验证等待、拒绝、超时和重试后的应用行为，不能证明微信原生弹窗已在真机出现。正式验收仍须用未授权账号检查：出现指引、同意后继续、拒绝后不上传且仍可阅读分享；后台隐私声明需已生效。微信官方规定拒绝后不足 10 秒再次调用将直接报拒绝，不应自动循环弹窗。
+
 ## 操作入口
 
 - 通用迁移/备份工具：`scripts/production/README.md`。
