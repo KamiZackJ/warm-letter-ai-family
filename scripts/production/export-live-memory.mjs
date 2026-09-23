@@ -49,6 +49,32 @@ function call(method, params = {}, timeout = 10_000) {
     socket.send(JSON.stringify({ id, method, params }));
   });
 }
+// Keep the actual target alive before closing its last referenced handle. An
+// inspector connection does not keep Node's event loop alive. Retain this timer
+// after a successful export until the operator stops the old process; a resume
+// clears it only after the HTTP listener is active again.
+async function retainTarget() {
+  await call('Runtime.evaluate', {
+    expression: `(() => {
+      const key = Symbol.for('warmletter.migration.keepalive');
+      if (!globalThis[key]) globalThis[key] = setInterval(() => {}, 60000);
+      globalThis[key].ref();
+      return true;
+    })()`,
+    returnByValue: true,
+  });
+}
+async function releaseTarget() {
+  await call('Runtime.evaluate', {
+    expression: `(() => {
+      const key = Symbol.for('warmletter.migration.keepalive');
+      if (globalThis[key]) clearInterval(globalThis[key]);
+      delete globalThis[key];
+      return true;
+    })()`,
+    returnByValue: true,
+  });
+}
 async function queryInstances(expression) {
   const prototype = await call('Runtime.evaluate', { expression: `(async () => (${expression}))()`, awaitPromise: true, objectGroup: 'warmletter-migration' });
   if (!prototype.result?.objectId) throw new Error('Missing prototype handle');
@@ -81,10 +107,12 @@ try {
         return true;
       }`,
     });
+    await releaseTarget();
     console.log(JSON.stringify({ status: 'previous-listener-resumed', pid: expectedPid }));
   } else {
   // Stop accepting new requests without killing the in-memory process. Existing
   // HTTP requests drain; separate queued generation jobs are drained below.
+  await retainTarget();
   listenerClosed = true;
   await call('Runtime.callFunctionOn', {
     objectId: serverObjects, arguments: [{ value: port }], awaitPromise: true, returnByValue: true,
@@ -150,8 +178,9 @@ try {
           return true;
         }`,
       });
+      await releaseTarget();
       console.error('Export failed; previous API listener reopened. Do not restart before a successful export.');
-    } catch { console.error('Export failed; API listener requires operator recovery. Memory remains in the original process.'); }
+    } catch { console.error('Export failed; API listener requires operator recovery. A migration keepalive was installed; verify the target PID before recovery.'); }
   }
   throw error;
 } finally {
