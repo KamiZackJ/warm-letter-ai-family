@@ -60,6 +60,7 @@
         wx:for="{{recentLetters}}"
         wx:key="id"
         class="letter-row"
+        disabled="{{loading || startingFlow}}"
         data-id="{{item.id}}"
         data-status="{{item.status}}"
         bindtap="openLetter"

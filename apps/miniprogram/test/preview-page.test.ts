@@ -17,6 +17,7 @@ const miniprogramDirectory = normalizedWorkingDirectory.endsWith("/apps/miniprog
 const mocks = vi.hoisted(() => ({
   getLetter: vi.fn(),
   listMaterials: vi.fn(),
+  getMaterialContent: vi.fn(),
   getSpeechCatalog: vi.fn(),
   generateNarration: vi.fn(),
   generateLetter: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock("../src/services/api", () => ({
   api: {
     getLetter: mocks.getLetter,
     listMaterials: mocks.listMaterials,
+    getMaterialContent: mocks.getMaterialContent,
     getSpeechCatalog: mocks.getSpeechCatalog,
     generateNarration: mocks.generateNarration,
     generateLetter: mocks.generateLetter,
@@ -121,6 +123,8 @@ function createContext(data: Record<string, unknown> = {}): PageContext {
     disposed: false,
     audioContext: null,
     generatedFilePath: "",
+    photoDownloads: [],
+    downloadedPhotoPaths: [],
     data: pageData,
     setData(patch: Record<string, unknown>) {
       Object.assign(pageData, patch);
@@ -170,6 +174,7 @@ beforeEach(() => {
   mocks.createInnerAudioContext.mockReturnValue(audioContext);
   mocks.getLetter.mockResolvedValue(structuredClone(letter));
   mocks.listMaterials.mockResolvedValue([structuredClone(photo)]);
+  mocks.getMaterialContent.mockResolvedValue("wxfile://temporary/owned-photo.jpg");
   mocks.getSpeechCatalog.mockResolvedValue(structuredClone(speechCatalog));
   mocks.generateNarration.mockResolvedValue({
     filePath: "/wx-user-data/warm-letter-narration-letter-1.wav",
@@ -230,6 +235,93 @@ describe("letter preview and delivery page", () => {
     expect(mocks.hideShareMenu).toHaveBeenCalled();
   });
 
+  it("restores only photos belonging to this letter when the device has no local media", async () => {
+    mocks.listMaterials.mockResolvedValue([
+      { ...photo, localPath: undefined },
+      { ...photo, id: "another-letter-photo", localPath: undefined },
+    ]);
+    const context = createContext();
+    await context.onLoad({ id: "letter-1" });
+    await vi.waitFor(() => expect(context.data.photos[0].localPath).toBe("wxfile://temporary/owned-photo.jpg"));
+
+    expect(mocks.getMaterialContent).toHaveBeenCalledTimes(1);
+    expect(mocks.getMaterialContent.mock.calls[0]![0].id).toBe("photo-1");
+    context.previewPhoto({ currentTarget: { dataset: { path: context.data.photos[0].localPath } } });
+    expect(mocks.previewImage).toHaveBeenCalledWith({
+      current: "wxfile://temporary/owned-photo.jpg", urls: ["wxfile://temporary/owned-photo.jpg"],
+    });
+    context.onUnload();
+    expect(mocks.unlink).toHaveBeenCalledWith(expect.objectContaining({ filePath: "wxfile://temporary/owned-photo.jpg" }));
+  });
+
+  it("keeps the letter visible after a failed photo download and allows retry without regenerating", async () => {
+    mocks.listMaterials.mockResolvedValue([{ ...photo, localPath: undefined }]);
+    mocks.getMaterialContent.mockRejectedValueOnce(new Error("照片读取超时，请重试"));
+    const context = createContext();
+    await context.onLoad({ id: "letter-1" });
+    await vi.waitFor(() => expect(context.data.photos[0].photoError).toContain("超时"));
+    expect(context.data.loadError).toBe("");
+    expect(context.data.letter.draft.title).toBe(letter.draft!.title);
+
+    await context.loadPhoto("photo-1");
+
+    expect(context.data.photos[0].localPath).toBe("wxfile://temporary/owned-photo.jpg");
+    expect(context.data.photos[0].photoError).toBe("");
+    expect(mocks.generateLetter).not.toHaveBeenCalled();
+    expect(mocks.generateNarration).not.toHaveBeenCalled();
+    context.onUnload();
+  });
+
+  it("cancels pending photo downloads on unload and deletes a late file without changing the page", async () => {
+    const pending = deferred<string>();
+    const abort = vi.fn();
+    mocks.listMaterials.mockResolvedValue([{ ...photo, localPath: undefined }]);
+    mocks.getMaterialContent.mockImplementation((_material, control) => {
+      control.abort = abort;
+      return pending.promise;
+    });
+    const context = createContext();
+    await context.onLoad({ id: "letter-1" });
+    const control = mocks.getMaterialContent.mock.calls[0]![1];
+    context.onUnload();
+    const beforeLateResult = structuredClone(context.data);
+    expect(control.cancelled).toBe(true);
+    expect(abort).toHaveBeenCalledTimes(1);
+
+    pending.resolve("wxfile://temporary/late-photo.jpg");
+    await vi.waitFor(() => expect(mocks.unlink).toHaveBeenCalledWith(expect.objectContaining({ filePath: "wxfile://temporary/late-photo.jpg" })));
+    expect(context.data).toEqual(beforeLateResult);
+  });
+
+  it("recovers an expired local photo once and leaves a failed downloaded image for explicit retry", async () => {
+    const context = createContext();
+    await context.onLoad({ id: "letter-1" });
+    context.handlePhotoError({ currentTarget: { dataset: { id: "photo-1", path: photo.localPath } } });
+    await vi.waitFor(() => expect(context.data.photos[0].downloaded).toBe(true));
+    context.handlePhotoError({ currentTarget: { dataset: { id: "photo-1", path: "wxfile://temporary/owned-photo.jpg" } } });
+
+    expect(mocks.getMaterialContent).toHaveBeenCalledTimes(1);
+    expect(context.data.photos[0].localPath).toBe("");
+    expect(context.data.photos[0].photoError).toContain("重试");
+    expect(mocks.unlink.mock.calls.every(([options]) => options.filePath !== photo.localPath)).toBe(true);
+    context.onUnload();
+  });
+
+  it("keeps an in-flight photo download valid when confirmation finishes on the same letter", async () => {
+    const pending = deferred<string>();
+    mocks.listMaterials.mockResolvedValue([{ ...photo, localPath: undefined }]);
+    mocks.getMaterialContent.mockReturnValue(pending.promise);
+    const context = createContext();
+    await context.onLoad({ id: "letter-1" });
+    await context.confirmForShare();
+    pending.resolve("wxfile://temporary/confirmed-photo.jpg");
+
+    await vi.waitFor(() => expect(context.data.photos[0].localPath).toBe("wxfile://temporary/confirmed-photo.jpg"));
+    expect(context.data.shareReady).toBe(true);
+    expect(context.data.photos[0].photoLoading).toBe(false);
+    context.onUnload();
+  });
+
   it("restores native friend sharing when a published page is reopened without a token", async () => {
     mocks.getLetter.mockResolvedValue({
       ...structuredClone(letter),
@@ -243,7 +335,53 @@ describe("letter preview and delivery page", () => {
     expect(mocks.reissueShare).toHaveBeenCalledWith("letter-1");
     expect(context.data.shareReady).toBe(true);
     expect(context.data.shareToken).toBe("restored-share-token");
+    expect(context.data.shareResetNotice).toContain("之前的分享已失效");
     expect(mocks.showShareMenu).toHaveBeenCalledWith({ menus: ["shareAppMessage"] });
+  });
+
+  it("reuses an available share token across owner preview visits without revoking previous shares", async () => {
+    mocks.getLetter.mockResolvedValue({
+      ...structuredClone(letter), status: "PUBLISHED", shareToken: "existing-share-token",
+    });
+    for (let visit = 0; visit < 2; visit += 1) {
+      const context = createContext();
+      await context.onLoad({ id: "letter-1" });
+      expect(context.data.shareReady).toBe(true);
+      expect(context.data.shareResetNotice).toBe("");
+      expect(context.onShareAppMessage().path).toBe("/pages/reader/index?id=letter-1&token=existing-share-token");
+      context.onUnload();
+    }
+    expect(mocks.reissueShare).not.toHaveBeenCalled();
+    expect(mocks.confirmLetter).not.toHaveBeenCalled();
+    expect(mocks.generateLetter).not.toHaveBeenCalled();
+    expect(mocks.generateNarration).not.toHaveBeenCalled();
+  });
+
+  it("does not enable sharing if restoring a missing token fails its safety check", async () => {
+    mocks.getLetter.mockResolvedValue({
+      ...structuredClone(letter), status: "PUBLISHED", shareToken: undefined,
+    });
+    mocks.reissueShare.mockRejectedValueOnce(new Error("安全检查暂时不可用"));
+    const context = createContext();
+
+    await context.onLoad({ id: "letter-1" });
+
+    expect(context.data.loadError).toBe("安全检查暂时不可用");
+    expect(context.data.shareReady).toBe(false);
+    expect(context.data.shareToken).toBe("");
+    expect(mocks.showShareMenu).not.toHaveBeenCalled();
+    expect(context.onShareAppMessage().path).toBe("/pages/home/index");
+  });
+
+  it("requires owner access before attempting to restore any share credential", async () => {
+    mocks.getLetter.mockRejectedValueOnce(new Error("无权访问这封家书"));
+    const context = createContext();
+
+    await context.onLoad({ id: "someone-elses-letter" });
+
+    expect(context.data.loadError).toBe("无权访问这封家书");
+    expect(mocks.reissueShare).not.toHaveBeenCalled();
+    expect(mocks.showShareMenu).not.toHaveBeenCalled();
   });
 
   it("generates and immediately previews the selected AI narration", async () => {

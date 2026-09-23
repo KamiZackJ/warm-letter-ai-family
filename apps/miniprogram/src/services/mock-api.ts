@@ -229,6 +229,11 @@ function assertDraftReadyForConfirmation(draft: LetterDraft): void {
 }
 
 export const mockApi = {
+  async getMaterialContent(material: Material, control: { cancelled: boolean }): Promise<string> {
+    // Packaged/source paths are not owned temporary downloads and must not be unlinked.
+    throw new Error(control.cancelled ? "照片读取已取消" : `${material.name}暂时无法读取，请重新添加`);
+  },
+
   async deleteLetter(id: string): Promise<{ localCleanupComplete: boolean }> {
     saveLetters(getLetters().filter((letter) => letter.id !== id));
     mockNarrations.delete(id);

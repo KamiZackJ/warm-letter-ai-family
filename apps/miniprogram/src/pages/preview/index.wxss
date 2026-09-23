@@ -133,9 +133,31 @@
   border-radius: 6rpx;
 }
 
+.preview-photo-item {
+  display: inline-block;
+  width: 216rpx;
+  margin-right: 14rpx;
+  vertical-align: top;
+}
+
+.preview-photo-placeholder {
+  min-height: 216rpx;
+  padding: 16rpx;
+  box-sizing: border-box;
+  white-space: normal;
+  font-size: 24rpx;
+  line-height: 1.5;
+  background: #e5e1d8;
+  color: #303532;
+}
+
+.preview-photo-placeholder button {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+}
+
 .preview-photo-button {
   display: inline-block;
-  margin-right: 14rpx;
   padding: 0;
   overflow: hidden;
   background: #e5e1d8;

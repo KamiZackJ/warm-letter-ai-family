@@ -9,6 +9,14 @@ type RequestOptions = {
   timeoutMs?: number;
 };
 
+export type MaterialDownloadControl = { cancelled: boolean; abort?: () => void };
+
+/** Only call for temporary paths returned by our own download operation. */
+export function removeDownloadedFile(filePath: string): void {
+  if (!filePath) return;
+  try { wx.getFileSystemManager().unlink({ filePath, fail: () => undefined }); } catch { /* Best effort. */ }
+}
+
 export class HttpRequestError extends Error {
   constructor(
     message: string,
@@ -146,6 +154,51 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     header,
     timeoutMs,
   });
+}
+
+export async function downloadMaterialContent(
+  materialId: string,
+  control: MaterialDownloadControl,
+): Promise<string> {
+  const cancelled = () => new HttpRequestError("照片读取已取消", 0, "REQUEST_CANCELLED", false);
+  if (control.cancelled) throw cancelled();
+  await ensureDeploymentMatches();
+  if (control.cancelled) throw cancelled();
+  let cancel: (() => void) | undefined;
+  try {
+    const result = await runCallbackTask<{ statusCode: number; tempFilePath: string }>((callbacks) => {
+      const task = wx.downloadFile({
+        url: `${environment.apiBaseUrl}/materials/${encodeURIComponent(materialId)}/content`,
+        header: accessTokenHeader(),
+        timeout: environment.requestTimeoutMs,
+        ...callbacks,
+      });
+      cancel = () => {
+        callbacks.fail(cancelled());
+        try { task?.abort?.(); } catch { /* Cancellation must still settle. */ }
+      };
+      control.abort = cancel;
+      if (control.cancelled) cancel();
+      return task;
+    }, {
+      timeoutMs: environment.requestTimeoutMs,
+      timeoutError: () => new HttpRequestError("照片读取超时，请重试", 0, "REQUEST_TIMEOUT", true),
+      onLateSuccess: (result) => removeDownloadedFile(result.tempFilePath),
+    }).catch((error: unknown) => { throw networkFailure(error); });
+    if (control.cancelled || result.statusCode !== 200 || !result.tempFilePath) {
+      removeDownloadedFile(result.tempFilePath);
+      if (control.cancelled) throw cancelled();
+      throw new HttpRequestError(
+        result.statusCode === 401 ? "微信登录已失效，请重新登录" : "照片暂时无法读取，请重试",
+        result.statusCode,
+        result.statusCode === 401 ? "UNAUTHORIZED" : "MATERIAL_DOWNLOAD_FAILED",
+        result.statusCode >= 500,
+      );
+    }
+    return result.tempFilePath;
+  } finally {
+    if (control.abort === cancel) delete control.abort;
+  }
 }
 
 function decodeBinaryError(data: unknown): {

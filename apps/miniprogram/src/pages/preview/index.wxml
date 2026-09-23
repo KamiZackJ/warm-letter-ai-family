@@ -28,9 +28,15 @@
     </view>
 
     <scroll-view wx:if="{{photos.length > 0}}" class="preview-photos" scroll-x enable-flex>
-      <button wx:for="{{photos}}" wx:key="id" class="preview-photo-button" aria-label="查看照片：{{item.name}}" data-path="{{item.localPath}}" bindtap="previewPhoto">
-        <image class="preview-photo" src="{{item.localPath}}" mode="aspectFill" />
-      </button>
+      <view wx:for="{{photos}}" wx:key="id" class="preview-photo-item">
+        <button wx:if="{{item.localPath}}" class="preview-photo-button" aria-label="查看照片：{{item.name}}" data-path="{{item.localPath}}" bindtap="previewPhoto">
+          <image class="preview-photo" src="{{item.localPath}}" mode="aspectFill" data-id="{{item.id}}" data-path="{{item.localPath}}" binderror="handlePhotoError" />
+        </button>
+        <view wx:else class="preview-photo-placeholder" aria-live="polite">
+          <text>{{item.photoLoading ? '正在读取照片…' : item.photoError || '照片待读取'}}</text>
+          <button wx:if="{{!item.photoLoading}}" class="secondary-button" data-id="{{item.id}}" bindtap="retryPhoto">重新读取</button>
+        </view>
+      </view>
     </scroll-view>
 
     <view wx:if="{{!shareReady}}" class="revision-band">
@@ -81,6 +87,7 @@
         <button class="primary-button confirm-button" loading="{{confirming}}" disabled="{{confirming || regenerating || speechLoading || voiceChangePending}}" bindtap="confirmForShare">{{confirming ? '正在确认…' : '确认内容，准备寄出'}}</button>
       </block>
       <block wx:else>
+        <text wx:if="{{shareResetNotice}}" class="band-copy" aria-live="polite">{{shareResetNotice}}</text>
         <view class="ready-message" aria-live="polite">
           <text class="ready-mark">✓</text>
           <text>内容已确认，可以交给微信选择好友。</text>

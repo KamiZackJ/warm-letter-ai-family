@@ -2,6 +2,9 @@ import { environmentView } from "../../config/env";
 import { api } from "../../services/api";
 import type { Letter, Material, SpeechCatalog } from "../../types/domain";
 import { draftNeedsSourceReview } from "../../utils/paragraph-attribution";
+import { removeDownloadedFile, type MaterialDownloadControl } from "../../services/http-client";
+
+type PreviewPhoto = Material & { photoLoading?: boolean; photoError?: string; downloaded?: boolean };
 
 type PreviewAudioContext = {
   src: string;
@@ -34,12 +37,15 @@ Page({
   speechRequestId: 0,
   audioContext: null as PreviewAudioContext | null,
   generatedFilePath: "",
+  photoLoadId: 0,
+  photoDownloads: [] as Array<{ id: string; control: MaterialDownloadControl }>,
+  downloadedPhotoPaths: [] as string[],
 
   data: {
     ...environmentView,
     letterId: "",
     letter: null as Letter | null,
-    photos: [] as Material[],
+    photos: [] as PreviewPhoto[],
     loading: true,
     loadError: "",
     regenerating: false,
@@ -47,6 +53,7 @@ Page({
     confirmError: "",
     shareReady: false,
     shareToken: "",
+    shareResetNotice: "",
     speechCatalog: emptySpeechCatalog,
     selectedVoiceIndex: 0,
     generatedVoiceId: "",
@@ -62,6 +69,8 @@ Page({
   async onLoad(options: { id?: string }) {
     this.disposed = false;
     this.hidden = false;
+    this.photoDownloads = [];
+    this.downloadedPhotoPaths = [];
     this.setupAudio();
     wx.hideShareMenu?.({ menus: ["shareAppMessage", "shareTimeline"] });
     if (!options.id) {
@@ -76,6 +85,7 @@ Page({
     this.disposed = true;
     this.loadRequestId += 1;
     this.speechRequestId += 1;
+    this.clearPhotoDownloads();
     this.teardownAudio();
     this.removeGeneratedFile();
   },
@@ -135,6 +145,7 @@ Page({
   async loadPreview() {
     if (this.disposed || this.data.speechLoading || this.data.regenerating || this.data.confirming) return;
     const requestId = ++this.loadRequestId;
+    this.clearPhotoDownloads();
     const letterId = this.data.letterId;
     const isCurrent = () => !this.disposed && requestId === this.loadRequestId;
     this.setData({ loading: true, loadError: "" });
@@ -146,11 +157,13 @@ Page({
       ]);
       if (!isCurrent()) return;
       let letter = loadedLetter;
+      let shareRestored = false;
       if (
         (letter.status === "PUBLISHED" || letter.status === "CONFIRMED") &&
         !letter.shareToken
       ) {
         letter = await api.reissueShare(letterId);
+        shareRestored = true;
       }
       if (!letter.draft) throw new Error("家书草稿还没有生成完成");
       if (!isCurrent()) return;
@@ -169,8 +182,7 @@ Page({
         photos: materials.filter(
           (material) =>
             materialIds.has(material.id) &&
-            (material.type === "photo" || material.type === "screenshot") &&
-            Boolean(material.localPath),
+            (material.type === "photo" || material.type === "screenshot"),
         ),
         speechCatalog,
         selectedVoiceIndex: 0,
@@ -182,9 +194,15 @@ Page({
         speechPlaying: false,
         shareReady: Boolean(letter.shareToken),
         shareToken: letter.shareToken || "",
+        shareResetNotice: shareRestored
+          ? "已恢复这封家书的分享入口。之前的分享已失效，请重新发送给家人。"
+          : this.data.shareResetNotice,
         loadError: "",
       });
       if (letter.shareToken) wx.showShareMenu?.({ menus: ["shareAppMessage"] });
+      for (const photo of this.data.photos) {
+        if (!photo.localPath) void this.loadPhoto(photo.id);
+      }
     } catch (error) {
       if (isCurrent()) {
         this.setData({ loadError: (error as Error).message || "家书预览暂时无法打开" });
@@ -196,6 +214,64 @@ Page({
 
   retryLoad() {
     void this.loadPreview();
+  },
+
+  clearPhotoDownloads() {
+    this.photoLoadId += 1;
+    for (const { control } of this.photoDownloads) {
+      control.cancelled = true;
+      control.abort?.();
+    }
+    this.photoDownloads = [];
+    for (const path of this.downloadedPhotoPaths) removeDownloadedFile(path);
+    this.downloadedPhotoPaths = [];
+  },
+
+  updatePhoto(id: string, patch: Partial<PreviewPhoto>) {
+    this.setData({ photos: this.data.photos.map((photo) => photo.id === id ? { ...photo, ...patch } : photo) });
+  },
+
+  async loadPhoto(id: string, requestId?: number) {
+    requestId ??= this.photoLoadId;
+    if (this.disposed || requestId !== this.photoLoadId || this.photoDownloads.some((item) => item.id === id)) return;
+    const photo = this.data.photos.find((item) => item.id === id);
+    if (!photo) return;
+    const control: MaterialDownloadControl = { cancelled: false };
+    this.photoDownloads.push({ id, control });
+    this.updatePhoto(id, { localPath: "", photoLoading: true, photoError: "" });
+    try {
+      const path = await api.getMaterialContent(photo, control);
+      if (this.disposed || control.cancelled || requestId !== this.photoLoadId) {
+        removeDownloadedFile(path);
+        return;
+      }
+      this.downloadedPhotoPaths.push(path);
+      this.updatePhoto(id, { localPath: path, photoLoading: false, photoError: "", downloaded: true });
+    } catch (error) {
+      if (!this.disposed && !control.cancelled && requestId === this.photoLoadId) {
+        this.updatePhoto(id, { photoLoading: false, photoError: error instanceof Error ? error.message : "照片暂时无法读取，请重试" });
+      }
+    } finally {
+      this.photoDownloads = this.photoDownloads.filter((item) => item.control !== control);
+    }
+  },
+
+  retryPhoto(event: { currentTarget: { dataset: { id: string } } }) {
+    void this.loadPhoto(event.currentTarget.dataset.id);
+  },
+
+  handlePhotoError(event: { currentTarget: { dataset: { id: string; path: string } } }) {
+    if (this.disposed || this.data.loading) return;
+    const { id, path } = event.currentTarget.dataset;
+    const photo = this.data.photos.find((item) => item.id === id);
+    if (!photo || photo.localPath !== path) return;
+    if (photo.downloaded) {
+      removeDownloadedFile(path);
+      this.downloadedPhotoPaths = this.downloadedPhotoPaths.filter((item) => item !== path);
+      this.updatePhoto(id, { localPath: "", photoError: "照片暂时无法显示，请重试" });
+    } else {
+      void this.loadPhoto(id);
+    }
   },
 
   editLetter() {

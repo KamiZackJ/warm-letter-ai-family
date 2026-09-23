@@ -21,7 +21,7 @@ import {
   resolveGenerationJobId,
   waitForGenerationJob,
 } from "./generation-polling";
-import { HttpRequestError, request, requestBinary, uploadBinary } from "./http-client";
+import { HttpRequestError, request, requestBinary, uploadBinary, downloadMaterialContent, removeDownloadedFile, type MaterialDownloadControl } from "./http-client";
 import { runCallbackTask } from "./async-task";
 import { ensurePrivacyConsent } from "./privacy";
 import { clearWarmLetterStorage, removeLetterLocally, removeNarrationFiles } from "../utils/data-deletion";
@@ -416,6 +416,22 @@ function requireShareToken(letterId: string, shareToken?: string): string {
 }
 
 export const realApi = {
+  async getMaterialContent(material: Material, control: MaterialDownloadControl): Promise<string> {
+    if ((material.type !== "photo" && material.type !== "screenshot") || !material.id.trim()) {
+      throw new Error("只能预览本人选择的照片");
+    }
+    let temporaryPath = "";
+    try {
+      return await authorized(async () => {
+        temporaryPath = await downloadMaterialContent(material.id, control);
+        return temporaryPath;
+      });
+    } catch (error) {
+      removeDownloadedFile(temporaryPath);
+      throw error;
+    }
+  },
+
   async listMaterials(): Promise<Material[]> {
     const response = await authorized(() =>
       request<{ materials: ServerMaterial[] }>("/materials"),

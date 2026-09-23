@@ -156,6 +156,68 @@ beforeEach(() => {
 });
 
 describe("home page recent letters recovery", () => {
+  it.each(["CONFIRMED", "PUBLISHED"])("opens %s server history through owner preview without requiring a local share token", async (status) => {
+    const saved = { ...createLetter("server-letter"), status } as LetterSummary;
+    mocks.listLetters.mockResolvedValue([saved]);
+    const context = createContext();
+    await context.loadLetters();
+
+    context.openLetter({ currentTarget: { dataset: context.data.recentLetters[0] } });
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith(expect.objectContaining({
+      url: "/pages/preview/index?id=server-letter",
+    }));
+    expect(mocks.beginCurrentMaterialSelection).not.toHaveBeenCalled();
+    expect(mocks.clearPendingGeneration).not.toHaveBeenCalled();
+  });
+
+  it("keeps unconfirmed drafts editable and encodes the letter identity", () => {
+    const context = createContext({ loading: false });
+
+    context.openLetter({ currentTarget: { dataset: { id: "letter?token=other", status: "EDITING" } } });
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith(expect.objectContaining({
+      url: "/pages/editor/index?id=letter%3Ftoken%3Dother",
+    }));
+  });
+
+  it("does not open stale history while the server list is refreshing", async () => {
+    const history = createDeferred<LetterSummary[]>();
+    mocks.listLetters.mockReturnValue(history.promise);
+    const context = createContext({ recentLetters: [createLetter("retained")] });
+    const refreshing = context.loadLetters();
+    const event = { currentTarget: { dataset: { id: "retained", status: "PUBLISHED" } } };
+
+    context.openLetter(event);
+    expect(mocks.navigateTo).not.toHaveBeenCalled();
+    history.resolve([{ ...createLetter("retained"), status: "PUBLISHED" }]);
+    await refreshing;
+    context.openLetter(event);
+
+    expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([undefined, "", "   "])("rejects an empty letter identity %s before navigation", (id) => {
+    const context = createContext({ loading: false });
+
+    context.openLetter({ currentTarget: { dataset: { id, status: "PUBLISHED" } } });
+
+    expect(mocks.navigateTo).not.toHaveBeenCalled();
+    expect(mocks.showToast).toHaveBeenCalledWith({ title: "家书链接不完整，请重新读取列表", icon: "none" });
+  });
+
+  it("ignores a late row tap after leaving home and reports a failed navigation", () => {
+    const context = createContext({ loading: false });
+    const event = { currentTarget: { dataset: { id: "letter-1", status: "PUBLISHED" } } };
+    context.disposed = true;
+    context.openLetter(event);
+    expect(mocks.navigateTo).not.toHaveBeenCalled();
+    context.disposed = false;
+    context.openLetter(event);
+    (mocks.navigateTo.mock.calls[0]![0] as { fail(): void }).fail();
+    expect(mocks.showToast).toHaveBeenCalledWith({ title: "暂时无法打开家书，请重试", icon: "none" });
+  });
+
   it("keeps the recent-letter note readable and recent-letter text multiline", () => {
     const styles = fileSystem.readFileSync(
       `${miniprogramDirectory}/src/pages/home/index.wxss`,

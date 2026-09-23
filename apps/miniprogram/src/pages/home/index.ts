@@ -229,10 +229,23 @@ Page({
     }
   },
 
-  openLetter(event: { currentTarget: { dataset: { id: string; status: string } } }) {
+  openLetter(event: { currentTarget: { dataset: { id?: string; status?: string } } }) {
+    if (this.disposed || this.data.loading || this.data.startingFlow) return;
+    const { id: rawId, status } = event.currentTarget.dataset;
+    const id = typeof rawId === "string" ? rawId.trim() : "";
+    if (!id) {
+      wx.showToast({ title: "家书链接不完整，请重新读取列表", icon: "none" });
+      return;
+    }
     this.dismissGuide();
-    const { id, status } = event.currentTarget.dataset;
-    const page = status === "CONFIRMED" || status === "PUBLISHED" ? "reader" : "editor";
-    wx.navigateTo({ url: `/pages/${page}/index?id=${id}` });
+    // Owner preview can restore a missing local share token after switching devices.
+    // Friend links continue to enter the reader with their existing credential.
+    const page = status === "CONFIRMED" || status === "PUBLISHED" ? "preview" : "editor";
+    wx.navigateTo({
+      url: `/pages/${page}/index?id=${encodeURIComponent(id)}`,
+      fail: () => {
+        if (!this.disposed) wx.showToast({ title: "暂时无法打开家书，请重试", icon: "none" });
+      },
+    });
   },
 });
