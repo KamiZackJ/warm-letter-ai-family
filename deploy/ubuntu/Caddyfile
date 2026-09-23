@@ -1,3 +1,7 @@
+{
+	default_sni api.warmjiashu.xyz
+}
+
 warmjiashu.xyz {
 	encode zstd gzip
 
@@ -21,6 +25,10 @@ www.warmjiashu.xyz {
 }
 
 api.warmjiashu.xyz {
+	tls {
+		key_type rsa2048
+	}
+
 	encode zstd gzip
 
 	header {
