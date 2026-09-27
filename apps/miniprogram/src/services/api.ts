@@ -116,6 +116,9 @@ const REAL_GENERATION_JOBS_KEY = storageKey("real_generation_jobs");
 const REAL_GENERATION_REQUEST_KEYS_KEY = storageKey("real_generation_request_keys");
 const ACCESS_TOKEN_KEY = storageKey("access_token");
 const ACCOUNT_DELETED_KEY = storageKey("account_deleted");
+// Publication checks have a 60-second server budget. Allow the result to arrive
+// before the native request deadline aborts and discards any later callbacks.
+const SHARE_CHECK_REQUEST_TIMEOUT_MS = 65_000;
 const deletedLetterIds = new Set<string>();
 
 function readRecord<T>(key: string): Record<string, T> {
@@ -763,7 +766,7 @@ export const realApi = {
           shareToken: string;
           shareExpiresAt: string;
           readerUrl: string;
-        }>(`/letters/${id}/confirm`, { method: "POST", data: {} }),
+        }>(`/letters/${id}/confirm`, { method: "POST", data: {}, timeoutMs: SHARE_CHECK_REQUEST_TIMEOUT_MS }),
       );
       saveShareToken(id, response.shareToken);
       return { ...mapLetter(response.letter), shareToken: response.shareToken };
@@ -788,7 +791,7 @@ export const realApi = {
         shareToken: string;
         shareExpiresAt: string;
         readerUrl: string;
-      }>(`/letters/${id}/share/reissue`, { method: "POST", data: {} }),
+      }>(`/letters/${id}/share/reissue`, { method: "POST", data: {}, timeoutMs: SHARE_CHECK_REQUEST_TIMEOUT_MS }),
     );
     saveShareToken(id, response.shareToken);
     return { ...mapLetter(response.letter), shareToken: response.shareToken };

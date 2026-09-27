@@ -118,10 +118,10 @@ describe("real API signature synchronization", () => {
       status: "PUBLISHED",
       shareToken: "confirmed-share-token",
     });
-    expect(requestMock).toHaveBeenCalledWith("/letters/letter-1/confirm", {
+    expect(requestMock).toHaveBeenCalledWith("/letters/letter-1/confirm", expect.objectContaining({
       method: "POST",
       data: {},
-    });
+    }));
   });
 
   it("reads the confirmed signature on a device with no sender-side draft storage", async () => {

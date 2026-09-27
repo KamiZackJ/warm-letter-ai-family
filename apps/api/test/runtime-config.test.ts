@@ -122,6 +122,23 @@ describe("API runtime configuration", () => {
     });
   });
 
+  it("keeps the WeChat moderation origin optional and independent from the public API", () => {
+    expect(loadApiRuntimeConfig(demoEnvironment).wechatMediaBaseUrl).toBeUndefined();
+    expect(loadApiRuntimeConfig(competitionEnvironment({ WECHAT_MEDIA_BASE_URL: "  " })).wechatMediaBaseUrl).toBeUndefined();
+    expect(loadApiRuntimeConfig(competitionEnvironment({ WECHAT_MEDIA_BASE_URL: "https://MEDIA.example.test:443/" })))
+      .toMatchObject({ wechatMediaBaseUrl: "https://media.example.test", publicBaseUrl: "https://api.evidence.example.test" });
+  });
+
+  it.each([
+    "http://media.example.test", "media.example.test", "https://user:pass@media.example.test", "https://@media.example.test",
+    "https://media.example.test/path", "https://media.example.test/./", "https://media.example.test//",
+    "https://media.example.test?", "https://media.example.test#", "https://media.example.test?token=private",
+    "https://media.example.test#fragment", "https://localhost", "https://127.0.0.1", "https://[::1]", "https://*.example.test",
+  ])("rejects unsafe WeChat media origin %s", (value) => {
+    expect(() => loadApiRuntimeConfig({ ...demoEnvironment, WECHAT_MEDIA_BASE_URL: value })).toThrow("WECHAT_MEDIA_BASE_URL");
+    expect(() => buildApp({ deploymentMode: "test", wechatMediaBaseUrl: value })).toThrow("WECHAT_MEDIA_BASE_URL");
+  });
+
   it("loads and validates generation cost rate limits", () => {
     expect(
       loadApiRuntimeConfig({

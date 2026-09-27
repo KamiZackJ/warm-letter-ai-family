@@ -43,6 +43,7 @@ import {
 import type { ReplySafetyPolicy } from "./reply-safety.js";
 import {
   assertApiDeploymentSupported,
+  resolveWechatMediaBaseUrl,
   type AIProviderMode,
   type AuthProviderMode,
   type DeploymentMode,
@@ -113,6 +114,7 @@ export interface BuildAppOptions {
   objectStorage?: ObjectStorage;
   uploadDirectory?: string;
   publicBaseUrl?: string;
+  wechatMediaBaseUrl?: string;
   maxMediaUploadBytes?: number;
   shareTokenTtlMs?: number;
   mediaTokenTtlMs?: number;
@@ -256,6 +258,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     options.objectStorage ??
     new FileSystemObjectStorage(options.uploadDirectory ?? resolve(process.cwd(), "uploads"));
   const publicBaseUrl = (options.publicBaseUrl ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
+  const wechatMediaBaseUrl = resolveWechatMediaBaseUrl(options.wechatMediaBaseUrl, publicBaseUrl);
   const maxMediaUploadBytes = options.maxMediaUploadBytes ?? defaultMaximumMediaBytes;
   if (!Number.isSafeInteger(maxMediaUploadBytes) || maxMediaUploadBytes < 1) {
     throw new Error("maxMediaUploadBytes must be a positive safe integer");
@@ -288,7 +291,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   };
   const safety = options.contentSafetyProvider ? new ProductionSafety({
     repository: service.repository, service, provider: options.contentSafetyProvider,
-    publicBaseUrl, signingKeys: options.mediaSigningKeys ?? [], now: options.now,
+    publicBaseUrl: wechatMediaBaseUrl, signingKeys: options.mediaSigningKeys ?? [], now: options.now,
     normalizeMaterial: (material) => normalizeSafetyMaterial(service.repository, objectStorage, material, safetyMaterialOptions),
   }) : undefined;
 

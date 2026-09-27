@@ -38,7 +38,7 @@ describe("durable media safety state transitions", () => {
     expect(repository.getLatestMediaSafetyCheck(material.id)).toMatchObject({
       status: "failed", diagnostic: { reason: "provider", wechatErrorCode: -1008 },
     });
-    await expect(safety.submitMaterial(material)).rejects.toMatchObject({ statusCode: 503 });
+    await expect(safety.submitMaterial(material)).rejects.toMatchObject({ statusCode: 503, code: "CONTENT_SAFETY_DOWNLOAD_FAILED" });
     expect(submitMedia).toHaveBeenCalledOnce();
     advance(60_000);
     submitMedia.mockResolvedValue({ decision: "pending", traceId: "trace-2" });
@@ -47,6 +47,41 @@ describe("durable media safety state transitions", () => {
     expect(repository.getLatestMediaSafetyCheck(material.id)).toMatchObject({ traceId: "trace-2", status: "pending" });
     expect(repository.getLatestMediaSafetyCheck(material.id)?.diagnostic).toBeUndefined();
     expect(repository.getMediaSafetyCheck("trace-1")?.diagnostic).toEqual({ reason: "provider", wechatErrorCode: -1008 });
+  });
+
+  it.each([
+    [-1008, "CONTENT_SAFETY_DOWNLOAD_FAILED"],
+    [-1, "CONTENT_SAFETY_UNAVAILABLE"],
+    [undefined, "CONTENT_SAFETY_UNAVAILABLE"],
+  ])("keeps failed check %s distinct from pending both during cooldown and final validation", async (wechatErrorCode, code) => {
+    const { safety, material, service } = setup();
+    const letter = service.createLetter(material.userId, { recipient: "妈妈", materialIds: [material.id] });
+    await safety.submitMaterial(material);
+    expect(() => safety.assertMediaPassed(letter)).toThrow(expect.objectContaining({ statusCode: 409, code: "CONTENT_SAFETY_PENDING" }));
+    safety.acceptCallback({ traceId: "trace-1", decision: "unavailable", reason: "provider", wechatErrorCode });
+    await expect(safety.submitMaterial(material)).rejects.toMatchObject({ statusCode: 503, code });
+    expect(() => safety.assertMediaPassed(letter)).toThrow(expect.objectContaining({ statusCode: 503, code }));
+  });
+
+  it("does not describe an absent receipt as an active check", () => {
+    const { safety, material, service } = setup();
+    const letter = service.createLetter(material.userId, { recipient: "妈妈", materialIds: [material.id] });
+    expect(() => safety.assertMediaPassed(letter)).toThrow(expect.objectContaining({ statusCode: 503, code: "CONTENT_SAFETY_UNAVAILABLE" }));
+  });
+
+  it("requires a valid signature, unexpired credential and READY material for every moderation fetch", () => {
+    const { safety, material, repository, advance } = setup();
+    const url = new URL(safety.mediaUrl(material));
+    const query = Object.fromEntries(url.searchParams);
+    expect(safety.verifyMedia(material.id, query).id).toBe(material.id);
+    expect(() => safety.verifyMedia(material.id, { ...query, signature: "0".repeat(64) })).toThrow();
+    advance(45 * 60_000);
+    expect(() => safety.verifyMedia(material.id, query)).toThrow();
+    const freshQuery = Object.fromEntries(new URL(safety.mediaUrl(material)).searchParams);
+    for (const status of ["UPLOADING", "DELETED"] as const) {
+      repository.saveMaterial({ ...material, status });
+      expect(() => safety.verifyMedia(material.id, freshQuery)).toThrow();
+    }
   });
 
   it("does not retry risky content or accept late approval for a rejected record", async () => {

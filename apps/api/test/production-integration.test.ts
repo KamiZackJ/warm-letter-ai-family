@@ -57,7 +57,7 @@ describe("production persistence, deletion and content safety integration", () =
   let generate: ReturnType<typeof vi.fn<(input: GenerateLetterInput) => Promise<LetterDraft>>>;
   let synthesize: ReturnType<typeof vi.fn<SpeechProvider["synthesize"]>>;
 
-  function construct(): FastifyInstance {
+  function construct(overrides: Partial<BuildAppOptions> = {}): FastifyInstance {
     const ai = new OpenAIResponsesProvider({ apiKey: "synthetic-unused", model: "synthetic-unused" });
     vi.spyOn(ai, "generateLetter").mockImplementation(generate);
     const options: BuildAppOptions = {
@@ -68,6 +68,7 @@ describe("production persistence, deletion and content safety integration", () =
       contentSafetyProvider: { name: "wechat-msg-sec-check-v2", checkText, submitMedia },
       moderationCallback: new WechatModerationCallbackVerifier({ token: callbackToken, appId: callbackApp, encodingAesKey: callbackKey.toString("base64").slice(0, -1) }),
       speechProvider: { name: "synthetic-tts", voices: [{ id: "voice", name: "测试声音", description: "测试", gender: "female" }], synthesize },
+      ...overrides,
     };
     return buildApp(options);
   }
@@ -260,6 +261,46 @@ describe("production persistence, deletion and content safety integration", () =
     expect((await confirm()).statusCode).toBe(503);
     expect(repository.listShareAccess(letter.id)).toEqual([]);
     expect(repository.getLetter(letter.id)?.state).toBe("EDITING");
+  });
+
+  it("reports download failure without issuing credentials or claiming that the check is still pending", async () => {
+    const owner = await login(app, "owner");
+    const { letter } = await mediaFixture(owner);
+    const confirm = () => app.inject({ method: "POST", url: `/v1/letters/${letter.id}/confirm`, headers: auth(owner), payload: {} });
+    expect((await confirm()).statusCode).toBe(409);
+    expect((await app.inject({ method: "POST", ...callbackEnvelope("media-trace", "pass", -1008) })).statusCode).toBe(200);
+    const failed = await confirm();
+    expect(failed.statusCode).toBe(503);
+    expect(json<{ error: { code: string } }>(failed).error.code).toBe("CONTENT_SAFETY_DOWNLOAD_FAILED");
+    expect(repository.listShareAccess(letter.id)).toEqual([]);
+    expect(repository.getLetter(letter.id)?.state).toBe("EDITING");
+  });
+
+  it.each([undefined, "https://media.example.test/"])("uses moderation origin %s only for signed checks, keeping upload and reader URLs unchanged", async (wechatMediaBaseUrl) => {
+    await app.close();
+    app = construct({ wechatMediaBaseUrl });
+    const owner = await login(app, "owner");
+    const { letter, material } = await mediaFixture(owner);
+    const pending = await app.inject({ method: "POST", url: `/v1/letters/${letter.id}/confirm`, headers: auth(owner), payload: {} });
+    expect(pending.statusCode).toBe(409);
+    const mediaUrl = new URL(submitMedia.mock.calls[0]![0].mediaUrl);
+    expect(mediaUrl.origin).toBe(wechatMediaBaseUrl ? "https://media.example.test" : "https://api.example.test");
+    expect(mediaUrl.pathname).toBe(`/v1/safety/media/${material.id}`);
+    const signedDownload = await app.inject({ method: "GET", url: `${mediaUrl.pathname}${mediaUrl.search}` });
+    expect(signedDownload.statusCode).toBe(200);
+    expect(signedDownload.rawPayload).toEqual(Buffer.from("ffd8ffd9", "hex"));
+    expect((await app.inject({ method: "GET", url: mediaUrl.pathname })).statusCode).toBe(404);
+    const upload = await app.inject({ method: "POST", url: "/v1/materials/presign", headers: auth(owner),
+      payload: { type: "photo", filename: "another.jpg", contentType: "image/jpeg" } });
+    expect(upload.statusCode).toBe(201);
+    expect(new URL(json<{ uploadUrl: string }>(upload).uploadUrl).origin).toBe("https://api.example.test");
+    expect((await app.inject({ method: "POST", ...callbackEnvelope("media-trace", "pass") })).statusCode).toBe(200);
+    const published = await publish(owner, letter.id);
+    const reader = await app.inject({ method: "GET", url: published.readerUrl });
+    expect(reader.statusCode).toBe(200);
+    const sourceUrl = json<{ reader: { sources: Array<{ mediaUrl: string }> } }>(reader).reader.sources[0]!.mediaUrl;
+    expect(new URL(sourceUrl).origin).toBe("https://api.example.test");
+    expect(reader.body).not.toContain("https://media.example.test");
   });
 
   it.each(["pass", "risky"])("publishes media only after an authenticated %s callback permits it", async (suggest) => {

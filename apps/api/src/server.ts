@@ -36,6 +36,7 @@ const app = buildApp({
   speechProvider: createSpeechProviderFromEnv(process.env),
   corsOrigins: runtimeConfig.corsOrigins,
   publicBaseUrl: runtimeConfig.publicBaseUrl,
+  wechatMediaBaseUrl: runtimeConfig.wechatMediaBaseUrl,
   uploadDirectory: runtimeConfig.uploadDirectory,
   maxMediaUploadBytes: runtimeConfig.maxMediaUploadBytes,
   shareTokenTtlMs: runtimeConfig.shareTokenTtlMs,

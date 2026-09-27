@@ -17,6 +17,7 @@ export interface ApiRuntimeConfig {
   host: string;
   corsOrigins: string[];
   publicBaseUrl: string;
+  wechatMediaBaseUrl?: string;
   uploadDirectory: string;
   databasePath?: string;
   maxMediaUploadBytes?: number;
@@ -227,6 +228,26 @@ function publicBaseUrlFromEnv(
   return url.origin;
 }
 
+/** Only WeChat's signed moderation fetches may use this separate HTTPS origin. */
+export function resolveWechatMediaBaseUrl(value: string | undefined, publicBaseUrl: string): string {
+  if (value === undefined) return publicBaseUrl;
+  const trimmed = value.trim();
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new Error("WECHAT_MEDIA_BASE_URL must be an absolute HTTPS origin");
+  }
+  if (!/^https:\/\/[^/?#\\\s@]+\/?$/iu.test(trimmed) || url.protocol !== "https:" ||
+    !url.hostname || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    throw new Error("WECHAT_MEDIA_BASE_URL must be an HTTPS origin without credentials, path, query, or fragment");
+  }
+  if (isLoopbackOrWildcardHostname(url.hostname)) {
+    throw new Error("WECHAT_MEDIA_BASE_URL must not use localhost, loopback, or wildcard hosts");
+  }
+  return url.origin;
+}
+
 function corsOriginsFromEnv(
   env: NodeJS.ProcessEnv,
   deploymentMode: DeploymentMode,
@@ -429,6 +450,9 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
       : undefined;
 
   const publicBaseUrl = publicBaseUrlFromEnv(env, deploymentMode);
+  const wechatMediaBaseUrl = env.WECHAT_MEDIA_BASE_URL?.trim()
+    ? resolveWechatMediaBaseUrl(env.WECHAT_MEDIA_BASE_URL, publicBaseUrl)
+    : undefined;
   const corsOrigins = corsOriginsFromEnv(env, deploymentMode);
   const uploadDirectory = resolve(requiredEnv(env, "UPLOAD_DIR"));
   const mediaSigningKeys = mediaSigningKeysFromEnv(env, deploymentMode);
@@ -448,6 +472,7 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
     host: env.HOST?.trim() || "0.0.0.0",
     corsOrigins,
     publicBaseUrl,
+    wechatMediaBaseUrl,
     uploadDirectory,
     databasePath: databasePath ? resolve(databasePath) : undefined,
     maxMediaUploadBytes: production ? Math.min(optionalIntegerFromEnv(env, "MAX_MEDIA_UPLOAD_BYTES") ?? 10 * 1024 * 1024, 10 * 1024 * 1024) : optionalIntegerFromEnv(env, "MAX_MEDIA_UPLOAD_BYTES"),

@@ -32,11 +32,15 @@ export class HttpRequestError extends Error {
 export function userFacingApiError(code: string | undefined, fallback?: string): string {
   switch (code) {
     case "CONTENT_SAFETY_PENDING":
-      return "图片或录音仍在安全检查中，家书尚未寄出。草稿已保存，请稍后回来确认；检查可能需要约 30 分钟。";
+      return "图片或录音的安全检查尚未完成，家书尚未寄出。草稿已保存，请稍后回来确认。";
+    case "CONTENT_SAFETY_DOWNLOAD_FAILED":
+      return "图片或录音的安全检查暂未成功，家书尚未寄出。草稿和素材已保留，请稍后重试。";
     case "CONTENT_SAFETY_REJECTED":
       return "部分内容未通过安全检查，家书尚未寄出。请核对文字，或删除相关素材后重新整理。";
     case "CONTENT_SAFETY_UNAVAILABLE":
       return "安全检查暂时不可用，尚未完成本次操作。请稍后重试。";
+    case "CONTENT_SAFETY_TIMEOUT":
+      return "安全检查等待超时，家书尚未寄出。草稿已保存，请稍后回来确认。";
     case "WECHAT_LOGIN_REQUIRED":
       return "微信登录已失效，请重新登录后再试。";
     default:

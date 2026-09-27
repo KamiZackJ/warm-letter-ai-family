@@ -45,6 +45,13 @@ export class ProductionSafety {
     return createHmac("sha256", key).update(`wechat-safety-v1\n${id}\n${expires}`).digest("hex");
   }
 
+  private mediaCheckFailure(check?: MediaSafetyCheck): ApiError {
+    if (check?.status === "failed" && check.diagnostic?.wechatErrorCode === -1008) {
+      return new ApiError(503, "CONTENT_SAFETY_DOWNLOAD_FAILED", "图片或录音的安全检查暂未成功，草稿和素材已保留，请稍后重试");
+    }
+    return new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "素材安全检查暂时不可用，请稍后重试");
+  }
+
   async submitMaterial(material: Material): Promise<void> {
     if (material.type === "text") return;
     const active = this.submissions.get(material.id);
@@ -62,7 +69,7 @@ export class ProductionSafety {
     if (previous?.status === "pending" && nowMs - Date.parse(previous.createdAt) < 35 * 60_000) return;
     if ((previous?.status === "failed" && nowMs - Date.parse(previous.updatedAt) < 60_000) ||
       (this.submissionRetryAfter.get(material.id) ?? 0) > nowMs) {
-      throw new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "素材安全检查暂时不可用，请一分钟后重试");
+      throw this.mediaCheckFailure(previous);
     }
     const current = repository.getMaterial(material.id);
     const user = repository.getUser(material.userId);
@@ -155,7 +162,8 @@ export class ProductionSafety {
       if (material.type === "text") continue;
       const check = this.options.repository.getLatestMediaSafetyCheck(id);
       if (check?.status === "reject") throw new ApiError(422, "CONTENT_SAFETY_REJECTED", "部分素材未通过安全检查，请移除后再试");
-      if (check?.status !== "pass") throw new ApiError(409, "CONTENT_SAFETY_PENDING", "照片或语音正在安全检查中，草稿已保存，请稍后再确认分享");
+      if (check?.status === "pending") throw new ApiError(409, "CONTENT_SAFETY_PENDING", "照片或语音正在安全检查中，草稿已保存，请稍后再确认分享");
+      if (check?.status !== "pass") throw this.mediaCheckFailure(check);
     }
   }
 }
