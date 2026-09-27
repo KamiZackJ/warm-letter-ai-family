@@ -142,6 +142,55 @@ describe("production persistence, deletion and content safety integration", () =
     expect(staging.close).toHaveBeenCalledOnce();
   });
 
+  it.each(["UPLOADING", "READY"] as const)("acknowledges %s uploads before background review and issues no share until authenticated approval", async (status) => {
+    await app.close();
+    const staged = deferred<string>();
+    const staging = { prepare: vi.fn((_material: unknown, _signal?: AbortSignal) => staged.promise), sweep: vi.fn(async () => {}), close: vi.fn() };
+    app = construct({ backgroundMediaSafety: true, safetyMediaStaging: staging });
+    const owner = await login(app, `background-${status}`);
+    const { letter, material } = await mediaFixture(owner);
+    repository.saveMaterial({ ...material, status });
+    const complete = await app.inject({ method: "POST", url: "/v1/materials/complete", headers: auth(owner), payload: { materialId: material.id } });
+    expect(complete.statusCode, complete.body).toBe(200);
+    expect(json(complete)).toMatchObject({ material: { id: material.id, status: "READY" } });
+    await vi.waitFor(() => expect(staging.prepare).toHaveBeenCalledOnce());
+    const confirm = () => app.inject({ method: "POST", url: `/v1/letters/${letter.id}/confirm`, headers: auth(owner), payload: {} });
+    expect(json(await confirm())).toMatchObject({ error: { code: "CONTENT_SAFETY_PENDING" } });
+    expect(submitMedia).not.toHaveBeenCalled();
+    expect(repository.listShareAccess(letter.id)).toEqual([]);
+    staged.resolve("https://private-storage.example.test/temporary-review");
+    await vi.waitFor(() => expect(repository.getLatestMediaSafetyCheck(material.id)?.status).toBe("pending"));
+    expect((await confirm()).statusCode).toBe(409);
+    const signed = callbackEnvelope("media-trace", "pass");
+    const forged = await app.inject({ method: "POST", url: signed.url.replace(/msg_signature=.*/, "msg_signature=" + "0".repeat(40)), payload: signed.payload });
+    expect(forged.statusCode).toBe(400);
+    expect(repository.listShareAccess(letter.id)).toEqual([]);
+    expect((await app.inject({ method: "POST", ...signed })).statusCode).toBe(200);
+    const published = await publish(owner, letter.id);
+    expect((await app.inject({ method: "GET", url: published.readerUrl })).statusCode).toBe(200);
+    expect(staging.prepare).toHaveBeenCalledOnce();
+  });
+
+  it.each(["material", "account", "close"])("aborts staged background work on %s without a late moderation submission", async (target) => {
+    await app.close();
+    const staged = deferred<string>();
+    const staging = { prepare: vi.fn((_material: unknown, _signal?: AbortSignal) => staged.promise), sweep: vi.fn(async () => {}), close: vi.fn() };
+    app = construct({ backgroundMediaSafety: true, safetyMediaStaging: staging });
+    const owner = await login(app, `background-delete-${target}`);
+    const { material } = await mediaFixture(owner);
+    expect((await app.inject({ method: "POST", url: "/v1/materials/complete", headers: auth(owner), payload: { materialId: material.id } })).statusCode).toBe(200);
+    await vi.waitFor(() => expect(staging.prepare).toHaveBeenCalledOnce());
+    const signal = staging.prepare.mock.calls[0]![1]!;
+    staging.close.mockImplementation(() => { expect(signal.aborted).toBe(true); });
+    if (target === "close") await app.close();
+    else expect((await app.inject({ method: "DELETE", url: target === "material" ? `/v1/materials/${material.id}` : "/v1/account", headers: auth(owner) })).statusCode).toBe(204);
+    expect(signal.aborted).toBe(true);
+    staged.resolve("https://private-storage.example.test/obsolete");
+    await new Promise(resolve => setImmediate(resolve));
+    expect(submitMedia).not.toHaveBeenCalled();
+    expect(repository.getLatestMediaSafetyCheck(material.id)).toBeUndefined();
+  });
+
   it("retains owner login and shared letters across SQLite restart, while rejecting forged dev tokens", async () => {
     const owner = await login(app, "owner");
     const { user, letter } = fixture(owner);

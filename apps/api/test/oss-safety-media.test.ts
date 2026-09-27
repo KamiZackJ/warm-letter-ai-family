@@ -93,7 +93,7 @@ describe("private OSS review copies", () => {
     { bucket: "https://another-host" }, { region: "oss-cn-beijing.evil.test" }, { region: "oss-cn-beijing-internal" },
     { accessKeyId: "" }, { accessKeySecret: "\nsecret" }, { namespacePrefix: "photos/" },
     { timeoutMs: 0 }, { timeoutMs: Infinity }, { timeoutMs: 15_001 },
-    { uploadTimeoutMs: 0 }, { uploadTimeoutMs: Infinity }, { uploadTimeoutMs: 25_001 },
+    { uploadTimeoutMs: 0 }, { uploadTimeoutMs: Infinity }, { uploadTimeoutMs: 90_001 },
   ])("rejects invalid config without including the value in errors: %j", (patch) => {
     expect(() => new OssSafetyMediaStore({ ...config, ...patch })).toThrow("Temporary media storage operation could not be completed");
     expect(sdk.instances).toHaveLength(0);
@@ -170,12 +170,12 @@ describe("private OSS review copies", () => {
 
   it("allows a bounded slower upload without lengthening deletion or leaving sockets open", async () => {
     vi.useFakeTimers();
-    sdk.put.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(putResult), 12_000)));
+    sdk.put.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(putResult), 45_000)));
     sdk.head.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(headResult()), 2_000)));
-    const store = new OssSafetyMediaStore({ ...config, uploadTimeoutMs: 25_000 });
+    const store = new OssSafetyMediaStore({ ...config, uploadTimeoutMs: 90_000 });
     const upload = store.put(key, media);
-    await vi.advanceTimersByTimeAsync(12_000);
-    expect(sdk.head).toHaveBeenCalledWith(key, expect.objectContaining({ timeout: 13_000 }));
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(sdk.head).toHaveBeenCalledWith(key, expect.objectContaining({ timeout: 45_000 }));
     await vi.advanceTimersByTimeAsync(2_000);
     await upload;
     expect(sdk.instances[0]!.httpsAgent.destroy).toHaveBeenCalledOnce();
@@ -185,6 +185,19 @@ describe("private OSS review copies", () => {
     expect(await deletion).toMatchObject({ error: { code: "OSS_SAFETY_TIMEOUT" } });
     expect(sdk.instances[1]).toMatchObject({ timeout: 10_000 });
     expect(sdk.instances[1]!.httpsAgent.destroy).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("ends a stalled background PUT at its own deadline without starting HEAD", async () => {
+    vi.useFakeTimers();
+    sdk.put.mockImplementationOnce(() => new Promise(() => undefined));
+    const result = observe(new OssSafetyMediaStore({ ...config, uploadTimeoutMs: 90_000 }).put(key, media));
+    await vi.advanceTimersByTimeAsync(89_999);
+    expect(sdk.instances[0]!.httpsAgent.destroy).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toMatchObject({ error: { code: "OSS_SAFETY_TIMEOUT" } });
+    expect(sdk.instances[0]!.httpsAgent.destroy).toHaveBeenCalledOnce();
+    expect(sdk.head).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 

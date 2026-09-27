@@ -15,7 +15,7 @@ export interface OssSafetyMediaOptions {
   namespacePrefix?: string;
   /** Total duration of one operation, including PUT verification. Maximum 15 seconds. */
   timeoutMs?: number;
-  /** Optional PUT plus HEAD budget. Maximum 25 seconds; cleanup keeps timeoutMs. */
+  /** Background PUT plus HEAD budget. Maximum 90 seconds; cleanup keeps timeoutMs. */
   uploadTimeoutMs?: number;
 }
 
@@ -59,7 +59,7 @@ export class OssSafetyMediaStore {
       fail("OSS_SAFETY_CONFIGURATION_INVALID");
     }
     this.uploadTimeoutMs = options.uploadTimeoutMs ?? this.timeoutMs;
-    if (!Number.isSafeInteger(this.uploadTimeoutMs) || this.uploadTimeoutMs < 1 || this.uploadTimeoutMs > 25_000) {
+    if (!Number.isSafeInteger(this.uploadTimeoutMs) || this.uploadTimeoutMs < 1 || this.uploadTimeoutMs > 90_000) {
       fail("OSS_SAFETY_CONFIGURATION_INVALID");
     }
     this.options = { ...options };

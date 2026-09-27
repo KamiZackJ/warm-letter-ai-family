@@ -106,6 +106,7 @@ export interface BuildAppOptions {
   repository?: Repository;
   contentSafetyProvider?: ContentSafetyProvider & MediaSafetyProvider;
   safetyMediaStaging?: Pick<SafetyMediaStaging, "prepare" | "sweep" | "close">;
+  backgroundMediaSafety?: boolean;
   moderationCallback?: WechatModerationCallbackVerifier;
   durableStorage?: boolean;
   mediaTemporaryDirectory?: string;
@@ -295,9 +296,18 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     repository: service.repository, service, provider: options.contentSafetyProvider,
     publicBaseUrl: wechatMediaBaseUrl, signingKeys: options.mediaSigningKeys ?? [], now: options.now,
     normalizeMaterial: (material) => normalizeSafetyMaterial(service.repository, objectStorage, material, safetyMaterialOptions),
-    prepareMediaUrl: options.safetyMediaStaging ? (material) => options.safetyMediaStaging!.prepare(material) : undefined,
+    prepareMediaUrl: options.safetyMediaStaging ? (material, signal) => options.safetyMediaStaging!.prepare(material, signal) : undefined,
+    backgroundMediaSafety: options.backgroundMediaSafety,
   }) : undefined;
   if (options.safetyMediaStaging && !safety) throw new Error("Safety staging requires content moderation");
+  if (options.backgroundMediaSafety && !safety) throw new Error("Background media checks require content moderation");
+
+  async function reviewCompletedMaterial(material: Material): Promise<void> {
+    if (options.backgroundMediaSafety) {
+      try { safety!.scheduleMaterial(material); }
+      catch { app.log.warn("Media review deferred; a later confirmation can retry"); }
+    } else await safety?.submitMaterial(material);
+  }
 
   async function cleanupObjects(): Promise<void> {
     for (const key of service.repository.listObjectDeletions()) {
@@ -312,6 +322,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.addHook("onReady", async () => { await cleanupObjects(); });
   app.addHook("onClose", async () => {
     clearInterval(cleanupTimer);
+    safety?.close();
     await cleanupObjects();
     options.safetyMediaStaging?.close();
   });
@@ -612,7 +623,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     let material = requireOwnedMaterial(service, user.id, materialId);
     if (material.status === "READY") {
       if (safety) material = await normalizeSafetyMaterial(service.repository, objectStorage, material, safetyMaterialOptions);
-      await safety?.submitMaterial(material);
+      await reviewCompletedMaterial(material);
       return { material };
     }
     if (material.status !== "UPLOADING") {
@@ -635,7 +646,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     }
     const textContent = stringValue(body.textContent, "textContent", false);
     const completed = service.completeMaterial(user.id, materialId, { textContent });
-    await safety?.submitMaterial(completed);
+    await reviewCompletedMaterial(completed);
     return { material: completed };
   });
 
@@ -661,6 +672,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const user = service.authenticate(tokenFrom(request));
     const { id } = request.params as { id: string };
     service.deleteMaterial(user.id, id);
+    safety?.cancelMaterial(id);
     await cleanupObjects();
     return reply.status(204).send();
   });
@@ -678,6 +690,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.delete("/v1/account", async (request, reply) => {
     const user = service.authenticate(tokenFrom(request));
     service.deleteAccount(user.id);
+    safety?.cancelUser(user.id);
     await cleanupObjects();
     return reply.status(204).send();
   });

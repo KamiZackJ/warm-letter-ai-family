@@ -101,7 +101,7 @@ export class SafetyMediaStaging {
     if (!Number.isSafeInteger(this.maxPendingLeases) || this.maxPendingLeases < 1 || this.maxPendingLeases > 10_000) {
       throw new Error("Invalid safety staging capacity");
     }
-    for (const [value, maximum] of [[this.ttlMs, maximumTtlMs], [this.operationTimeoutMs, 60_000], [this.sweepTimeoutMs, 30_000]] as const) {
+    for (const [value, maximum] of [[this.ttlMs, maximumTtlMs], [this.operationTimeoutMs, 105_000], [this.sweepTimeoutMs, 30_000]] as const) {
       if (!Number.isSafeInteger(value) || value < 1 || value > maximum) throw new Error("Invalid safety staging deadline");
     }
     this.ready = this.restore();
@@ -131,15 +131,18 @@ export class SafetyMediaStaging {
     return Boolean(check && check.traceId !== lease.baselineTraceId && check.status !== "pending");
   }
 
-  async prepare(material: Material): Promise<string> {
-    if (this.closed) throw unavailable();
+  async prepare(material: Material, parentSignal?: AbortSignal): Promise<string> {
+    if (this.closed || parentSignal?.aborted) throw unavailable();
     const source = this.current(material);
     const sourceFingerprint = fingerprint(source);
     const active = this.preparations.get(source.id);
     if (active?.fingerprint === sourceFingerprint) return active.promise;
     active?.controller.abort();
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    parentSignal?.addEventListener("abort", abort, { once: true });
     const promise = this.prepareSource(source, controller).finally(() => {
+      parentSignal?.removeEventListener("abort", abort);
       if (this.preparations.get(source.id)?.controller === controller) this.preparations.delete(source.id);
     });
     this.preparations.set(source.id, { fingerprint: sourceFingerprint, controller, promise });

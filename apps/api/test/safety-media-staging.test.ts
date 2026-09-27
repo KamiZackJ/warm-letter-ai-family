@@ -251,8 +251,46 @@ describe("private media review staging lifecycle", () => {
     expect(await journal()).toEqual([]);
   });
 
+  it("cancels only the parent worker's upload and preserves cleanup for late writes", async () => {
+    const controller = new AbortController();
+    const upload = deferred<void>();
+    let uploadSignal!: AbortSignal;
+    vi.mocked(remote.put).mockImplementationOnce(async (key, input, signal) => {
+      uploadSignal = signal;
+      await upload.promise;
+      remoteObjects.set(key, input.bytes);
+    });
+    const pending = staging.prepare(material, controller.signal).then(() => undefined, (error: unknown) => error);
+    await vi.waitFor(() => expect(remote.put).toHaveBeenCalledOnce());
+    controller.abort();
+    expect(await pending).toMatchObject({ code: "CONTENT_SAFETY_UNAVAILABLE" });
+    expect(uploadSignal.aborted).toBe(true);
+    expect(remote.signedGetUrl).not.toHaveBeenCalled();
+    upload.resolve();
+    await vi.waitFor(async () => {
+      const records = await journal();
+      expect(records.length === 0 || records.every((record) => record.state === "delete-pending" && record.uploadSettled)).toBe(true);
+    });
+    // An already-running uncertainty sweep may retain its original retry date.
+    // The durable tombstone must still remove the late object by that date.
+    now += 45 * 60_000;
+    await vi.waitFor(async () => {
+      await staging.sweep();
+      expect(remoteObjects.size).toBe(0);
+      expect(await journal()).toEqual([]);
+    });
+    expect(repository.getMaterial(material.id)?.status).toBe("READY");
+  });
+
+  it("does not start a cancelled worker's preparation", async () => {
+    const controller = new AbortController(); controller.abort();
+    await expect(staging.prepare(material, controller.signal)).rejects.toMatchObject({ code: "CONTENT_SAFETY_UNAVAILABLE" });
+    expect(remote.put).not.toHaveBeenCalled();
+    expect(remote.signedGetUrl).not.toHaveBeenCalled();
+  });
+
   it("rejects untrusted directory, key prefix and URL lifetime configuration", () => {
-    for (const override of [{ directory: "relative" }, { objectKeyPrefix: "../other/" }, { ttlMs: 45 * 60_000 + 1 }]) {
+    for (const override of [{ directory: "relative" }, { objectKeyPrefix: "../other/" }, { ttlMs: 45 * 60_000 + 1 }, { operationTimeoutMs: 105_001 }]) {
       expect(() => create(override)).toThrow();
     }
   });
@@ -307,7 +345,8 @@ describe("private media review staging lifecycle", () => {
   it("rotates cleanup attempts so one stalled delete cannot starve later revoked objects", async () => {
     await staging.sweep();
     staging.close();
-    staging = create({ sweepTimeoutMs: 50 });
+    // Exercise the stalled DELETE deadline without treating slow CI fsync as it.
+    staging = create({ sweepTimeoutMs: 500 });
     await staging.prepare(material);
     const second = repository.saveMaterial({ ...material, id: "second", objectKey: "second.jpg" });
     await staging.prepare(second);

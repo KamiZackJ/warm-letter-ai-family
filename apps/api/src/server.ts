@@ -20,11 +20,12 @@ const safetyMediaStaging = runtimeConfig.wechatOss ? new SafetyMediaStaging({
   directory: join(runtimeConfig.uploadDirectory, ".wechat-safety-staging"),
   namespaceId: `${runtimeConfig.wechatOss.region}/${runtimeConfig.wechatOss.bucket}/wechat-safety/`,
   repository: repository!, objectStorage,
+  operationTimeoutMs: 105_000,
   remote: new OssSafetyMediaStore({
     ...runtimeConfig.wechatOss,
     accessKeyId: process.env.WECHAT_OSS_ACCESS_KEY_ID!.trim(),
     accessKeySecret: process.env.WECHAT_OSS_ACCESS_KEY_SECRET!.trim(),
-    namespacePrefix: "wechat-safety/", timeoutMs: 10_000, uploadTimeoutMs: 25_000,
+    namespacePrefix: "wechat-safety/", timeoutMs: 10_000, uploadTimeoutMs: 90_000,
   }),
 }) : undefined;
 const app = buildApp({
@@ -43,6 +44,7 @@ const app = buildApp({
   mediaTemporaryDirectory: process.env.MEDIA_TEMP_DIR || `${runtimeConfig.uploadDirectory}/.safety-tmp`,
   contentSafetyProvider: production ? createContentSafetyProviderFromEnv(process.env) : undefined,
   safetyMediaStaging,
+  backgroundMediaSafety: Boolean(safetyMediaStaging),
   moderationCallback: production ? new WechatModerationCallbackVerifier({
     token: process.env.WECHAT_MESSAGE_TOKEN!, appId: process.env.WECHAT_APP_ID!,
     encodingAesKey: process.env.WECHAT_ENCODING_AES_KEY!,
