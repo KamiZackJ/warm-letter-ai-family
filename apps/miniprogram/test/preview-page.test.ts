@@ -404,6 +404,94 @@ describe("letter preview and delivery page", () => {
     expect(audioContext.play).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores empty-player errors and clears a previous playback warning when loading a preview", async () => {
+    const context = createContext({ speechError: "旧的播放提示" });
+    await context.onLoad({ id: "letter-1" });
+    const onError = audioContext.onError.mock.calls.at(-1)![0];
+    onError({ errCode: 10003, errMsg: "private native file details" });
+    expect(audioContext.stop).not.toHaveBeenCalled();
+    expect(context.data.speechPath).toBe("");
+    expect(context.data.speechError).toBe("");
+    expect(context.audioErrorCode).toBeNull();
+    expect(mocks.generateNarration).not.toHaveBeenCalled();
+  });
+
+  it("preserves generated audio when native playback fails synchronously", async () => {
+    const context = createContext({
+      letterId: "letter-1", letter: structuredClone(letter), speechCatalog: structuredClone(speechCatalog),
+    });
+    audioContext.play.mockImplementation(() => {
+      audioContext.onError.mock.calls.at(-1)![0]({ errCode: 10003, errMsg: "private path and token" });
+    });
+    await context.generateNarration();
+    expect(context.data.speechPath).toContain("warm-letter-narration-letter-1.wav");
+    expect(context.data.speechPlaying).toBe(false);
+    expect(context.data.persistedVoiceKnown).toBe(true);
+    expect(context.data.speechError).toContain("音频已保留");
+    expect(context.data.speechError).not.toContain("重新生成");
+    expect(JSON.stringify(context.data)).not.toContain("private path and token");
+    expect(context.audioErrorCode).toBe(10003);
+    expect(mocks.unlink).not.toHaveBeenCalled();
+  });
+
+  it("retries the same saved file with a new player and ignores callbacks from the retired one", async () => {
+    const context = createContext({
+      letterId: "letter-1", letter: structuredClone(letter), speechCatalog: structuredClone(speechCatalog),
+    });
+    await context.generateNarration();
+    const originalPath = context.data.speechPath;
+    const retiredError = audioContext.onError.mock.calls.at(-1)![0];
+    retiredError({ errCode: 10001 });
+    const recovered = {
+      src: "", play: vi.fn(), pause: vi.fn(), stop: vi.fn(), destroy: vi.fn(),
+      onEnded: vi.fn(), onError: vi.fn(),
+    };
+    mocks.createInnerAudioContext.mockReturnValueOnce(recovered);
+    context.toggleNarration();
+    expect(audioContext.destroy).toHaveBeenCalled();
+    expect(recovered.src).toBe(originalPath);
+    expect(recovered.play).toHaveBeenCalledTimes(1);
+    expect(mocks.generateNarration).toHaveBeenCalledTimes(1);
+    expect(mocks.unlink).not.toHaveBeenCalled();
+    retiredError({ errCode: 10003 });
+    expect(context.data.speechPlaying).toBe(true);
+    expect(context.data.speechError).toBe("");
+    expect(context.audioErrorCode).toBeNull();
+  });
+
+  it("resumes a paused narration without reassigning src or restarting synthesis", async () => {
+    let savedSource = "";
+    const assignSource = vi.fn((value: string) => { savedSource = value; });
+    Object.defineProperty(audioContext, "src", { get: () => savedSource, set: assignSource, configurable: true });
+    const context = createContext({
+      letterId: "letter-1", letter: structuredClone(letter), speechCatalog: structuredClone(speechCatalog),
+    });
+    await context.generateNarration();
+    context.toggleNarration();
+    audioContext.onError.mock.calls.at(-1)![0]({ errCode: 10001 });
+    expect(context.data.speechPlaying).toBe(false);
+    expect(context.data.speechError).toBe("");
+    context.toggleNarration();
+    expect(assignSource).toHaveBeenCalledTimes(1);
+    expect(audioContext.pause).toHaveBeenCalledTimes(1);
+    expect(audioContext.play).toHaveBeenCalledTimes(2);
+    expect(mocks.generateNarration).toHaveBeenCalledTimes(1);
+  });
+
+  it("sanitizes a thrown native playback failure and retains the saved voice", async () => {
+    audioContext.play.mockImplementation(() => { throw new Error("private native URL and credential"); });
+    const context = createContext({
+      letterId: "letter-1", letter: structuredClone(letter), speechCatalog: structuredClone(speechCatalog),
+    });
+    await context.generateNarration();
+    expect(context.data.speechPlaying).toBe(false);
+    expect(context.data.persistedVoiceKnown).toBe(true);
+    expect(context.data.generatedVoiceId).toBe("Cherry");
+    expect(context.data.speechError).toContain("播放按钮重试");
+    expect(context.data.speechError).not.toContain("private");
+    expect(context.audioErrorCode).toBeNull();
+  });
+
   it("confirms content before enabling the native share panel", async () => {
     const context = createContext({
       letterId: "letter-1",
@@ -458,7 +546,7 @@ describe("letter preview and delivery page", () => {
     expect(mocks.reissueShare).not.toHaveBeenCalled();
   });
 
-  it("stops on hide and stores a hidden narration result without automatically playing it", async () => {
+  it("keeps an empty player idle and stores a hidden narration result without automatically playing it", async () => {
     const pending = deferred<{ filePath: string; contentType: string }>();
     mocks.generateNarration.mockReturnValueOnce(pending.promise);
     const context = createContext({
@@ -467,7 +555,7 @@ describe("letter preview and delivery page", () => {
     context.setupAudio();
     const generation = context.generateNarration();
     context.onHide();
-    expect(audioContext.stop).toHaveBeenCalled();
+    expect(audioContext.stop).not.toHaveBeenCalled();
     pending.resolve({ filePath: "/wx-user-data/warm-letter-narration-hidden.wav", contentType: "audio/wav" });
     await generation;
     expect(context.data.speechLoading).toBe(false);

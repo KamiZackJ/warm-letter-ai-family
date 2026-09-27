@@ -13,7 +13,7 @@ type PreviewAudioContext = {
   stop(): void;
   destroy?(): void;
   onEnded(callback: () => void): void;
-  onError(callback: () => void): void;
+  onError(callback: (error?: { errCode?: unknown }) => void): void;
 };
 
 const emptySpeechCatalog: SpeechCatalog = { available: false, voices: [] };
@@ -36,6 +36,10 @@ Page({
   loadRequestId: 0,
   speechRequestId: 0,
   audioContext: null as PreviewAudioContext | null,
+  audioPlaybackActive: false,
+  audioNeedsRecovery: false,
+  // Numeric native diagnostics stay in page memory; never retain errMsg or paths.
+  audioErrorCode: null as number | null,
   generatedFilePath: "",
   photoLoadId: 0,
   photoDownloads: [] as Array<{ id: string; control: MaterialDownloadControl }>,
@@ -96,7 +100,7 @@ Page({
 
   onHide() {
     this.hidden = true;
-    this.audioContext?.stop();
+    this.stopNarration();
     if (!this.disposed) this.setData({ speechPlaying: false });
   },
 
@@ -109,23 +113,63 @@ Page({
     if (this.disposed) return;
     const audioContext = wx.createInnerAudioContext() as PreviewAudioContext;
     audioContext.onEnded(() => {
-      if (!this.disposed && this.audioContext === audioContext) this.setData({ speechPlaying: false });
-    });
-    audioContext.onError(() => {
       if (!this.disposed && this.audioContext === audioContext) {
-        this.setData({
-          speechPlaying: false,
-          speechError: "朗读暂时无法播放，请重新生成。",
-        });
+        this.audioPlaybackActive = false;
+        this.setData({ speechPlaying: false });
       }
     });
+    audioContext.onError((error) => {
+      // Empty/stopped players can report errors without a playback request.
+      // A retired player must not overwrite the state of its replacement.
+      if (this.disposed || this.audioContext !== audioContext || !this.audioPlaybackActive ||
+        !this.data.speechPath || audioContext.src !== this.data.speechPath) return;
+      this.handlePlaybackFailure(error?.errCode);
+    });
     this.audioContext = audioContext;
+    this.audioNeedsRecovery = false;
   },
 
   teardownAudio() {
-    this.audioContext?.stop();
-    this.audioContext?.destroy?.();
+    const audioContext = this.audioContext;
     this.audioContext = null;
+    this.audioPlaybackActive = false;
+    if (audioContext?.src) audioContext.stop();
+    audioContext?.destroy?.();
+  },
+
+  stopNarration() {
+    this.audioPlaybackActive = false;
+    if (this.audioContext?.src) this.audioContext.stop();
+  },
+
+  handlePlaybackFailure(code?: unknown) {
+    if (this.disposed) return;
+    this.audioPlaybackActive = false;
+    this.audioNeedsRecovery = true;
+    this.audioErrorCode = typeof code === "number" && [-1, 10001, 10002, 10003, 10004].includes(code)
+      ? code : null;
+    this.setData({
+      speechPlaying: false,
+      speechError: "朗读暂时没能播放，音频已保留，请点播放按钮重试。",
+    });
+  },
+
+  playSavedNarration() {
+    if (this.disposed || this.hidden || !this.data.speechPath) return;
+    try {
+      if (!this.audioContext || this.audioNeedsRecovery) this.setupAudio();
+      const audioContext = this.audioContext;
+      if (!audioContext) throw new Error("Audio player unavailable");
+      this.audioPlaybackActive = true;
+      this.audioErrorCode = null;
+      // Set state before native calls so a synchronous onError/onEnded wins.
+      this.setData({ speechPlaying: true, speechError: "" });
+      // Reassigning src on resume restarts the file on real devices.
+      if (audioContext.src !== this.data.speechPath) audioContext.src = this.data.speechPath;
+      if (this.audioPlaybackActive) audioContext.play();
+    } catch {
+      this.handlePlaybackFailure();
+    }
   },
 
   removeGeneratedFile() {
@@ -175,7 +219,7 @@ Page({
         return;
       }
       const materialIds = new Set(letter.materialIds);
-      this.audioContext?.stop();
+      this.stopNarration();
       this.removeGeneratedFile();
       this.setData({
         letter,
@@ -192,6 +236,7 @@ Page({
         voiceChangePending: false,
         speechPath: "",
         speechPlaying: false,
+        speechError: "",
         shareReady: Boolean(letter.shareToken),
         shareToken: letter.shareToken || "",
         shareResetNotice: shareRestored
@@ -321,7 +366,7 @@ Page({
     const selectedVoiceIndex = Number(event.detail.value);
     if (!Number.isInteger(selectedVoiceIndex) || !this.data.speechCatalog.voices[selectedVoiceIndex] ||
       selectedVoiceIndex === this.data.selectedVoiceIndex) return;
-    this.audioContext?.stop();
+    this.stopNarration();
     const voiceChangePending = !this.data.persistedVoiceKnown ||
       this.data.speechCatalog.voices[selectedVoiceIndex]!.id !== this.data.generatedVoiceId;
     this.setData({ selectedVoiceIndex, voiceChangePending, speechError: "", speechPlaying: false });
@@ -351,7 +396,7 @@ Page({
       speechLoading: true, speechError: "", speechPlaying: false,
       persistedVoiceKnown: false, voiceChangePending: true,
     });
-    this.audioContext?.stop();
+    this.stopNarration();
     try {
       const narration = await api.generateNarration(
         this.data.letterId,
@@ -365,15 +410,13 @@ Page({
       }
       this.removeGeneratedFile();
       this.generatedFilePath = narration.filePath;
-      if (!this.audioContext) this.setupAudio();
-      if (!this.audioContext) throw new Error("暂时无法播放，请重试");
-      this.audioContext.src = narration.filePath;
-      if (!this.hidden) this.audioContext.play();
       this.setData({
-        speechPath: narration.filePath, speechPlaying: !this.hidden,
+        speechPath: narration.filePath, speechPlaying: false,
         generatedVoiceId: voice.id, generatedVoiceName: voice.name,
         persistedVoiceKnown: true, voiceChangePending: false,
       });
+      this.setupAudio();
+      this.playSavedNarration();
     } catch (error) {
       if (!this.disposed && requestId === this.speechRequestId) {
         this.setData({ speechError: (error as Error).message || "朗读生成失败，请稍后重试" });
@@ -384,15 +427,14 @@ Page({
   },
 
   toggleNarration() {
-    if (this.operationBusy() || !this.data.speechPath || !this.audioContext) return;
+    if (this.operationBusy() || !this.data.speechPath) return;
     if (this.data.speechPlaying) {
-      this.audioContext.pause();
+      this.audioPlaybackActive = false;
+      this.audioContext?.pause();
       this.setData({ speechPlaying: false });
       return;
     }
-    this.audioContext.src = this.data.speechPath;
-    this.audioContext.play();
-    this.setData({ speechPlaying: true, speechError: "" });
+    this.playSavedNarration();
   },
 
   previewPhoto(event: { currentTarget: { dataset: { path: string } } }) {

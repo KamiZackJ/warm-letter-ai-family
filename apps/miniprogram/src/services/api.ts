@@ -119,6 +119,9 @@ const ACCOUNT_DELETED_KEY = storageKey("account_deleted");
 // Publication checks have a 60-second server budget. Allow the result to arrive
 // before the native request deadline aborts and discards any later callbacks.
 const SHARE_CHECK_REQUEST_TIMEOUT_MS = 65_000;
+// Completion may normalize audio, stage the review copy and submit its check.
+// Allow that bounded server work to finish without extending ordinary requests.
+const MATERIAL_COMPLETION_REQUEST_TIMEOUT_MS = 65_000;
 const deletedLetterIds = new Set<string>();
 
 function readRecord<T>(key: string): Record<string, T> {
@@ -489,6 +492,7 @@ export const realApi = {
       const completed = await authorized(() =>
         request<{ material: ServerMaterial }>("/materials/complete", {
           method: "POST",
+          timeoutMs: MATERIAL_COMPLETION_REQUEST_TIMEOUT_MS,
           data: { materialId: presigned.materialId },
         }),
       );
