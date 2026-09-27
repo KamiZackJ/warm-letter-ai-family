@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, copyFileSync, existsSync, renameSync, rmSync, readdirSync, lstatSync, openSync, fsyncSync, closeSync } from 'node:fs';
+import { copySafetyJournalSnapshot, restoreSafetyJournalSnapshot } from './safety-journal-backup.mjs';
 
 const { values } = parseArgs({ options: {
   database: { type: 'string' }, uploads: { type: 'string' }, destination: { type: 'string' },
@@ -87,11 +88,18 @@ try {
     if (metadata.sizeBytes !== content.length) throw new Error('Object size mismatch');
     manifest.objects.push({ objectKey, sizeBytes: content.length, sha256: createHash('sha256').update(content).digest('hex') });
   }
-  // Rehearse a restore into a separate DB file, never overwrite live data.
+  // Include cleanup obligations even after their user/material rows were deleted.
+  // Only this fixed hidden directory is added; unrelated upload files stay excluded.
+  manifest.safetyStaging = copySafetyJournalSnapshot(uploadRoot, outputUploads);
+  // Rehearse a restore into a separate DB and journal, never overwrite live data.
   const rehearsal = join(staging, 'restore-rehearsal.sqlite');
   copyFileSync(outputDatabase, rehearsal);
   verifyDatabase(rehearsal).close();
   rmSync(rehearsal);
+  const journalRehearsal = join(staging, 'restore-rehearsal-uploads');
+  mkdirSync(journalRehearsal, { mode: 0o700 });
+  restoreSafetyJournalSnapshot(outputUploads, journalRehearsal, manifest.safetyStaging);
+  rmSync(journalRehearsal, { recursive: true });
   manifest.databaseSha256 = createHash('sha256').update(readFileSync(outputDatabase)).digest('hex');
   writeFileSync(join(staging, 'manifest.json'), JSON.stringify(manifest, null, 2), { mode: 0o600, flag: 'wx', flush: true });
   const dateName = manifest.createdAt.replaceAll(':', '-').replaceAll('.', '-');
@@ -112,7 +120,8 @@ try {
       removed += 1;
     }
   }
-  console.log(JSON.stringify({ status: 'backed-up-and-restored-in-rehearsal', backup: basename(destination), counts: manifest.counts, objectCount: manifest.objects.length, removed }));
+  console.log(JSON.stringify({ status: 'backed-up-and-restored-in-rehearsal', backup: basename(destination), counts: manifest.counts,
+    objectCount: manifest.objects.length, safetyLeaseCount: manifest.safetyStaging.files.filter(file => file.name !== 'context.json').length, removed }));
 } catch (error) {
   // A concurrent object deletion may make this attempt fail. This is safe: the
   // incomplete directory is discarded; previous completed backups stay intact.

@@ -399,6 +399,31 @@ describe("API runtime configuration", () => {
       ),
     ).toThrow("DATABASE_PATH");
   });
+
+  it("keeps OSS staging opt-in, validates the exact production scope and omits credentials from summaries", () => {
+    const valid = competitionEnvironment({
+      DEPLOYMENT_MODE: "production", AUTH_PROVIDER: "wechat",
+      DATABASE_PATH: resolve("durable-api-test.sqlite"), UPLOAD_DIR: resolve("durable-uploads"),
+      PRODUCTION_SINGLE_INSTANCE: "true", WECHAT_MESSAGE_TOKEN: "testMessageToken",
+      WECHAT_ENCODING_AES_KEY: Buffer.alloc(32, 8).toString("base64").slice(0, -1),
+      WECHAT_OSS_BUCKET: "warm-safety-test", WECHAT_OSS_REGION: "oss-cn-beijing",
+      WECHAT_OSS_ACCESS_KEY_ID: "synthetic-oss-id", WECHAT_OSS_ACCESS_KEY_SECRET: "synthetic-oss-secret",
+    });
+    expect(loadApiRuntimeConfig(valid).wechatOss).toBeUndefined();
+    const enabled = { ...valid, WECHAT_MEDIA_STORAGE: "oss" };
+    const config = loadApiRuntimeConfig(enabled);
+    expect(config.wechatOss).toEqual({ bucket: "warm-safety-test", region: "oss-cn-beijing" });
+    expect(JSON.stringify(config)).not.toMatch(/synthetic-oss-id|synthetic-oss-secret/);
+    for (const [override, message] of [
+      [{ WECHAT_OSS_BUCKET: "a/other" }, "WECHAT_OSS_BUCKET"],
+      [{ WECHAT_OSS_REGION: "oss-cn-hongkong" }, "WECHAT_OSS_REGION"],
+      [{ WECHAT_OSS_ACCESS_KEY_ID: " " }, "WECHAT_OSS_ACCESS_KEY_ID"],
+      [{ WECHAT_OSS_ACCESS_KEY_SECRET: undefined }, "WECHAT_OSS_ACCESS_KEY_SECRET"],
+      [{ WECHAT_MEDIA_BASE_URL: "https://media.example.test" }, "cannot be combined"],
+      [{ WECHAT_MEDIA_STORAGE: "public" }, "WECHAT_MEDIA_STORAGE"],
+    ] as const) expect(() => loadApiRuntimeConfig({ ...enabled, ...override })).toThrow(message);
+    expect(() => loadApiRuntimeConfig({ ...demoEnvironment, WECHAT_MEDIA_STORAGE: "oss" })).toThrow("production mode");
+  });
 });
 
 describe("API deployment disclosure", () => {

@@ -18,6 +18,7 @@ export interface ApiRuntimeConfig {
   corsOrigins: string[];
   publicBaseUrl: string;
   wechatMediaBaseUrl?: string;
+  wechatOss?: { bucket: string; region: "oss-cn-beijing" };
   uploadDirectory: string;
   databasePath?: string;
   maxMediaUploadBytes?: number;
@@ -455,6 +456,20 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
     : undefined;
   const corsOrigins = corsOriginsFromEnv(env, deploymentMode);
   const uploadDirectory = resolve(requiredEnv(env, "UPLOAD_DIR"));
+  const wechatMediaStorage = enumValueFromEnv(env, "WECHAT_MEDIA_STORAGE", ["api", "oss"] as const, "api");
+  let wechatOss: ApiRuntimeConfig["wechatOss"];
+  if (wechatMediaStorage === "oss") {
+    if (!production) throw new Error("OSS safety staging requires production mode");
+    const bucket = requiredEnv(env, "WECHAT_OSS_BUCKET");
+    if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error("WECHAT_OSS_BUCKET must be a valid bucket name");
+    const region = requiredEnv(env, "WECHAT_OSS_REGION");
+    if (region !== "oss-cn-beijing") throw new Error("WECHAT_OSS_REGION must be the verified oss-cn-beijing region");
+    // Validate presence only. Secrets must not enter the runtime summary or logs.
+    requiredEnv(env, "WECHAT_OSS_ACCESS_KEY_ID");
+    requiredEnv(env, "WECHAT_OSS_ACCESS_KEY_SECRET");
+    if (wechatMediaBaseUrl) throw new Error("WECHAT_MEDIA_BASE_URL cannot be combined with OSS safety staging");
+    wechatOss = {bucket, region};
+  }
   const mediaSigningKeys = mediaSigningKeysFromEnv(env, deploymentMode);
   const shareTokenTtlMs =
     integerFromEnv(env, "SHARE_TOKEN_TTL_SECONDS", 30 * 24 * 60 * 60, 300) * 1000;
@@ -473,6 +488,7 @@ export function loadApiRuntimeConfig(env: NodeJS.ProcessEnv): ApiRuntimeConfig {
     corsOrigins,
     publicBaseUrl,
     wechatMediaBaseUrl,
+    wechatOss,
     uploadDirectory,
     databasePath: databasePath ? resolve(databasePath) : undefined,
     maxMediaUploadBytes: production ? Math.min(optionalIntegerFromEnv(env, "MAX_MEDIA_UPLOAD_BYTES") ?? 10 * 1024 * 1024, 10 * 1024 * 1024) : optionalIntegerFromEnv(env, "MAX_MEDIA_UPLOAD_BYTES"),

@@ -8,7 +8,7 @@ import type { Material } from "../src/domain.js";
 
 afterEach(() => vi.useRealTimers());
 
-function setup(normalizeMaterial?: (material: Material) => Promise<Material>) {
+function setup(normalizeMaterial?: (material: Material) => Promise<Material>, prepareMediaUrl?: (material: Material) => Promise<string>) {
   let now = new Date("2026-09-23T00:00:00.000Z");
   const repository = new MemoryRepository();
   const service = new WarmLetterService(repository, new FakeAIProvider());
@@ -16,11 +16,41 @@ function setup(normalizeMaterial?: (material: Material) => Promise<Material>) {
   const material = repository.saveMaterial({ id: "material", userId: "user", type: "photo", name: "photo.jpg", status: "READY", contentType: "image/jpeg", objectKey: "user/photo.jpg", createdAt: now.toISOString() });
   const submitMedia = vi.fn<MediaSafetyProvider["submitMedia"]>().mockResolvedValue({ decision: "pending", traceId: "trace-1" });
   const provider: ContentSafetyProvider & MediaSafetyProvider = { name: "test", submitMedia, checkText: async () => ({ decision: "allow", traceId: "text-1" }) };
-  const safety = new ProductionSafety({ repository, service, provider, normalizeMaterial, publicBaseUrl: "https://api.example", signingKeys: [Buffer.alloc(32, 1)], now: () => now });
+  const safety = new ProductionSafety({ repository, service, provider, normalizeMaterial, prepareMediaUrl, publicBaseUrl: "https://api.example", signingKeys: [Buffer.alloc(32, 1)], now: () => now });
   return { repository, service, material, submitMedia, safety, advance: (milliseconds: number) => { now = new Date(now.getTime() + milliseconds); } };
 }
 
 describe("durable media safety state transitions", () => {
+  it("submits the prepared private copy while still requiring the authentic final receipt", async () => {
+    const prepare = vi.fn(async () => "https://private.example.test/short-lived");
+    const { safety, material, repository, service, submitMedia } = setup(undefined, prepare);
+    const letter = service.createLetter(material.userId, { recipient: "妈妈", materialIds: [material.id] });
+    await safety.submitMaterial(material);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(submitMedia).toHaveBeenCalledWith(expect.objectContaining({ mediaUrl: "https://private.example.test/short-lived" }));
+    expect(repository.getLatestMediaSafetyCheck(material.id)?.status).toBe("pending");
+    expect(() => safety.assertMediaPassed(letter)).toThrow(expect.objectContaining({ code: "CONTENT_SAFETY_PENDING" }));
+    safety.acceptCallback({ traceId: "trace-1", decision: "allow" });
+    expect(() => safety.assertMediaPassed(letter)).not.toThrow();
+  });
+
+  it("does not submit or approve when preparing the private copy fails", async () => {
+    const { safety, material, repository, submitMedia } = setup(undefined, async () => { throw new Error("preparation unavailable"); });
+    await expect(safety.submitMaterial(material)).rejects.toThrow("preparation unavailable");
+    expect(submitMedia).not.toHaveBeenCalled();
+    expect(repository.getLatestMediaSafetyCheck(material.id)).toBeUndefined();
+  });
+
+  it.each(["deleted", "replaced"])("does not submit a source %s while its private copy is being prepared", async (change) => {
+    let finish!: (url: string) => void;
+    const { safety, material, repository, submitMedia } = setup(undefined, () => new Promise<string>((resolve) => { finish = resolve; }));
+    const checking = safety.submitMaterial(material);
+    repository.saveMaterial({ ...material, ...(change === "deleted" ? { status: "DELETED" as const } : { objectKey: "user/new.jpg" }) });
+    finish("https://private.example.test/short-lived");
+    await checking;
+    expect(submitMedia).not.toHaveBeenCalled();
+    expect(repository.getLatestMediaSafetyCheck(material.id)).toBeUndefined();
+  });
   it("keeps a received trace pending until the signed result is applied", async () => {
     const { safety, material, repository } = setup();
     await safety.submitMaterial(material);
@@ -177,6 +207,22 @@ describe("publication uses one content snapshot and one total deadline", () => {
         closing: "保重。", signature: "我", provider: "test", generatedAt: createdAt },
     });
   }
+
+  it("does not start a new media submission after late private-copy preparation", async () => {
+    vi.useFakeTimers();
+    let finish!: (url: string) => void;
+    const { safety, material, repository, submitMedia } = setup(undefined, () => new Promise<string>((resolve) => { finish = resolve; }));
+    const letter = readyLetter(repository, material);
+    const result = safety.requirePublishable(material.userId, letter.id).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await result).toMatchObject({ code: "CONTENT_SAFETY_TIMEOUT" });
+    finish("https://private.example.test/short-lived");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(submitMedia).not.toHaveBeenCalled();
+    expect(repository.getLatestMediaSafetyCheck(material.id)).toBeUndefined();
+    expect(repository.listShareAccess(letter.id)).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
   it("rejects the changed letter when another request switches materials during normalization", async () => {
     let finish!: (material: Material) => void;

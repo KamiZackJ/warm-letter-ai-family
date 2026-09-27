@@ -33,6 +33,7 @@ import {
 import { MemoryRepository, type Repository } from "./repository.js";
 import type { ContentSafetyProvider, MediaSafetyProvider } from "./content-safety.js";
 import { ProductionSafety } from "./production-safety.js";
+import type { SafetyMediaStaging } from "./safety-media-staging.js";
 import { normalizeSafetyMaterial } from "./safety-materials.js";
 import { WechatModerationCallbackVerifier } from "./wechat-moderation-callback.js";
 import {
@@ -104,6 +105,7 @@ export interface BuildAppOptions {
   wechatAuthProvider?: WechatAuthProvider;
   repository?: Repository;
   contentSafetyProvider?: ContentSafetyProvider & MediaSafetyProvider;
+  safetyMediaStaging?: Pick<SafetyMediaStaging, "prepare" | "sweep" | "close">;
   moderationCallback?: WechatModerationCallbackVerifier;
   durableStorage?: boolean;
   mediaTemporaryDirectory?: string;
@@ -293,17 +295,26 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     repository: service.repository, service, provider: options.contentSafetyProvider,
     publicBaseUrl: wechatMediaBaseUrl, signingKeys: options.mediaSigningKeys ?? [], now: options.now,
     normalizeMaterial: (material) => normalizeSafetyMaterial(service.repository, objectStorage, material, safetyMaterialOptions),
+    prepareMediaUrl: options.safetyMediaStaging ? (material) => options.safetyMediaStaging!.prepare(material) : undefined,
   }) : undefined;
+  if (options.safetyMediaStaging && !safety) throw new Error("Safety staging requires content moderation");
 
   async function cleanupObjects(): Promise<void> {
     for (const key of service.repository.listObjectDeletions()) {
       try { await objectStorage.delete(key); service.repository.completeObjectDeletion(key); }
       catch { app.log.warn("Object deletion pending; cleanup will retry"); }
     }
+    try { await options.safetyMediaStaging?.sweep(); }
+    catch { app.log.warn("Safety copy deletion pending; cleanup will retry"); }
   }
   const cleanupTimer = setInterval(() => { void cleanupObjects(); }, 30_000);
   cleanupTimer.unref();
-  app.addHook("onClose", async () => { clearInterval(cleanupTimer); await cleanupObjects(); });
+  app.addHook("onReady", async () => { await cleanupObjects(); });
+  app.addHook("onClose", async () => {
+    clearInterval(cleanupTimer);
+    await cleanupObjects();
+    options.safetyMediaStaging?.close();
+  });
   const generationRateLimiter = new GenerationRateLimiter(
     options.generationRateLimits,
     () => (options.now?.() ?? new Date()).getTime(),
@@ -421,7 +432,12 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     app.get("/v1/wechat/messages", async (request, reply) => reply.type("text/plain").send(verifier.verifyHandshake(request.query as Record<string, string>)));
     app.post("/v1/wechat/messages", {bodyLimit: 128 * 1024}, async (request, reply) => {
       const result = verifier.decodeMediaCheckCallback(request.query as Record<string, string>, request.body as string | Record<string, unknown>);
-      if (result) safety.acceptCallback(result);
+      if (result) {
+        safety.acceptCallback(result);
+        // Acknowledgement must not wait for remote storage. Failed deletion
+        // stays journaled and is retried by the regular cleanup sweep.
+        void cleanupObjects().catch(() => app.log.warn("Safety cleanup pending; cleanup will retry"));
+      }
       return reply.type("text/plain").send("success");
     });
     app.get("/v1/safety/media/:id", async (request, reply) => {

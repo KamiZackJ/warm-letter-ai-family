@@ -20,11 +20,13 @@
   "dependencies": {
     "@fastify/cors": "^11.3.0",
     "@warm-letter/contracts": "workspace:*",
+    "ali-oss": "^6.23.0",
     "fastify": "^5.6.1",
     "openai": "^7.4.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/ali-oss": "^6.23.3",
     "@types/node": "^22.0.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

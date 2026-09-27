@@ -1,6 +1,6 @@
 <view class="page privacy-page">
   <text class="page-title">你的近况，由你做主</text>
-  <text class="page-subtitle">更新日期：2026 年 9 月 23 日</text>
+  <text class="page-subtitle">更新日期：2026 年 9 月 27 日</text>
   <view class="policy-section">
     <text class="section-title">我们使用哪些信息</text>
     <text>你主动选择的照片、截图、录音、文字，以及你填写的收件人称呼，用于整理家书。微信登录标识用于找回属于你的素材和家书、保护数据与回复安全。我们不读取微信好友名单，也不会自动读取相册或聊天记录。</text>
@@ -8,6 +8,7 @@
   <view class="policy-section">
     <text class="section-title">内容怎样处理</text>
     <text>素材上传到暖笺服务器；照片、录音与文字按你的操作交由阿里云百炼处理，用于理解内容、整理家书或生成 AI 朗读。微信提供登录、隐私授权与内容安全检测服务。当前服务器位于中国香港，上传内容将传输至该服务器；请勿上传身份证、密码等敏感信息，上传他人信息前请取得同意。</text>
+    <text>为完成图片和录音的安全检查，必要的素材副本可能临时保存在中国北京的阿里云 OSS，仅通过短期私密链接交给微信检测，不作为公开素材或家书分享入口。</text>
   </view>
   <view class="policy-section">
     <text class="section-title">谁能看到家书</text>
@@ -16,6 +17,7 @@
   <view class="policy-section">
     <text class="section-title">保存与删除</text>
     <text>你的家书和素材保留至你主动删除相应内容或注销账号。可在素材页删除素材，在首页“隐私与数据管理”删除家书或注销账号。删除家书会撤销其分享；注销账号会清除家书、素材、本人回复和登录数据。本机生成的朗读文件也会清理。你的原始相册照片不受影响。删除后无法恢复，受限恢复备份最多保留 7 天后轮换清除。</text>
+    <text>审核临时副本在检测结束、过期或原素材删除后清理；失败会持续重试，并由云存储过期规则兜底。若云端删除暂时失败，已签发的审核链接可能在剩余有效期内仍可访问，最长为签发后 45 分钟；这不影响家书分享入口的撤销。</text>
   </view>
   <view class="policy-section">
     <text class="section-title">AI 需要你的核对</text>

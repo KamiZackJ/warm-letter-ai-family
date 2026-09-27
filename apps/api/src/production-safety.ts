@@ -18,6 +18,7 @@ export class ProductionSafety {
     publicBaseUrl: string;
     signingKeys: readonly Uint8Array[];
     normalizeMaterial?: (material: Material) => Promise<Material>;
+    prepareMediaUrl?: (material: Material) => Promise<string>;
     now?: () => Date;
   }) {}
 
@@ -52,16 +53,17 @@ export class ProductionSafety {
     return new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "素材安全检查暂时不可用，请稍后重试");
   }
 
-  async submitMaterial(material: Material): Promise<void> {
+  async submitMaterial(material: Material, assertActive: () => void = () => {}): Promise<void> {
+    assertActive();
     if (material.type === "text") return;
     const active = this.submissions.get(material.id);
     if (active) return active;
-    const submission = this.performSubmission(material).finally(() => this.submissions.delete(material.id));
+    const submission = this.performSubmission(material, assertActive).finally(() => this.submissions.delete(material.id));
     this.submissions.set(material.id, submission);
     return submission;
   }
 
-  private async performSubmission(material: Material): Promise<void> {
+  private async performSubmission(material: Material, assertActive: () => void): Promise<void> {
     const repository = this.options.repository;
     const previous = repository.getLatestMediaSafetyCheck(material.id);
     const nowMs = this.now().getTime();
@@ -78,8 +80,20 @@ export class ProductionSafety {
     for (const [id, until] of this.submissionRetryAfter) if (until <= nowMs) this.submissionRetryAfter.delete(id);
     if (this.submissionRetryAfter.size >= 10_000) throw new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "素材安全检查繁忙，请稍后重试");
     this.submissionRetryAfter.set(material.id, nowMs + 60_000);
+    const mediaUrl = this.options.prepareMediaUrl
+      ? await this.options.prepareMediaUrl(current)
+      : this.mediaUrl(current);
+    // Preparation can finish after the enclosing publication request expired.
+    // Keep the private copy tracked for cleanup, but never start a late submission.
+    assertActive();
+    const prepared = repository.getMaterial(material.id);
+    if (!prepared || prepared.status !== "READY" || prepared.objectKey !== current.objectKey ||
+      prepared.contentType !== current.contentType || prepared.userId !== user.id || !repository.getUser(user.id)) {
+      this.submissionRetryAfter.delete(material.id);
+      return;
+    }
     const result = await this.options.provider.submitMedia({
-      mediaUrl: this.mediaUrl(current), mediaType: material.type === "audio" ? "audio" : "image", openId: user.openId, scene: 4,
+      mediaUrl, mediaType: material.type === "audio" ? "audio" : "image", openId: user.openId, scene: 4,
     });
     if (result.decision !== "pending") {
       if (result.reason === "login-required") throw new ApiError(401, "WECHAT_LOGIN_REQUIRED", "请重新打开小程序并登录后重试");
@@ -141,7 +155,7 @@ export class ProductionSafety {
         }
         materials.push(material);
         const readyMaterial = material;
-        await deadline.wait(() => this.submitMaterial(readyMaterial));
+        await deadline.wait(() => this.submitMaterial(readyMaterial, () => deadline.check()));
       }
       this.assertMediaPassed(snapshot);
       await deadline.wait(() => service.checkText(userId, [snapshot.recipient, draft.title, draft.greeting,

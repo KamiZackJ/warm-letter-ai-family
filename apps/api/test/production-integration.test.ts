@@ -113,6 +113,35 @@ describe("production persistence, deletion and content safety integration", () =
     return result;
   }
 
+  it("uses a private staging copy, acknowledges authenticated callbacks despite cleanup failures and never auto-publishes", async () => {
+    await app.close();
+    const staging = {
+      prepare: vi.fn(async () => "https://private-storage.example.test/temporary-review"),
+      sweep: vi.fn(async () => {}), close: vi.fn(),
+    };
+    app = construct({ safetyMediaStaging: staging });
+    const owner = await login(app, "owner-staging");
+    expect(staging.sweep).toHaveBeenCalled();
+    const { letter, material } = await mediaFixture(owner);
+    const first = await app.inject({ method: "POST", url: `/v1/letters/${letter.id}/confirm`, headers: auth(owner), payload: {} });
+    expect(first.statusCode).toBe(409);
+    expect(json(first)).toMatchObject({ error: { code: "CONTENT_SAFETY_PENDING" } });
+    expect(staging.prepare).toHaveBeenCalledOnce();
+    expect(submitMedia).toHaveBeenCalledWith(expect.objectContaining({ mediaUrl: "https://private-storage.example.test/temporary-review" }));
+    expect(repository.listShareAccess(letter.id)).toEqual([]);
+    staging.sweep.mockRejectedValue(new Error("synthetic storage failure"));
+    const callback = await app.inject({ method: "POST", ...callbackEnvelope("media-trace", "pass") });
+    expect(callback.statusCode).toBe(200);
+    expect(callback.body).toBe("success");
+    expect(repository.getLatestMediaSafetyCheck(material.id)?.status).toBe("pass");
+    expect(repository.getLetter(letter.id)?.state).toBe("EDITING");
+    const published = await publish(owner, letter.id);
+    expect((await app.inject({ method: "GET", url: published.readerUrl })).statusCode).toBe(200);
+    staging.sweep.mockResolvedValue();
+    await app.close();
+    expect(staging.close).toHaveBeenCalledOnce();
+  });
+
   it("retains owner login and shared letters across SQLite restart, while rejecting forged dev tokens", async () => {
     const owner = await login(app, "owner");
     const { user, letter } = fixture(owner);
