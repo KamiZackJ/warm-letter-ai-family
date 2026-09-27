@@ -27,8 +27,14 @@
   gap: 8rpx;
 }
 
-.font-button {
+/* Override the style-v2 button width without changing buttons on other pages. */
+.reader-page button.font-button {
   width: 112rpx;
+  min-width: 0;
+  margin: 0;
+}
+
+.font-button {
   height: 88rpx;
   padding: 0;
   border: 2rpx solid #d0cdc5;
@@ -193,14 +199,14 @@
   border-top: 2rpx solid #e3dfd6;
 }
 
-.paragraph-source-toggle,
+.reader-page button.paragraph-source-toggle,
 .paragraph-source-empty {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 14rpx;
+  display: block;
   width: 100%;
+  min-width: 0;
+  max-width: none;
   min-height: 88rpx;
+  margin: 0;
   padding: 12rpx 0;
   border: 0;
   border-radius: 0;
@@ -210,17 +216,27 @@
 }
 
 .paragraph-source-empty {
-  grid-template-columns: auto minmax(0, 1fr);
   min-height: 68rpx;
 }
 
+.paragraph-source-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8rpx 20rpx;
+}
+
 .paragraph-source-kicker {
+  display: block;
   color: #245a4b;
   font-size: 22rpx;
   font-weight: 700;
 }
 
 .paragraph-source-summary {
+  display: block;
+  margin-top: 8rpx;
   min-width: 0;
   color: #606863;
   font-size: 24rpx;
@@ -228,7 +244,8 @@
 }
 
 .paragraph-source-action {
-  width: 180rpx;
+  flex: none;
+  margin-left: auto;
   color: #245a4b;
   font-size: 23rpx;
   font-weight: 650;
@@ -337,7 +354,7 @@
   vertical-align: top;
 }
 
-.image-preview,
+.reader-page button.image-preview,
 .letter-image,
 .image-placeholder {
   width: 248rpx;
@@ -348,6 +365,7 @@
 .image-preview {
   position: relative;
   overflow: hidden;
+  margin: 0;
   padding: 0;
   background: #e7e2d7;
 }
@@ -389,8 +407,10 @@
   white-space: normal;
 }
 
-.image-retry-button {
+.reader-page button.image-retry-button {
   width: 190rpx;
+  max-width: 100%;
+  margin: 0;
   height: 88rpx;
   padding: 0 12rpx;
   border: 2rpx solid #245a4b;
@@ -418,12 +438,17 @@
   border-top: 2rpx solid #d5d1c8;
 }
 
+.reader-page button.voice-row {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
 .voice-row {
   display: grid;
   grid-template-columns: 84rpx minmax(0, 1fr);
   align-items: center;
   gap: 20rpx;
-  width: 100%;
   min-height: 120rpx;
   padding: 16rpx 20rpx;
   border: 2rpx solid #9bbcaf;
@@ -534,9 +559,11 @@
   line-height: 1.5;
 }
 
-.media-retry-button,
-.reply-retry-button {
+.reader-page button.media-retry-button,
+.reader-page button.reply-retry-button {
+  width: auto;
   min-width: 180rpx;
+  margin: 0;
   height: 88rpx;
   padding: 0 18rpx;
   border: 2rpx solid #7d302b;
@@ -614,7 +641,7 @@
   text-align: right;
 }
 
-.reply-button {
+.reader-page button.reply-button {
   width: 100%;
   margin-top: 16rpx;
 }
