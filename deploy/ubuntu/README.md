@@ -2,7 +2,13 @@
 
 本目录用于阿里云中国香港轻量服务器（Ubuntu 24.04），不包含凭据。当前分支为 `codex/warm-letter-mvp`，运行时为 Node.js `22.23.2`、pnpm `11.19.0`、单 API 进程、systemd 和 Caddy。
 
-## 当前状态（2026-09-23）
+## 最新部署（2026-09-27）
+
+正式 API 已运行 `557d5fc` 完整 Linux 运行包，保留原 SQLite、uploads 和私密环境配置；生产健康检查、原记录核对及静态服务校验通过。新增的北京 OSS 审核暂存代码仍未启用，等待专用受限凭据配置与真实媒体验收。用户已批准生产接入及按量费用；不能把后端部署成功称为微信媒体分享已修复。持续状态见[分享修复记录](../../docs/SHARE_REPAIR_2026-09-27.md)。
+
+已有 systemd 安装增加 [40-oss-network-introspection.conf](./40-oss-network-introspection.conf)，仅允许 Node/OSS SDK 查询本机网卡所需的 `AF_NETLINK`，保留空 capabilities 及其他沙箱设置。完整运行包部署与回退必须同时处理代码和依赖，参见 [OSS 部署要求](../../docs/OSS_SAFETY_STAGING.md#新增运行时依赖的部署要求)；不要沿现有运行目录符号链接直接覆盖 `dist`。
+
+## 历史状态（2026-09-23）
 
 - 公网 API：`https://api.warmjiashu.xyz`；后端运行 `4cf6a6f`，包含 `09ab236` 微信回调诊断修复，模式为 `production + SQLite`。最新 API 全量 361 项测试通过。
 - 微信真实登录、Qwen 文字/图片理解、语音转写、家书整理和可选朗读已接入。内容安全使用微信真实文本检查与图片/录音异步审核，回调由正式 API 接收。

@@ -19,7 +19,8 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ReadWritePaths=/var/lib/warm-letter
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Node's networkInterfaces() (used by ali-oss) requires local netlink queries.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 CapabilityBoundingSet=
 AmbientCapabilities=
 LockPersonality=true
