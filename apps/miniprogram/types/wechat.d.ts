@@ -16,3 +16,8 @@ declare function App<T extends WechatRecord>(
 ): void;
 
 declare const wx: any;
+
+declare function getCurrentPages(): Array<{
+  route?: string;
+  data?: Record<string, unknown>;
+}>;

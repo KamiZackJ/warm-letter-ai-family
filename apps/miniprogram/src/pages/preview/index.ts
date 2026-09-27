@@ -55,6 +55,7 @@ Page({
     regenerating: false,
     confirming: false,
     confirmError: "",
+    safetyCheckPending: false,
     shareReady: false,
     shareToken: "",
     shareResetNotice: "",
@@ -467,6 +468,7 @@ Page({
       if (this.disposed) return;
       this.setData({
         letter: published,
+        safetyCheckPending: false,
         shareReady: true,
         shareToken: published.shareToken,
       });
@@ -475,7 +477,10 @@ Page({
     } catch (error) {
       if (!this.disposed) {
         const message = (error as Error).message || "确认失败，请重试";
-        this.setData({ confirmError: message });
+        this.setData({
+          confirmError: message,
+          safetyCheckPending: (error as { code?: string } | null)?.code === "CONTENT_SAFETY_PENDING",
+        });
         wx.showToast({ title: "尚未寄出，请查看提示", icon: "none" });
       }
     } finally {

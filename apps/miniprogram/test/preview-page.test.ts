@@ -199,16 +199,27 @@ beforeEach(() => {
 describe("letter preview and delivery page", () => {
   it("keeps pending safety checks visible without enabling sharing and allows a later retry", async () => {
     const message = "图片或录音仍在安全检查中，家书尚未寄出。草稿已保存，请稍后回来确认。";
-    mocks.confirmLetter.mockRejectedValueOnce(new Error(message));
+    mocks.confirmLetter.mockRejectedValueOnce(Object.assign(new Error(message), { code: "CONTENT_SAFETY_PENDING" }));
     const page = createContext({ letterId: "letter-1", letter: structuredClone(letter) });
     await page.confirmForShare();
     expect(page.data.confirming).toBe(false);
     expect(page.data.shareReady).toBe(false);
     expect(page.data.confirmError).toBe(message);
+    expect(page.data.safetyCheckPending).toBe(true);
     expect(mocks.showShareMenu).not.toHaveBeenCalled();
     await page.confirmForShare();
     expect(page.data.confirmError).toBe("");
+    expect(page.data.safetyCheckPending).toBe(false);
     expect(page.data.shareReady).toBe(true);
+  });
+  it("keeps a failed recheck distinct from pending moderation without enabling sharing", async () => {
+    mocks.confirmLetter.mockRejectedValueOnce(Object.assign(new Error("检查未成功"), { code: "CONTENT_SAFETY_DOWNLOAD_FAILED" }));
+    const page = createContext({ letterId: "letter-1", letter: structuredClone(letter), safetyCheckPending: true });
+    await page.confirmForShare();
+    expect(page.data.safetyCheckPending).toBe(false);
+    expect(page.data.confirmError).toBe("检查未成功");
+    expect(page.data.shareReady).toBe(false);
+    expect(mocks.showShareMenu).not.toHaveBeenCalled();
   });
   it("exposes preview, rewrite, narration, and native WeChat friend sharing controls", () => {
     const template = fileSystem.readFileSync(

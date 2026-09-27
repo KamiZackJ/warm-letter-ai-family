@@ -32,7 +32,7 @@ export class HttpRequestError extends Error {
 export function userFacingApiError(code: string | undefined, fallback?: string): string {
   switch (code) {
     case "CONTENT_SAFETY_PENDING":
-      return "图片或录音的安全检查尚未完成，家书尚未寄出。草稿已保存，请稍后回来确认。";
+      return "上次检查时，图片或录音尚未完成安全检查，家书尚未寄出。草稿已保存，请稍后重试，查看最新结果。";
     case "CONTENT_SAFETY_DOWNLOAD_FAILED":
       return "图片或录音的安全检查暂未成功，家书尚未寄出。草稿和素材已保留，请稍后重试。";
     case "CONTENT_SAFETY_REJECTED":
