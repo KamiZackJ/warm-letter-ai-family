@@ -5,6 +5,7 @@ import { WarmLetterService } from "../src/service.js";
 import { FakeAIProvider } from "../src/ai.js";
 import type { ContentSafetyProvider, MediaSafetyProvider } from "../src/content-safety.js";
 import type { Material } from "../src/domain.js";
+import { ApiError } from "../src/errors.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -91,6 +92,58 @@ describe("durable media safety state transitions", () => {
     safety.acceptCallback({ traceId: "trace-1", decision: "unavailable", reason: "provider", wechatErrorCode });
     await expect(safety.submitMaterial(material)).rejects.toMatchObject({ statusCode: 503, code });
     expect(() => safety.assertMediaPassed(letter)).toThrow(expect.objectContaining({ statusCode: 503, code }));
+  });
+
+  it("retains the new private-copy failure during cooldown without reusing an old download diagnostic", async () => {
+    const prepare = vi.fn(async () => "https://private.example.test/short-lived");
+    const { safety, material, repository, service, submitMedia, advance } = setup(undefined, prepare);
+    const letter = service.createLetter(material.userId, { recipient: "妈妈", materialIds: [material.id] });
+    await safety.submitMaterial(material);
+    safety.acceptCallback({ traceId: "trace-1", decision: "unavailable", reason: "provider", wechatErrorCode: -1008 });
+    advance(60_000);
+    prepare.mockRejectedValueOnce(new ApiError(503, "CONTENT_SAFETY_UNAVAILABLE", "private signed URL must not be cached"));
+    await expect(safety.submitMaterial(material)).rejects.toMatchObject({ code: "CONTENT_SAFETY_UNAVAILABLE" });
+    await expect(safety.submitMaterial(material)).rejects.toMatchObject({
+      statusCode: 503, code: "CONTENT_SAFETY_UNAVAILABLE", message: "素材安全检查暂时不可用，请稍后重试",
+    });
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(submitMedia).toHaveBeenCalledOnce();
+    expect(repository.getLatestMediaSafetyCheck(material.id)).toMatchObject({
+      traceId: "trace-1", status: "failed", diagnostic: { wechatErrorCode: -1008 },
+    });
+    expect(() => safety.assertMediaPassed(letter)).toThrow();
+    expect(repository.listShareAccess(letter.id)).toEqual([]);
+    advance(60_000);
+    submitMedia.mockResolvedValueOnce({ decision: "pending", traceId: "trace-2" });
+    await safety.submitMaterial(material);
+    expect(repository.getLatestMediaSafetyCheck(material.id)).toMatchObject({ traceId: "trace-2", status: "pending" });
+    expect(() => safety.assertMediaPassed(letter)).toThrow(expect.objectContaining({ code: "CONTENT_SAFETY_PENDING" }));
+    safety.acceptCallback({ traceId: "trace-2", decision: "allow" });
+    expect(() => safety.assertMediaPassed(letter)).not.toThrow();
+  });
+
+  it("preserves a new login-required failure instead of an old failed download", async () => {
+    const { safety, material, submitMedia, advance } = setup();
+    await safety.submitMaterial(material);
+    safety.acceptCallback({ traceId: "trace-1", decision: "unavailable", reason: "provider", wechatErrorCode: -1008 });
+    advance(60_000);
+    submitMedia.mockResolvedValueOnce({ decision: "unavailable", reason: "login-required", retryable: false });
+    await expect(safety.submitMaterial(material)).rejects.toMatchObject({ statusCode: 401, code: "WECHAT_LOGIN_REQUIRED" });
+    await expect(safety.submitMaterial(material)).rejects.toMatchObject({ statusCode: 401, code: "WECHAT_LOGIN_REQUIRED" });
+    expect(submitMedia).toHaveBeenCalledTimes(2);
+  });
+
+  it("redacts an unclassified fresh provider failure during cooldown", async () => {
+    const { safety, material, submitMedia, advance } = setup();
+    await safety.submitMaterial(material);
+    safety.acceptCallback({ traceId: "trace-1", decision: "unavailable", reason: "provider", wechatErrorCode: -1008 });
+    advance(60_000);
+    submitMedia.mockRejectedValueOnce(new Error("https://private.invalid/?signature=secret"));
+    await expect(safety.submitMaterial(material)).rejects.toThrow();
+    const error = await safety.submitMaterial(material).catch((value: unknown) => value);
+    expect(error).toMatchObject({ statusCode: 503, code: "CONTENT_SAFETY_UNAVAILABLE" });
+    expect(String(error)).not.toMatch(/signature|secret|private/);
+    expect(submitMedia).toHaveBeenCalledTimes(2);
   });
 
   it("does not describe an absent receipt as an active check", () => {

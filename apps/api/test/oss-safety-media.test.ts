@@ -93,6 +93,7 @@ describe("private OSS review copies", () => {
     { bucket: "https://another-host" }, { region: "oss-cn-beijing.evil.test" }, { region: "oss-cn-beijing-internal" },
     { accessKeyId: "" }, { accessKeySecret: "\nsecret" }, { namespacePrefix: "photos/" },
     { timeoutMs: 0 }, { timeoutMs: Infinity }, { timeoutMs: 15_001 },
+    { uploadTimeoutMs: 0 }, { uploadTimeoutMs: Infinity }, { uploadTimeoutMs: 25_001 },
   ])("rejects invalid config without including the value in errors: %j", (patch) => {
     expect(() => new OssSafetyMediaStore({ ...config, ...patch })).toThrow("Temporary media storage operation could not be completed");
     expect(sdk.instances).toHaveLength(0);
@@ -167,6 +168,41 @@ describe("private OSS review copies", () => {
     expect(sdk.head).not.toHaveBeenCalled();
   });
 
+  it("allows a bounded slower upload without lengthening deletion or leaving sockets open", async () => {
+    vi.useFakeTimers();
+    sdk.put.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(putResult), 12_000)));
+    sdk.head.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(headResult()), 2_000)));
+    const store = new OssSafetyMediaStore({ ...config, uploadTimeoutMs: 25_000 });
+    const upload = store.put(key, media);
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(sdk.head).toHaveBeenCalledWith(key, expect.objectContaining({ timeout: 13_000 }));
+    await vi.advanceTimersByTimeAsync(2_000);
+    await upload;
+    expect(sdk.instances[0]!.httpsAgent.destroy).toHaveBeenCalledOnce();
+    sdk.delete.mockImplementationOnce(() => new Promise(() => undefined));
+    const deletion = observe(store.delete(key));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await deletion).toMatchObject({ error: { code: "OSS_SAFETY_TIMEOUT" } });
+    expect(sdk.instances[1]).toMatchObject({ timeout: 10_000 });
+    expect(sdk.instances[1]!.httpsAgent.destroy).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([0, 1, 499, 500, 746, 999])("keeps SDK rounded timestamps inside the absolute lease at millisecond %i", async (millisecond) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 8, 27, 11, 2, 58, millisecond)));
+    // Actual ali-oss utility.timestamp uses Math.round, not Math.floor.
+    sdk.signatureUrl.mockImplementationOnce((objectKey, options) =>
+      `https://${config.bucket}.${config.region}.aliyuncs.com/${objectKey}?OSSAccessKeyId=synthetic&Signature=synthetic&Expires=${Math.round(Date.now() / 1000) + options.expires}`);
+    const absoluteExpiry = new Date(Date.UTC(2026, 8, 27, 11, 47, 48, 942));
+    const url = new URL(await new OssSafetyMediaStore(config).signedGetUrl(key, absoluteExpiry));
+    const actualExpiry = Number(url.searchParams.get("Expires")) * 1000;
+    expect(actualExpiry).toBeLessThanOrEqual(absoluteExpiry.getTime());
+    expect(actualExpiry).toBeGreaterThan(absoluteExpiry.getTime() - 2_000);
+    expect(sdk.put).not.toHaveBeenCalled();
+    expect(sdk.head).not.toHaveBeenCalled();
+  });
+
   it("cancels a delete without cancelling concurrent operations", async () => {
     const controller = new AbortController();
     let completeWrite!: (value: unknown) => void;
@@ -213,13 +249,26 @@ describe("private OSS review copies", () => {
     expect(sdk.instances[0]!.httpsAgent.destroy).toHaveBeenCalledOnce();
   });
 
+  it("signs with the real SDK across the rounding boundary without network access", async () => {
+    const { default: RealOss } = await vi.importActual<{ default: typeof import("ali-oss") }>("ali-oss");
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-27T11:02:58.746Z"));
+    const realClient = new RealOss({ bucket: config.bucket, region: config.region,
+      accessKeyId: config.accessKeyId, accessKeySecret: config.accessKeySecret, secure: true });
+    sdk.signatureUrl.mockImplementationOnce((objectKey, options) => realClient.signatureUrl(objectKey, options));
+    const deadline = new Date("2026-09-27T11:47:48.942Z");
+    const signed = new URL(await new OssSafetyMediaStore(config).signedGetUrl(key, deadline));
+    expect(Number(signed.searchParams.get("Expires")) * 1000).toBeLessThanOrEqual(deadline.getTime());
+    expect(sdk.put).not.toHaveBeenCalled();
+    expect(sdk.head).not.toHaveBeenCalled();
+  });
+
   it("creates a GET-only signed URL no later than the requested 45-minute deadline, with no network operations", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-27T12:00:00.800Z"));
     const expiry = new Date(Date.now() + OSS_SAFETY_MAX_URL_AGE_MS);
     const url = new URL(await new OssSafetyMediaStore(config).signedGetUrl(key, expiry));
     expect(url.protocol).toBe("https:");
     expect(Number(url.searchParams.get("Expires")) * 1000).toBeLessThanOrEqual(expiry.getTime());
-    expect(sdk.signatureUrl).toHaveBeenCalledExactlyOnceWith(key, { method: "GET", expires: 2700 });
+    expect(sdk.signatureUrl).toHaveBeenCalledExactlyOnceWith(key, { method: "GET", expires: 2699 });
     expect(sdk.put).not.toHaveBeenCalled(); expect(sdk.head).not.toHaveBeenCalled(); expect(sdk.delete).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });

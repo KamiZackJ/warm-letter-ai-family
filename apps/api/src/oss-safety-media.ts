@@ -15,6 +15,8 @@ export interface OssSafetyMediaOptions {
   namespacePrefix?: string;
   /** Total duration of one operation, including PUT verification. Maximum 15 seconds. */
   timeoutMs?: number;
+  /** Optional PUT plus HEAD budget. Maximum 25 seconds; cleanup keeps timeoutMs. */
+  uploadTimeoutMs?: number;
 }
 
 export class OssSafetyMediaError extends Error {
@@ -40,6 +42,7 @@ function responseHeader(headers: object, name: string): string {
 export class OssSafetyMediaStore {
   private readonly options: OssSafetyMediaOptions;
   private readonly timeoutMs: number;
+  private readonly uploadTimeoutMs: number;
   private readonly hostname: string;
 
   constructor(options: OssSafetyMediaOptions) {
@@ -53,6 +56,10 @@ export class OssSafetyMediaStore {
     ) fail("OSS_SAFETY_CONFIGURATION_INVALID");
     this.timeoutMs = options.timeoutMs ?? 10_000;
     if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 1 || this.timeoutMs > 15_000) {
+      fail("OSS_SAFETY_CONFIGURATION_INVALID");
+    }
+    this.uploadTimeoutMs = options.uploadTimeoutMs ?? this.timeoutMs;
+    if (!Number.isSafeInteger(this.uploadTimeoutMs) || this.uploadTimeoutMs < 1 || this.uploadTimeoutMs > 25_000) {
       fail("OSS_SAFETY_CONFIGURATION_INVALID");
     }
     this.options = { ...options };
@@ -85,7 +92,7 @@ export class OssSafetyMediaStore {
           responseHeader(head.res.headers, "content-type").split(";", 1)[0]?.trim() !== input.contentType) {
         fail("OSS_SAFETY_VERIFICATION_FAILED");
       }
-    });
+    }, this.uploadTimeoutMs);
   }
 
   async delete(key: string, signal?: AbortSignal): Promise<void> {
@@ -105,7 +112,9 @@ export class OssSafetyMediaStore {
     return this.run("OSS_SAFETY_SIGN_FAILED", signal, async (client, remaining) => {
       remaining();
       // SDK v6 signs locally; no STS discovery/refresh or network request is used.
-      const expires = Math.floor((deadline - Date.now()) / 1000);
+      // ali-oss v6 rounds its current timestamp to the nearest second. Reserve
+      // that upper rounded second so the signed expiry never crosses our lease.
+      const expires = Math.floor(deadline / 1000) - Math.ceil(Date.now() / 1000);
       if (expires < 1) fail("OSS_SAFETY_EXPIRY_INVALID");
       const signed = client.signatureUrl(key, { method: "GET", expires });
       const url = new URL(signed);
@@ -128,15 +137,15 @@ export class OssSafetyMediaStore {
   }
 
   private run<T>(code: string, signal: AbortSignal | undefined,
-    operation: (client: OSS, remaining: () => number) => Promise<T>): Promise<T> {
+    operation: (client: OSS, remaining: () => number) => Promise<T>, timeoutMs = this.timeoutMs): Promise<T> {
     if (signal?.aborted) return Promise.reject(new OssSafetyMediaError("OSS_SAFETY_ABORTED"));
     // urllib 2.x treats even "0" as enabling its global proxy override. That
     // would replace our dedicated agent and bypass transport cancellation.
     if (process.env.URLLIB_ENABLE_PROXY) return Promise.reject(new OssSafetyMediaError("OSS_SAFETY_PROXY_FORBIDDEN"));
     // ali-oss.cancel() only cancels multipart uploads. A dedicated agent per
     // operation lets abort destroy the real HTTPS sockets without cancelling peers.
-    const agent = new HttpsAgent({ keepAlive: false, maxSockets: 1, timeout: this.timeoutMs });
-    const deadline = Date.now() + this.timeoutMs;
+    const agent = new HttpsAgent({ keepAlive: false, maxSockets: 1, timeout: timeoutMs });
+    const deadline = Date.now() + timeoutMs;
     return new Promise<T>((resolve, reject) => {
       let settled = false;
       const finish = (success: boolean, value?: unknown) => {
@@ -149,13 +158,13 @@ export class OssSafetyMediaStore {
         else reject(value instanceof OssSafetyMediaError ? value : new OssSafetyMediaError(code));
       };
       const abort = () => finish(false, new OssSafetyMediaError("OSS_SAFETY_ABORTED"));
-      const timer = setTimeout(() => finish(false, new OssSafetyMediaError("OSS_SAFETY_TIMEOUT")), this.timeoutMs);
+      const timer = setTimeout(() => finish(false, new OssSafetyMediaError("OSS_SAFETY_TIMEOUT")), timeoutMs);
       const remaining = () => {
         if (signal?.aborted) fail("OSS_SAFETY_ABORTED");
         if (process.env.URLLIB_ENABLE_PROXY) fail("OSS_SAFETY_PROXY_FORBIDDEN");
         const time = deadline - Date.now();
         if (settled || time <= 0) fail("OSS_SAFETY_TIMEOUT");
-        return Math.min(time, this.timeoutMs);
+        return Math.min(time, timeoutMs);
       };
       signal?.addEventListener("abort", abort, { once: true });
       try {
@@ -165,7 +174,7 @@ export class OssSafetyMediaStore {
         const sdkOptions: OSS.Options & { retryMax: number; httpsAgent: HttpsAgent; enableProxy: boolean } = {
           bucket: this.options.bucket, region: this.options.region,
           accessKeyId: this.options.accessKeyId, accessKeySecret: this.options.accessKeySecret,
-          secure: true, internal: false, cname: false, timeout: this.timeoutMs,
+          secure: true, internal: false, cname: false, timeout: timeoutMs,
           retryMax: 0, enableProxy: false, httpsAgent: agent,
         };
         const client = new OSS(sdkOptions);

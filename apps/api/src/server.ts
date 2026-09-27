@@ -24,7 +24,7 @@ const safetyMediaStaging = runtimeConfig.wechatOss ? new SafetyMediaStaging({
     ...runtimeConfig.wechatOss,
     accessKeyId: process.env.WECHAT_OSS_ACCESS_KEY_ID!.trim(),
     accessKeySecret: process.env.WECHAT_OSS_ACCESS_KEY_SECRET!.trim(),
-    namespacePrefix: "wechat-safety/", timeoutMs: 10_000,
+    namespacePrefix: "wechat-safety/", timeoutMs: 10_000, uploadTimeoutMs: 25_000,
   }),
 }) : undefined;
 const app = buildApp({
